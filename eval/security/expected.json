@@ -1,0 +1,164 @@
+{
+  "review_type": "security",
+  "scope": {
+    "root": "files/src",
+    "globs": ["**/*.ts"],
+    "excludes": ["**/dist/**", "**/node_modules/**"]
+  },
+  "notes": "Hand-labeled ground truth for the review-security prompt eval gate. Each finding must be discoverable from static source review without running the app. Severities follow CVSS-like buckets: critical = remote/local privilege boundary crossed; high = secret/credential exposure or unbounded resource consumption; medium = defense-in-depth gap or injection vector with limited blast radius; low = best-practice deviation.",
+  "findings": [
+    {
+      "id": "SEC-001",
+      "category": "secrets_storage",
+      "severity": "high",
+      "file": "files/src/main/claudeAssistant.ts",
+      "line": 45,
+      "summary": "Anthropic API key persisted to plaintext JSON in userData.",
+      "evidence": "saveConfig writes {apiKey, model, customSystemPrompt} via fs.writeFileSync(CONFIG_FILE(), JSON.stringify(merged), { mode: 0o600 }). The 0o600 only applies on file creation — subsequent writes do not re-chmod, and the key is plaintext on disk.",
+      "recommendation": "Store the API key in macOS Keychain via Electron's safeStorage.encryptString / decryptString (or keytar). Keep only model + customSystemPrompt in the JSON file. On read, fall back to plaintext only for one-time migration, then delete the plaintext field.",
+      "confidence": 0.95,
+      "fingerprint_inputs": ["secrets_storage", "files/src/main/claudeAssistant.ts", "saveConfig:apiKey:plaintext"]
+    },
+    {
+      "id": "SEC-002",
+      "category": "prompt_injection",
+      "severity": "medium",
+      "file": "files/src/main/claudeAssistant.ts",
+      "line": 130,
+      "summary": "User-provided vehicle description and recentLogs are interpolated directly inside a literal <session-snapshot> tag with no escaping — a crafted vehicle string containing '</session-snapshot>' breaks the synthetic boundary and lets the user (or any attacker who controls log content) inject system-level instructions.",
+      "evidence": "messages content is `<session-snapshot>\\n${formatContext(ctx)}\\n</session-snapshot>\\n\\n${question}`. formatContext concatenates ctx.vehicle and ctx.recentLogs verbatim. Neither is HTML- or tag-escaped.",
+      "recommendation": "Escape any literal '</session-snapshot>' in formatContext (or use a per-call random delimiter / UUID-tagged fence). Also cap field lengths.",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["prompt_injection", "files/src/main/claudeAssistant.ts", "session-snapshot:unescaped"]
+    },
+    {
+      "id": "SEC-004",
+      "category": "denial_of_service",
+      "severity": "medium",
+      "file": "files/src/main/main.ts",
+      "line": 53,
+      "summary": "sessionLog grows unbounded. Long-running sessions (the device polls PIDs continuously) accumulate entries forever, exhausting renderer and main-process memory.",
+      "evidence": "let sessionLog: LogEntry[] = []; addLog pushes without trimming. The poll loop in OBDProtocolManager runs continuously while connected.",
+      "recommendation": "Apply a ring-buffer cap (e.g. 10_000 entries) in addLog. Optionally flush oldest to a rolling on-disk file when exceeded.",
+      "confidence": 0.95,
+      "fingerprint_inputs": ["dos_unbounded_buffer", "files/src/main/main.ts", "sessionLog:unbounded"]
+    },
+    {
+      "id": "SEC-005",
+      "category": "input_validation",
+      "severity": "medium",
+      "file": "files/src/main/main.ts",
+      "line": 117,
+      "summary": "connectToPort accepts an arbitrary portPath string from the renderer with no allowlist on the path shape. Even though contextIsolation is on, defense-in-depth is missing: any string that SerialPort accepts will be tried.",
+      "evidence": "ipcMain.handle('obd:connect') passes the renderer-provided port directly to connectToPort, which calls new SerialPort({ path: portPath, ... }). The only check is the /dev/tty. → /dev/cu. rewrite.",
+      "recommendation": "Validate portPath against ^/dev/(cu|tty|rfcomm)\\..+ on macOS / COM[0-9]+ on Windows / a documented device path on Linux before opening. Reject anything else with an explicit error.",
+      "confidence": 0.85,
+      "fingerprint_inputs": ["input_validation", "files/src/main/main.ts", "connectToPort:portPath:no-allowlist"]
+    },
+    {
+      "id": "SEC-006",
+      "category": "missing_csp",
+      "severity": "medium",
+      "file": "files/src/renderer/index.html",
+      "line": 6,
+      "summary": "Renderer CSP allows 'unsafe-inline' on default-src and 'unsafe-eval' on script-src, neutralizing most of CSP's XSS protection.",
+      "evidence": "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; script-src 'self' 'unsafe-eval';\" /> — assistant output rendering or any future devDependency can execute injected scripts.",
+      "recommendation": "Drop 'unsafe-eval' (audit webpack output if dev-tooling requires it; switch to a build config that emits no eval). Keep 'unsafe-inline' on style-src only, not default-src. Add explicit connect-src https://api.anthropic.com.",
+      "confidence": 0.95,
+      "fingerprint_inputs": ["missing_csp", "files/src/renderer/index.html", "csp:unsafe-inline-eval"]
+    },
+    {
+      "id": "SEC-006b",
+      "category": "electron_hardening",
+      "severity": "medium",
+      "file": "files/src/main/main.ts",
+      "line": 28,
+      "summary": "BrowserWindow webPreferences omits sandbox:true and the app installs no will-navigate / setWindowOpenHandler guard, so a renderer compromise has full preload + navigation surface.",
+      "evidence": "webPreferences: { preload: ..., contextIsolation: true, nodeIntegration: false } — sandbox defaults to false in Electron, and no app.on('web-contents-created', ...) handler restricts navigation or new-window targets.",
+      "recommendation": "Set sandbox:true on webPreferences (verify the preload still works under the sandbox), and add a global web-contents-created handler that calls setWindowOpenHandler(() => ({action:'deny'})) and rejects will-navigate to anything other than your dev URL or file://.",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["electron_hardening", "files/src/main/main.ts", "BrowserWindow:sandbox-off"]
+    },
+    {
+      "id": "SEC-007",
+      "category": "secrets_storage",
+      "severity": "medium",
+      "file": "files/src/main/claudeAssistant.ts",
+      "line": 45,
+      "summary": "writeFileSync mode option only applies on file creation, not on overwrite. If the config file already exists with broader permissions, saveConfig will not tighten them.",
+      "evidence": "fs.writeFileSync(CONFIG_FILE(), JSON.stringify(merged), { mode: 0o600 }) — Node fs honors mode only when creating.",
+      "recommendation": "Follow the write with fs.chmodSync(CONFIG_FILE(), 0o600). Better yet, supersede this entirely with Keychain storage per SEC-001.",
+      "confidence": 0.85,
+      "fingerprint_inputs": ["secrets_storage", "files/src/main/claudeAssistant.ts", "writeFile:mode:no-chmod-on-overwrite"]
+    },
+    {
+      "id": "SEC-008",
+      "category": "input_validation",
+      "severity": "medium",
+      "file": "files/src/main/main.ts",
+      "line": 348,
+      "summary": "claude:set-config accepts an unbounded customSystemPrompt string from the renderer and writes it to disk; no length cap and no schema validation.",
+      "evidence": "if (typeof customSystemPrompt === 'string') updates.customSystemPrompt = customSystemPrompt; saveClaudeConfig(updates). No max length, no character-class filter.",
+      "recommendation": "Cap to a documented maximum (e.g. 8 KB), reject non-string payloads, and validate apiKey shape (e.g. /^sk-ant-[A-Za-z0-9_-]{20,}$/) before persisting.",
+      "confidence": 0.85,
+      "fingerprint_inputs": ["input_validation", "files/src/main/main.ts", "claude:set-config:no-bounds"]
+    },
+    {
+      "id": "SEC-009",
+      "category": "rate_limiting",
+      "severity": "low",
+      "file": "files/src/main/main.ts",
+      "line": 313,
+      "summary": "claude:ask has no rate limit or throttle. activeAskController cancels the previous in-flight ask but a renderer-side bug or compromised UI can drive cost up by issuing requests as fast as it can without consuming responses.",
+      "evidence": "ipcMain.handle('claude:ask', ...) aborts the prior controller and starts a new ask. No min-interval, no daily budget cap.",
+      "recommendation": "Add a min-interval guard (e.g. 500 ms) and a per-session token budget tied to the configured model's pricing. Refuse with a clear error when exceeded.",
+      "confidence": 0.75,
+      "fingerprint_inputs": ["rate_limiting", "files/src/main/main.ts", "claude:ask:unrate-limited"]
+    },
+    {
+      "id": "SEC-010",
+      "category": "dev_mode_attack_surface",
+      "severity": "low",
+      "file": "files/src/main/main.ts",
+      "line": 37,
+      "summary": "process.env.NODE_ENV === 'development' triggers loadURL('http://localhost:3000') and openDevTools. If NODE_ENV is set in the packaged app's launch environment, a local user can force the renderer to load from an unauthenticated localhost server they control.",
+      "evidence": "if (process.env.NODE_ENV === 'development') { mainWindow.loadURL('http://localhost:3000'); ... }",
+      "recommendation": "Switch to a build-time constant (e.g. webpack DefinePlugin / app.isPackaged) so production builds never honor env overrides. At minimum, also gate on !app.isPackaged.",
+      "confidence": 0.8,
+      "fingerprint_inputs": ["dev_mode", "files/src/main/main.ts", "NODE_ENV:runtime-trust"]
+    },
+    {
+      "id": "SEC-011",
+      "category": "secrets_exposure",
+      "severity": "low",
+      "file": "files/src/main/main.ts",
+      "line": 339,
+      "summary": "keyHint returns the last 4 characters of the API key. Acceptable for UX, but worth noting that any process able to read the renderer process memory or screen capture can see this hint, which combined with leaked key prefixes elsewhere narrows brute-force / phishing identifying.",
+      "evidence": "keyHint: cfg.apiKey ? `…${cfg.apiKey.slice(-4)}` : '',",
+      "recommendation": "Acceptable as-is, but document this as expected behavior; consider showing only last 2 chars or a generated handle.",
+      "confidence": 0.5,
+      "fingerprint_inputs": ["secrets_exposure", "files/src/main/main.ts", "keyHint:last4"]
+    },
+    {
+      "id": "SEC-012",
+      "category": "dependency_supply_chain",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "Dependency ranges use caret prefixes throughout (e.g. \"@anthropic-ai/sdk\": \"^0.104.1\", \"electron\": \"^31.0.0\"). Without a committed lockfile review and an SCA tool wired into CI, transitive vulnerabilities and a typosquatted/compromised release will be installed automatically.",
+      "evidence": "dependencies and devDependencies all use ^ ranges; no documented npm audit or Snyk step.",
+      "recommendation": "Commit and review package-lock.json, run `npm audit --omit=dev` in CI with a failure threshold, and pin Electron + @anthropic-ai/sdk to exact versions until security review windows.",
+      "confidence": 0.7,
+      "fingerprint_inputs": ["supply_chain", "files/package.json", "caret-ranges:no-audit"]
+    }
+  ],
+  "scoring": {
+    "pass_threshold": {
+      "recall_high_or_above": 0.80,
+      "recall_medium_or_above": 0.70,
+      "max_false_positive_rate": 0.30,
+      "severity_match_rate": 0.70
+    },
+    "method": "For each prompt run, match emitted findings to expected findings by fingerprint OR by (file, category, line within ±10). Compute: recall by severity bucket, FP rate (= emitted findings not matching any expected / total emitted), severity-match rate (= matched findings with same severity / matched findings)."
+  }
+}

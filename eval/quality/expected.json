@@ -1,0 +1,92 @@
+{
+  "review_type": "quality",
+  "scope": {"root": "files/src", "globs": ["**/*.ts", "**/*.tsx"], "excludes": ["**/dist/**", "**/node_modules/**"]},
+  "notes": "Code quality ground truth. More subjective than security/deps; pass thresholds lowered. Focused on patterns the source CLEARLY exhibits (silent error swallowing, magic constants, module-scope mutable state, type-safety escape hatches).",
+  "findings": [
+    {
+      "id": "QLT-001",
+      "category": "silent_error_swallowing",
+      "severity": "high",
+      "file": "files/src/core/obdProtocolManager.ts",
+      "line": 131,
+      "summary": "Multiple catch blocks swallow errors silently with no logging or signal back to the caller (pollBatteryVoltage, pollSinglePID, discoverSupportedPIDs sub-block, scanDTCs per-mode). When a PID consistently fails to parse, the UI shows stale data and the developer has no breadcrumb.",
+      "evidence": "} catch { /* Non-fatal — retry next cycle */ } and } catch { /* Some ranges may not be supported — continue */ } appear in pollBatteryVoltage, pollSinglePID, scanDTCs mode loop, discoverSupportedPIDs range loop. Errors are not even debug-logged.",
+      "recommendation": "Replace each silent catch with `catch (err) { this.log(\\`${context} failed: ${err.message}\\`); }`. The polling loop already has the log channel — use it for diagnostics rather than vanishing every failure.",
+      "confidence": 0.95,
+      "fingerprint_inputs": ["silent_error_swallowing", "files/src/core/obdProtocolManager.ts", "catch-no-log"]
+    },
+    {
+      "id": "QLT-002",
+      "category": "module_scope_mutable_state",
+      "severity": "medium",
+      "file": "files/src/main/main.ts",
+      "line": 49,
+      "summary": "Eight module-level `let` bindings (mainWindow, elm, obd, simulator, simulatorMode, sessionLog, activePort, isConnecting, activeAskController) hold the entire app's runtime state. This makes lifecycle reasoning hard and effectively-impossible to test.",
+      "evidence": "let mainWindow: BrowserWindow | null = null; let elm: ELM327Commander | null = null; let obd: OBDProtocolManager | null = null; let simulator: ELM327Simulator | null = null; let simulatorMode = false; let sessionLog: LogEntry[] = []; let activePort: any = null; let isConnecting = false; let activeAskController: AbortController | null = null;",
+      "recommendation": "Encapsulate in a single AppSession class that the IPC handlers receive via closure. Reset on disconnect, dispose on app quit, and the simulator-vs-real branch becomes an injected strategy.",
+      "confidence": 0.85,
+      "fingerprint_inputs": ["module_scope_mutable_state", "files/src/main/main.ts", "app-state:module-level-lets"]
+    },
+    {
+      "id": "QLT-003",
+      "category": "type_safety_escape_hatch",
+      "severity": "medium",
+      "file": "files/src/main/main.ts",
+      "line": 54,
+      "summary": "SerialPort is typed as `any` because of a require() workaround, and `activePort: any` propagates the lack of types through every call site. PIDDefinition.format() and decode() also accept/return loose `any`-ish types.",
+      "evidence": "const { SerialPort } = require('serialport') as { SerialPort: any }; let activePort: any = null; — the type information for SerialPort is available via the package's bundled @types.",
+      "recommendation": "Import the type only: `import type { SerialPort as SerialPortType } from 'serialport';` then `const { SerialPort } = require('serialport') as { SerialPort: typeof SerialPortType };`. Type activePort as `SerialPortType | null`.",
+      "confidence": 0.8,
+      "fingerprint_inputs": ["type_safety_escape_hatch", "files/src/main/main.ts", "SerialPort:any"]
+    },
+    {
+      "id": "QLT-004",
+      "category": "magic_constant",
+      "severity": "medium",
+      "file": "files/src/core/elm327Commander.ts",
+      "line": 9,
+      "summary": "Multiple magic constants (timeouts, baud rate 115200, max_tokens 1500, history.slice(-12), 20ms sleep, 300ms pre-DTC pause) are inlined at call sites with no shared config. Tuning one of them means hunting through three files.",
+      "evidence": "ELM_TIMEOUT = 2500 in elm327Commander; baudRate: 115200 in main.ts:141; sleep(20) and (300) in obdProtocolManager.ts; max_tokens: 1500 and history.slice(-12) in claudeAssistant.ts.",
+      "recommendation": "Centralize in `files/src/shared/config.ts` with named exports (SERIAL_BAUD_RATE, ELM_DEFAULT_TIMEOUT_MS, POLL_YIELD_MS, DTC_SCAN_PAUSE_MS, ASSISTANT_MAX_TOKENS, ASSISTANT_HISTORY_LIMIT). Tuning is then a one-file change.",
+      "confidence": 0.75,
+      "fingerprint_inputs": ["magic_constant", "files/src/core/elm327Commander.ts", "scattered-constants"]
+    },
+    {
+      "id": "QLT-005",
+      "category": "duplicated_logic",
+      "severity": "medium",
+      "file": "files/src/core/obdProtocolManager.ts",
+      "line": 177,
+      "summary": "scanDTCs and clearDTCs both implement the same 'pause polling → wait 300ms → do work → resume polling' pattern by hand. The duplication will drift the next time one is changed.",
+      "evidence": "scanDTCs (line ~177–212) and clearDTCs (line ~253–268) each save wasPolling, set pollingActive=false, sleep(300), do work, and conditionally re-runPollLoop().",
+      "recommendation": "Extract `private async withPollingPaused<T>(work: () => Promise<T>): Promise<T>` that handles the save/pause/sleep/restore. Both methods become 3-line wrappers.",
+      "confidence": 0.85,
+      "fingerprint_inputs": ["duplicated_logic", "files/src/core/obdProtocolManager.ts", "withPollingPaused"]
+    },
+    {
+      "id": "QLT-006",
+      "category": "weak_naming",
+      "severity": "low",
+      "file": "files/src/main/main.ts",
+      "line": 75,
+      "summary": "`fakeSend` and `fakeEmitter` describe their implementation (fake = simulator path) instead of their role. The same name is reused for the real-serial path in connectToPort, hiding the distinction in code that branches on it.",
+      "evidence": "startSimulator declares `const fakeSend = (data: string) => {...}`; connectToPort declares another `const fakeSend = ...` for the REAL serial port. Same name, different transport.",
+      "recommendation": "Rename to `simTransportSend` / `serialTransportSend` (or just `sendToTransport` once the strategy lives behind an interface per QLT-002).",
+      "confidence": 0.7,
+      "fingerprint_inputs": ["weak_naming", "files/src/main/main.ts", "fakeSend:misleading"]
+    },
+    {
+      "id": "QLT-007",
+      "category": "stale_comment_or_dead_code",
+      "severity": "low",
+      "file": "files/src/main/main.ts",
+      "line": 218,
+      "summary": "Comment claims 'fast every cycle, normal every 3rd, slow every 10th' but the poll-loop comment block in obdProtocolManager.ts says 'every 5th' and 'every 20th'. The actual code is every 3rd / every 10th.",
+      "evidence": "main.ts:218 addLog message: 'fast every cycle, normal every 3rd, slow every 10th' — obdProtocolManager.ts:10 comment: 'every 5th cycle, slow every 20th' — code: cycleCount % 3, cycleCount % 10. Doc/code mismatch.",
+      "recommendation": "Fix the obdProtocolManager.ts header comment to match the code (3rd / 10th) and consider extracting the cadence constants per QLT-004.",
+      "confidence": 0.95,
+      "fingerprint_inputs": ["stale_comment_or_dead_code", "files/src/core/obdProtocolManager.ts", "comment-code-cadence-mismatch"]
+    }
+  ],
+  "scoring": {"pass_threshold": {"recall_high_or_above": 0.50, "recall_medium_or_above": 0.40, "max_false_positive_rate": 0.50, "severity_match_rate": 0.55}, "method": "Quality is more subjective — thresholds lower than security/deps. Same scorer with quality-tuned aliases."}
+}

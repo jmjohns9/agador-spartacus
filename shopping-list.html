@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shopping List</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <style>
+    :root {
+      --color-background-primary: #ffffff;
+      --color-background-secondary: #f5f5f5;
+      --color-text-primary: #1a1a1a;
+      --color-text-secondary: #6b7280;
+      --color-border-tertiary: rgba(0,0,0,0.12);
+      --color-info: #2563eb;
+      --color-info-bg: #eff6ff;
+      --color-success: #16a34a;
+      --color-success-bg: #f0fdf4;
+      --color-danger: #dc2626;
+      --color-danger-bg: #fef2f2;
+      --color-warn: #d97706;
+      --color-warn-bg: #fffbeb;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --border-radius-md: 8px;
+      --border-radius-lg: 12px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-background-primary: #111111;
+        --color-background-secondary: #1c1c1c;
+        --color-text-primary: #f0f0f0;
+        --color-text-secondary: #9ca3af;
+        --color-border-tertiary: rgba(255,255,255,0.1);
+        --color-info: #60a5fa;
+        --color-info-bg: #1e3a5f;
+        --color-success: #4ade80;
+        --color-success-bg: #14532d;
+        --color-danger: #f87171;
+        --color-danger-bg: #7f1d1d;
+        --color-warn: #fbbf24;
+        --color-warn-bg: #78350f;
+      }
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-sans);
+      font-size: 16px;
+      font-weight: 400;
+      line-height: 1.7;
+      color: var(--color-text-primary);
+      background: var(--color-background-primary);
+      padding: 2rem 1rem;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .header {
+      margin-bottom: 2rem;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--color-text-primary);
+      margin-bottom: 0.25rem;
+    }
+    .header-sub {
+      font-size: 14px;
+      color: var(--color-text-secondary);
+    }
+
+    /* Section labels */
+    h2 {
+      font-size: 18px;
+      font-weight: 500;
+      margin-bottom: 1rem;
+    }
+    h3 {
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    /* Input section */
+    .input-section {
+      background: var(--color-background-secondary);
+      border-radius: var(--border-radius-lg);
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .input-grid {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .input-row-secondary {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    @media (max-width: 480px) {
+      .input-grid, .input-row-secondary { grid-template-columns: 1fr; }
+    }
+
+    input[type="text"], input[type="url"] {
+      height: 36px;
+      padding: 0 12px;
+      font-size: 14px;
+      font-family: var(--font-sans);
+      color: var(--color-text-primary);
+      background: var(--color-background-primary);
+      border: 0.5px solid var(--color-border-tertiary);
+      border-radius: var(--border-radius-md);
+      outline: none;
+      width: 100%;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]:focus, input[type="url"]:focus {
+      border-color: var(--color-info);
+    }
+    input::placeholder { color: var(--color-text-secondary); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 36px;
+      padding: 0 14px;
+      font-size: 14px;
+      font-family: var(--font-sans);
+      font-weight: 400;
+      border: 0.5px solid var(--color-border-tertiary);
+      border-radius: var(--border-radius-md);
+      background: transparent;
+      color: var(--color-text-primary);
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .btn:hover { background: var(--color-background-secondary); }
+    .btn-primary {
+      background: var(--color-info);
+      color: #fff;
+      border-color: var(--color-info);
+    }
+    .btn-primary:hover { opacity: 0.9; background: var(--color-info); }
+    .btn-icon {
+      padding: 0;
+      width: 32px;
+      height: 32px;
+      justify-content: center;
+      border: 0.5px solid transparent;
+    }
+    .btn-icon:hover { background: var(--color-background-secondary); border-color: var(--color-border-tertiary); }
+    .btn-danger:hover { color: var(--color-danger); border-color: var(--color-danger); background: var(--color-danger-bg); }
+
+    .select-cat {
+      height: 36px;
+      padding: 0 10px;
+      font-size: 14px;
+      font-family: var(--font-sans);
+      color: var(--color-text-primary);
+      background: var(--color-background-primary);
+      border: 0.5px solid var(--color-border-tertiary);
+      border-radius: var(--border-radius-md);
+      outline: none;
+      cursor: pointer;
+    }
+
+    /* Search */
+    .search-wrap {
+      position: relative;
+      margin-bottom: 1rem;
+    }
+    .search-wrap i {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--color-text-secondary);
+      font-size: 16px;
+      pointer-events: none;
+    }
+    .search-wrap input {
+      padding-left: 32px;
+    }
+
+    /* Filters */
+    .filter-section {
+      margin-bottom: 1.5rem;
+    }
+    .filter-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+      gap: 6px;
+    }
+    .filter-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      height: 32px;
+      font-size: 13px;
+      font-family: var(--font-sans);
+      border: 0.5px solid var(--color-border-tertiary);
+      border-radius: var(--border-radius-md);
+      background: transparent;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .filter-btn:hover { background: var(--color-background-secondary); color: var(--color-text-primary); }
+    .filter-btn.active {
+      background: var(--color-info-bg);
+      color: var(--color-info);
+      border-color: var(--color-info);
+    }
+    .filter-count {
+      font-size: 11px;
+      background: var(--color-background-secondary);
+      border-radius: 10px;
+      padding: 0 5px;
+      min-width: 18px;
+      text-align: center;
+    }
+    .filter-btn.active .filter-count {
+      background: var(--color-info);
+      color: #fff;
+    }
+
+    /* Items list */
+    .items-section { margin-bottom: 1.5rem; }
+
+    .category-group { margin-bottom: 1.5rem; }
+    .category-group:last-child { margin-bottom: 0; }
+    .category-label {
+      font-size: 12px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--color-text-secondary);
+      margin-bottom: 6px;
+      padding-left: 2px;
+    }
+
+    .item-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--color-background-primary);
+      border: 0.5px solid var(--color-border-tertiary);
+      border-radius: var(--border-radius-md);
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      transition: opacity 0.2s;
+    }
+    .item-card.purchased {
+      opacity: 0.5;
+    }
+    .item-card.purchased .item-name {
+      text-decoration: line-through;
+      color: var(--color-text-secondary);
+    }
+
+    input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      cursor: pointer;
+      accent-color: var(--color-success);
+    }
+
+    .item-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .item-name {
+      font-size: 14px;
+      color: var(--color-text-primary);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .item-name a {
+      color: var(--color-info);
+      text-decoration: none;
+    }
+    .item-name a:hover { text-decoration: underline; }
+
+    .cat-badge {
+      font-size: 11px;
+      padding: 1px 7px;
+      border-radius: 20px;
+      border: 0.5px solid transparent;
+      white-space: nowrap;
+    }
+    .cat-produce  { background: var(--color-success-bg); color: var(--color-success); border-color: var(--color-success); }
+    .cat-dairy    { background: var(--color-info-bg); color: var(--color-info); border-color: var(--color-info); }
+    .cat-pantry   { background: var(--color-warn-bg); color: var(--color-warn); border-color: var(--color-warn); }
+    .cat-meat     { background: var(--color-danger-bg); color: var(--color-danger); border-color: var(--color-danger); }
+    .cat-frozen   { background: #e0f2fe; color: #0369a1; border-color: #0369a1; }
+    .cat-bakery   { background: #fdf4ff; color: #9333ea; border-color: #9333ea; }
+    .cat-beverages{ background: #fef3c7; color: #b45309; border-color: #b45309; }
+    .cat-household{ background: #f1f5f9; color: #475569; border-color: #475569; }
+    .cat-other    { background: var(--color-background-secondary); color: var(--color-text-secondary); border-color: var(--color-border-tertiary); }
+
+    @media (prefers-color-scheme: dark) {
+      .cat-frozen    { background: #0c4a6e; color: #7dd3fc; border-color: #7dd3fc; }
+      .cat-bakery    { background: #4a044e; color: #d8b4fe; border-color: #d8b4fe; }
+      .cat-beverages { background: #451a03; color: #fcd34d; border-color: #fcd34d; }
+      .cat-household { background: #1e293b; color: #94a3b8; border-color: #94a3b8; }
+    }
+
+    .item-qty {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .qty-btn {
+      width: 24px;
+      height: 24px;
+      border: 0.5px solid var(--color-border-tertiary);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--color-text-secondary);
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .qty-btn:hover { background: var(--color-background-secondary); color: var(--color-text-primary); }
+    .qty-val {
+      font-size: 13px;
+      min-width: 20px;
+      text-align: center;
+      color: var(--color-text-primary);
+    }
+
+    .item-actions {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    /* Edit mode */
+    .edit-form {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+    }
+    .edit-row {
+      display: flex;
+      gap: 6px;
+    }
+    .edit-row input { flex: 1; }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--color-text-secondary);
+    }
+    .empty-state i {
+      font-size: 40px;
+      margin-bottom: 0.75rem;
+      display: block;
+      opacity: 0.4;
+    }
+    .empty-state p { font-size: 14px; }
+
+    /* Summary */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 8px;
+      margin-bottom: 1.5rem;
+    }
+    .summary-card {
+      background: var(--color-background-secondary);
+      border-radius: var(--border-radius-md);
+      padding: 12px 16px;
+      text-align: center;
+    }
+    .summary-val {
+      font-size: 24px;
+      font-weight: 500;
+      color: var(--color-text-primary);
+      line-height: 1.2;
+    }
+    .summary-label {
+      font-size: 12px;
+      color: var(--color-text-secondary);
+      margin-top: 2px;
+    }
+
+    /* Bulk / footer actions */
+    .footer-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* Divider */
+    .divider {
+      border: none;
+      border-top: 0.5px solid var(--color-border-tertiary);
+      margin: 1.5rem 0;
+    }
+
+    /* Notification toast */
+    #toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      background: var(--color-text-primary);
+      color: var(--color-background-primary);
+      padding: 8px 16px;
+      border-radius: var(--border-radius-md);
+      font-size: 13px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+      z-index: 999;
+    }
+    #toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>Shopping list</h1>
+    <p class="header-sub">Add items, track purchases, and stay organized.</p>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary" id="summary">
+    <div class="summary-card">
+      <div class="summary-val" id="count-total">0</div>
+      <div class="summary-label">Total items</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-val" id="count-purchased">0</div>
+      <div class="summary-label">Purchased</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-val" id="count-remaining">0</div>
+      <div class="summary-label">Remaining</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-val" id="count-linked">0</div>
+      <div class="summary-label">With links</div>
+    </div>
+  </div>
+
+  <!-- Add item -->
+  <div class="input-section">
+    <div class="input-grid" style="margin-bottom:8px">
+      <input type="text" id="item-name" placeholder="Item name (e.g. Organic milk)" />
+      <select class="select-cat" id="item-cat">
+        <option value="auto">Auto</option>
+        <option value="produce">Produce</option>
+        <option value="dairy">Dairy</option>
+        <option value="meat">Meat</option>
+        <option value="pantry">Pantry</option>
+        <option value="frozen">Frozen</option>
+        <option value="bakery">Bakery</option>
+        <option value="beverages">Beverages</option>
+        <option value="household">Household</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="input-row-secondary">
+      <input type="url" id="item-url" placeholder="Product link (optional)" />
+      <button class="btn btn-primary" id="add-btn" onclick="handleAdd()">
+        <i class="ti ti-plus" aria-hidden="true"></i> Add
+      </button>
+    </div>
+  </div>
+
+  <!-- Search + Filters -->
+  <div class="filter-section">
+    <div class="search-wrap" style="margin-bottom:10px">
+      <i class="ti ti-search" aria-hidden="true"></i>
+      <input type="text" id="search-input" placeholder="Search items…" oninput="renderItems()" />
+    </div>
+    <div class="filter-grid" id="filter-grid"></div>
+  </div>
+
+  <!-- Items -->
+  <div class="items-section" id="items-container"></div>
+
+  <hr class="divider" />
+
+  <!-- Footer actions -->
+  <div class="footer-actions">
+    <button class="btn" onclick="markAllPurchased()">
+      <i class="ti ti-checks" aria-hidden="true"></i> Mark all purchased
+    </button>
+    <button class="btn" onclick="clearPurchased()">
+      <i class="ti ti-trash" aria-hidden="true"></i> Clear purchased
+    </button>
+    <button class="btn" onclick="exportCSV()">
+      <i class="ti ti-download" aria-hidden="true"></i> Export CSV
+    </button>
+    <button class="btn" onclick="clearAll()">
+      <i class="ti ti-circle-x" aria-hidden="true"></i> Clear all
+    </button>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+  // ── Data ──────────────────────────────────────────────────────────────────
+  let items = [];
+  let activeFilter = 'all';
+
+  const CATEGORIES = ['all','produce','dairy','meat','pantry','frozen','bakery','beverages','household','other'];
+
+  const KEYWORDS = {
+    produce:    ['apple','banana','orange','lemon','lime','grape','berry','berries','tomato','potato','onion','garlic','carrot','broccoli','spinach','lettuce','kale','cucumber','avocado','pepper','mushroom','zucchini','corn','celery','ginger','mango','pineapple','peach','plum','pear','cherry','vegetable','fruit','salad','herb','basil','cilantro','parsley','mint'],
+    dairy:      ['milk','cheese','butter','cream','yogurt','yoghurt','egg','eggs','kefir','whey','sour cream','half and half','cheddar','mozzarella','parmesan','brie','cottage','ricotta','ghee'],
+    meat:       ['chicken','beef','pork','turkey','lamb','fish','salmon','tuna','shrimp','steak','bacon','sausage','ham','ground','mince','meat','seafood','crab','lobster','prawn','deli','salami','pepperoni'],
+    pantry:     ['rice','pasta','flour','sugar','salt','oil','vinegar','sauce','ketchup','mustard','mayo','mayonnaise','jam','honey','peanut','almond','cashew','nut','seed','bean','lentil','chickpea','canned','can','broth','stock','soup','spice','pepper','cumin','paprika','oregano','cereal','oat','granola','bread','cracker','chip','popcorn','noodle','quinoa'],
+    frozen:     ['frozen','ice cream','popsicle','waffle','pizza','burrito','nugget'],
+    bakery:     ['bread','baguette','bagel','muffin','croissant','cake','cookie','donut','pie','pastry','roll','bun','loaf','scone','brownie'],
+    beverages:  ['water','juice','coffee','tea','soda','beer','wine','juice','drink','kombucha','sparkling','lemonade','cocktail','spirit','whiskey','vodka','rum','gin','champagne'],
+    household:  ['soap','shampoo','toothpaste','toothbrush','tissue','toilet','paper towel','laundry','detergent','bleach','sponge','cleaning','trash','bag','wrap','foil','spray','dish','hand wash','conditioner','razor','deodorant','lotion','sunscreen'],
+  };
+
+  function detectCategory(name) {
+    const lower = name.toLowerCase();
+    for (const [cat, words] of Object.entries(KEYWORDS)) {
+      if (words.some(w => lower.includes(w))) return cat;
+    }
+    return 'other';
+  }
+
+  function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+  function save() { localStorage.setItem('shopping-list-v2', JSON.stringify(items)); }
+
+  function load() {
+    try {
+      const raw = localStorage.getItem('shopping-list-v2');
+      items = raw ? JSON.parse(raw) : [];
+    } catch { items = []; }
+  }
+
+  // ── Add item ──────────────────────────────────────────────────────────────
+  function handleAdd() {
+    const nameEl = document.getElementById('item-name');
+    const urlEl  = document.getElementById('item-url');
+    const catEl  = document.getElementById('item-cat');
+    const name   = nameEl.value.trim();
+    if (!name) { nameEl.focus(); return; }
+
+    const catChoice = catEl.value;
+    const category  = catChoice === 'auto' ? detectCategory(name) : catChoice;
+
+    let link = urlEl.value.trim();
+    if (link && !/^https?:\/\//i.test(link)) link = 'https://' + link;
+
+    items.unshift({ id: genId(), name, category, quantity: 1, link, purchased: false });
+    save();
+    nameEl.value = '';
+    urlEl.value  = '';
+    catEl.value  = 'auto';
+    nameEl.focus();
+    renderAll();
+    toast(`"${name}" added`);
+  }
+
+  // ── Actions ───────────────────────────────────────────────────────────────
+  function togglePurchased(id) {
+    const item = items.find(i => i.id === id);
+    if (item) { item.purchased = !item.purchased; save(); renderAll(); }
+  }
+
+  function deleteItem(id) {
+    const item = items.find(i => i.id === id);
+    items = items.filter(i => i.id !== id);
+    save(); renderAll();
+    if (item) toast(`"${item.name}" removed`);
+  }
+
+  function updateQuantity(id, delta) {
+    const item = items.find(i => i.id === id);
+    if (item) {
+      item.quantity = Math.max(1, (item.quantity || 1) + delta);
+      save(); renderAll();
+    }
+  }
+
+  function startEdit(id) {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+    const card = document.getElementById('card-' + id);
+    const inner = card.querySelector('.item-inner');
+    inner.innerHTML = `
+      <div class="edit-form">
+        <div class="edit-row">
+          <input type="text" id="edit-name-${id}" value="${escHtml(item.name)}" placeholder="Item name" />
+          <select class="select-cat" id="edit-cat-${id}">
+            ${['produce','dairy','meat','pantry','frozen','bakery','beverages','household','other'].map(c =>
+              `<option value="${c}" ${item.category===c?'selected':''}>${cap(c)}</option>`
+            ).join('')}
+          </select>
+        </div>
+        <div class="edit-row">
+          <input type="url" id="edit-url-${id}" value="${escHtml(item.link||'')}" placeholder="Product link (optional)" />
+          <button class="btn btn-primary" onclick="saveEdit('${id}')"><i class="ti ti-check"></i> Save</button>
+          <button class="btn" onclick="renderItems()"><i class="ti ti-x"></i></button>
+        </div>
+      </div>
+    `;
+    document.getElementById('edit-name-' + id)?.focus();
+  }
+
+  function saveEdit(id) {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+    const nameEl = document.getElementById('edit-name-' + id);
+    const catEl  = document.getElementById('edit-cat-' + id);
+    const urlEl  = document.getElementById('edit-url-' + id);
+    const name   = nameEl.value.trim();
+    if (!name) { nameEl.focus(); return; }
+    let link = urlEl.value.trim();
+    if (link && !/^https?:\/\//i.test(link)) link = 'https://' + link;
+    item.name     = name;
+    item.category = catEl.value;
+    item.link     = link;
+    save(); renderAll();
+  }
+
+  function markAllPurchased() {
+    items.forEach(i => { i.purchased = true; });
+    save(); renderAll(); toast('All items marked purchased');
+  }
+
+  function clearPurchased() {
+    const n = items.filter(i => i.purchased).length;
+    items = items.filter(i => !i.purchased);
+    save(); renderAll();
+    if (n) toast(`${n} purchased item${n>1?'s':''} cleared`);
+  }
+
+  function clearAll() {
+    if (!items.length) return;
+    if (!confirm('Clear all items?')) return;
+    items = []; save(); renderAll(); toast('List cleared');
+  }
+
+  function exportCSV() {
+    const header = ['Name','Category','Quantity','Link','Purchased'];
+    const rows = items.map(i => [
+      `"${i.name.replace(/"/g,'""')}"`,
+      i.category,
+      i.quantity,
+      i.link || '',
+      i.purchased ? 'Yes' : 'No'
+    ]);
+    const csv = [header, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'shopping-list.csv';
+    a.click();
+    toast('CSV exported');
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  function getFiltered() {
+    const q = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
+    return items.filter(item => {
+      const catMatch = activeFilter === 'all' || item.category === activeFilter;
+      const txtMatch = !q || item.name.toLowerCase().includes(q) || item.category.includes(q);
+      return catMatch && txtMatch;
+    });
+  }
+
+  function renderFilters() {
+    const grid = document.getElementById('filter-grid');
+    const cats = ['all','produce','dairy','meat','pantry','frozen','bakery','beverages','household','other'];
+    grid.innerHTML = cats.map(c => {
+      const count = c === 'all' ? items.length : items.filter(i => i.category === c).length;
+      if (c !== 'all' && count === 0) return '';
+      return `<button class="filter-btn ${activeFilter===c?'active':''}" onclick="setFilter('${c}')">
+        ${cap(c)} <span class="filter-count">${count}</span>
+      </button>`;
+    }).join('');
+  }
+
+  function setFilter(cat) {
+    activeFilter = cat;
+    renderAll();
+  }
+
+  function renderItems() {
+    const container = document.getElementById('items-container');
+    const filtered  = getFiltered();
+
+    if (!filtered.length) {
+      const msg = items.length ? 'No items match your filter.' : 'No items yet — add something above!';
+      container.innerHTML = `<div class="empty-state">
+        <i class="ti ti-shopping-cart" aria-hidden="true"></i>
+        <p>${msg}</p>
+      </div>`;
+      return;
+    }
+
+    // Group by category when filter is 'all'
+    if (activeFilter === 'all') {
+      const grouped = {};
+      filtered.forEach(item => {
+        if (!grouped[item.category]) grouped[item.category] = [];
+        grouped[item.category].push(item);
+      });
+      container.innerHTML = Object.entries(grouped).map(([cat, catItems]) => `
+        <div class="category-group">
+          <div class="category-label">${cap(cat)}</div>
+          ${catItems.map(itemHTML).join('')}
+        </div>
+      `).join('');
+    } else {
+      container.innerHTML = filtered.map(itemHTML).join('');
+    }
+  }
+
+  function itemHTML(item) {
+    const nameInner = item.link
+      ? `<a href="${escAttr(item.link)}" target="_blank" rel="noopener">${escHtml(item.name)}</a>
+         <i class="ti ti-external-link" aria-hidden="true" style="font-size:13px;color:var(--color-text-secondary)"></i>`
+      : escHtml(item.name);
+
+    return `<div class="item-card ${item.purchased?'purchased':''}" id="card-${item.id}">
+      <input type="checkbox" ${item.purchased?'checked':''} onchange="togglePurchased('${item.id}')" aria-label="Mark ${escAttr(item.name)} as purchased" />
+      <div class="item-inner" style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;flex-wrap:wrap">
+        <span class="item-name">${nameInner}</span>
+        <span class="cat-badge cat-${item.category}">${cap(item.category)}</span>
+      </div>
+      <div class="item-qty">
+        <button class="qty-btn" onclick="updateQuantity('${item.id}',-1)" aria-label="Decrease quantity">−</button>
+        <span class="qty-val">${item.quantity}</span>
+        <button class="qty-btn" onclick="updateQuantity('${item.id}',1)" aria-label="Increase quantity">+</button>
+      </div>
+      <div class="item-actions">
+        <button class="btn btn-icon" onclick="startEdit('${item.id}')" aria-label="Edit ${escAttr(item.name)}">
+          <i class="ti ti-edit" aria-hidden="true"></i>
+        </button>
+        <button class="btn btn-icon btn-danger" onclick="deleteItem('${item.id}')" aria-label="Delete ${escAttr(item.name)}">
+          <i class="ti ti-trash" aria-hidden="true"></i>
+        </button>
+      </div>
+    </div>`;
+  }
+
+  function renderSummary() {
+    const total     = items.length;
+    const purchased = items.filter(i => i.purchased).length;
+    const linked    = items.filter(i => i.link).length;
+    document.getElementById('count-total').textContent     = total;
+    document.getElementById('count-purchased').textContent = purchased;
+    document.getElementById('count-remaining').textContent = total - purchased;
+    document.getElementById('count-linked').textContent    = linked;
+  }
+
+  function renderAll() {
+    renderSummary();
+    renderFilters();
+    renderItems();
+  }
+
+  // ── Utils ─────────────────────────────────────────────────────────────────
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+  function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function escAttr(s) { return escHtml(s||''); }
+
+  let toastTimer;
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+  }
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  document.addEventListener('keydown', e => {
+    if ((e.key === 'Enter') && document.activeElement.id === 'item-name') handleAdd();
+    if ((e.key === 'Enter') && document.activeElement.id === 'item-url')  handleAdd();
+  });
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  load();
+  renderAll();
+</script>
+</body>
+</html>

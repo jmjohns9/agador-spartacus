@@ -1,0 +1,80 @@
+{
+  "review_type": "tests",
+  "scope": {"root": "files", "src": "files/src", "checked_for_absence": ["**/*.test.ts", "**/*.spec.ts", "jest.config.*", "vitest.config.*", "**/__tests__/**"]},
+  "notes": "Ground truth for the review-tests prompt. Project has zero test files and no test runner declared; the eval focuses on (a) flagging the absence as the dominant finding and (b) naming the highest-risk untested modules so the recommendation is actionable.",
+  "findings": [
+    {
+      "id": "TST-001",
+      "category": "no_test_infrastructure",
+      "severity": "high",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "Project declares no test runner (no jest, vitest, mocha, node:test) and no `test` script. There is no path for CI to run tests at all.",
+      "evidence": "package.json scripts: {dev, watch:main, watch:renderer, build, dist, typecheck}. No `test`, no test-runner dependency. No jest.config.* / vitest.config.* in the tree.",
+      "recommendation": "Add vitest as a devDependency (works for both main/Node and renderer code via jsdom), set `\"test\": \"vitest run\"` and `\"test:watch\": \"vitest\"`, then commit a minimal smoke test for the highest-risk module first (see TST-002).",
+      "confidence": 0.99,
+      "fingerprint_inputs": ["no_test_infrastructure", "files/package.json", "no-test-runner"]
+    },
+    {
+      "id": "TST-002",
+      "category": "untested_critical_module",
+      "severity": "high",
+      "file": "files/src/core/elm327Commander.ts",
+      "line": null,
+      "summary": "ELM327Commander has zero tests — it owns the entire serial protocol state machine (send chain, prompt detection, timeout handling, PID response parsing). Bugs here corrupt every reading shown to the user.",
+      "evidence": "No *.test.ts / *.spec.ts file references ELM327Commander; the only exerciser of the parsing logic is the live serial path.",
+      "recommendation": "Add unit tests for parsePIDResponse (header detection, multi-ECU truncation, malformed-hex rejection), the send-chain ordering (two concurrent send() calls must serialize), and the timeout path (late bytes from a previous command must not corrupt the next reply).",
+      "confidence": 0.95,
+      "fingerprint_inputs": ["untested_critical_module", "files/src/core/elm327Commander.ts", "ELM327Commander:untested"]
+    },
+    {
+      "id": "TST-003",
+      "category": "untested_critical_module",
+      "severity": "high",
+      "file": "files/src/core/obdProtocolManager.ts",
+      "line": null,
+      "summary": "OBDProtocolManager has zero tests — it owns DTC parsing (Mode 03/07/0A) and the supported-PID bitmask discovery. A parse bug emits wrong DTC codes to the assistant and the user.",
+      "evidence": "discoverSupportedPIDs() shifts a 4-byte bitmask into PIDs; parseDTCResponse() bit-packs the type nibble. Neither path is exercised by any test.",
+      "recommendation": "Add table-driven tests over known-good fixtures: each official Mode 03/07/0A example from SAE J1979 → expected DTC list; each bitmask example from ELM327 docs → expected PID set.",
+      "confidence": 0.95,
+      "fingerprint_inputs": ["untested_critical_module", "files/src/core/obdProtocolManager.ts", "OBDProtocolManager:untested"]
+    },
+    {
+      "id": "TST-004",
+      "category": "untested_pure_function",
+      "severity": "medium",
+      "file": "files/src/core/pidCatalog.ts",
+      "line": null,
+      "summary": "PID decode formulas are pure functions (trim, tempF, rpm, maf, volt1, …) — easiest possible tests, zero exist. A miscoded formula shows wrong readings to the user with no warning.",
+      "evidence": "pidCatalog.ts exports ~14 pure decode helpers. None are tested. Several have non-obvious factors (rpm = (a*256+b)/4, trim = ((a-128)/128)*100).",
+      "recommendation": "One-line parametric test per helper: assert decode([fixture_bytes]) === expected_value for at least the boundary cases (min, max, midpoint, the known-good example value).",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["untested_pure_function", "files/src/core/pidCatalog.ts", "decode-helpers:untested"]
+    },
+    {
+      "id": "TST-005",
+      "category": "no_ci_test_gate",
+      "severity": "medium",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "Even if tests existed, there is no CI pipeline to run them (no .github/workflows, no .gitlab-ci.yml, no .circleci). The only quality gate the codebase enforces is `tsc --noEmit`.",
+      "evidence": "Absence of CI config; the `typecheck` script is the sole automation-friendly check.",
+      "recommendation": "Add a GitHub Actions workflow that runs on PR: `npm ci && npm run typecheck && npm test`. Block merge on red.",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["no_ci_test_gate", "files/package.json", "no-ci-gate"]
+    },
+    {
+      "id": "TST-006",
+      "category": "untested_simulator_parity",
+      "severity": "low",
+      "file": "files/src/core/elm327Simulator.ts",
+      "line": null,
+      "summary": "The ELM327 simulator and the real-device path share NO common test. Drift between simulator encoding and real-device decoding is the most likely source of silent regressions because dev work happens against the simulator.",
+      "evidence": "elm327Simulator.respond() encodes responses; ELM327Commander.parsePIDResponse() decodes them. No round-trip test asserts simulator.respond(pid) decoded back equals the simulator's internal state.",
+      "recommendation": "Add one round-trip test per PID: for each entry in PID_MAP, feed simulator's response into parsePIDResponse + the decode helper, assert it round-trips the simulator's internal state within tolerance.",
+      "confidence": 0.85,
+      "fingerprint_inputs": ["untested_simulator_parity", "files/src/core/elm327Simulator.ts", "simulator-roundtrip:untested"]
+    }
+  ],
+  "scoring": {"pass_threshold": {"recall_high_or_above": 0.66, "recall_medium_or_above": 0.50, "max_false_positive_rate": 0.35, "severity_match_rate": 0.60}, "method": "Same as deps; file-level matching."}
+}

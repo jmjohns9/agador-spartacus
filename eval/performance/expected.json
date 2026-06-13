@@ -1,0 +1,116 @@
+{
+  "review_type": "performance",
+  "scope": {"root": "files/src", "globs": ["**/*.ts", "**/*.tsx"], "excludes": ["**/dist/**", "**/node_modules/**"]},
+  "notes": "Ground truth for review-performance. Focused on patterns the source clearly exhibits: hot-loop allocations, unbounded buffers, sequential awaits in I/O-bounded code, redundant work on every render/tick. Static review only — no profiling fixtures.",
+  "findings": [
+    {
+      "id": "PRF-001",
+      "category": "unbounded_buffer",
+      "severity": "high",
+      "file": "files/src/main/main.ts",
+      "line": 53,
+      "summary": "sessionLog array grows unbounded with TX/RX log entries during a connected session; both the main-process Array and every renderer subscriber's mirror grow forever. Eventually triggers GC pressure and IPC backpressure.",
+      "evidence": "let sessionLog: LogEntry[] = []; addLog pushes without trimming. Every command logs at least TX and RX entries; the poll loop runs continuously.",
+      "recommendation": "Apply a ring-buffer cap in addLog (e.g. 10_000 entries, drop oldest). Mirror the cap in the renderer's log store.",
+      "confidence": 0.95,
+      "fingerprint_inputs": ["unbounded_buffer", "files/src/main/main.ts", "sessionLog:unbounded"]
+    },
+    {
+      "id": "PRF-002",
+      "category": "hot_loop_allocation",
+      "severity": "medium",
+      "file": "files/src/main/main.ts",
+      "line": 155,
+      "summary": "Every serial RX chunk allocates two intermediate strings (`ascii` + `display` via two .replace() calls) and an addLog object for the log path. At ~20–50 chunks/sec under polling, this is sustained allocation churn.",
+      "evidence": "port.on('data', chunk => { const ascii = chunk.toString('ascii'); const display = ascii.replace(/\\r/g, '\\\\r').replace(/\\n/g, '\\\\n'); addLog({...}); elm?.onData(ascii); });",
+      "recommendation": "Move the display escape into a debug-only path gated by a verbose flag, or batch chunks for a single log entry per command response. The hot path should just forward ascii to elm.onData.",
+      "confidence": 0.8,
+      "fingerprint_inputs": ["hot_loop_allocation", "files/src/main/main.ts", "port.on:data:escape-allocations"]
+    },
+    {
+      "id": "PRF-003",
+      "category": "sequential_await_in_loop",
+      "severity": "medium",
+      "file": "files/src/core/obdProtocolManager.ts",
+      "line": 28,
+      "summary": "discoverSupportedPIDs() awaits each of the 4 support-range requests sequentially even though they're independent ELM commands. Since ELM is single-command serial, this is forced — but the 3000ms timeout per range means a non-responsive ECM stalls discovery for 12s.",
+      "evidence": "for (const rangePID of supportRanges) { const resp = await this.elm.send(rangePID, 3000); ... } — 4 ranges × 3s = 12s worst case.",
+      "recommendation": "Shorten the per-range timeout to 1500ms (ELM auto-timing handles longer responses), and break out early once a range returns NO DATA (subsequent ranges depend on prior bitmask bits indicating support).",
+      "confidence": 0.7,
+      "fingerprint_inputs": ["sequential_await_in_loop", "files/src/core/obdProtocolManager.ts", "discoverSupportedPIDs:long-timeout"]
+    },
+    {
+      "id": "PRF-004",
+      "category": "redundant_recomputation",
+      "severity": "medium",
+      "file": "files/src/main/claudeAssistant.ts",
+      "line": 71,
+      "summary": "formatContext is called fresh on every claude:ask, rebuilding the entire snapshot string by Array.push + join even when only the question changed. With the current chat UI sending the full snapshot per turn, this is wasted work and bloats the input tokens (no prompt-caching boundary placed).",
+      "evidence": "askClaude builds messages with `<session-snapshot>\\n${formatContext(ctx)}\\n</session-snapshot>\\n\\n${question}` inside the user content block, mixing stable context with the volatile question. The Anthropic SDK supports `cache_control: {type: 'ephemeral'}` at message boundaries.",
+      "recommendation": "Split the user message into two content blocks: a stable `<session-snapshot>...</session-snapshot>` block with `cache_control: {type: 'ephemeral'}`, then the question. Saves input tokens on every follow-up turn in the same chat.",
+      "confidence": 0.75,
+      "fingerprint_inputs": ["redundant_recomputation", "files/src/main/claudeAssistant.ts", "askClaude:no-cache-boundary"]
+    },
+    {
+      "id": "PRF-005",
+      "category": "hot_loop_allocation",
+      "severity": "low",
+      "file": "files/src/core/obdProtocolManager.ts",
+      "line": 147,
+      "summary": "pollSinglePID allocates a new PIDReading object every poll. At 10–20 Hz across 15 PIDs, this is ~150–300 small object allocations per second. Acceptable on desktop but worth tightening if the renderer chokes.",
+      "evidence": "const reading: PIDReading = { pid, value, raw: bytes, timestamp: Date.now(), unit: definition.unit }; emit('pid-reading', reading) — allocated even when value didn't change since last poll.",
+      "recommendation": "Reuse a per-PID PIDReading object and mutate fields, OR add a `value === lastValue` short-circuit before emitting (saves both allocation and IPC traffic).",
+      "confidence": 0.65,
+      "fingerprint_inputs": ["hot_loop_allocation", "files/src/core/obdProtocolManager.ts", "pollSinglePID:alloc"]
+    },
+    {
+      "id": "PRF-006",
+      "category": "missing_short_circuit",
+      "severity": "low",
+      "file": "files/src/core/elm327Commander.ts",
+      "line": 51,
+      "summary": "onData does `recvBuf += chunk` then a substring scan for '>' on every chunk. With incremental chunks from Bluetooth (often 1–4 bytes), this is O(n) per byte = O(n²) over a full response.",
+      "evidence": "onData() concatenates and re-checks the full recvBuf for ELM_PROMPT each chunk. For a 200-byte response delivered in 50 BT chunks, that's 50 × ~200 = 10000 char-checks.",
+      "recommendation": "Track the last-scanned offset and only search the newly-appended slice for the '>' prompt: `if (chunk.includes('>')) { ... }` plus a length-only update otherwise.",
+      "confidence": 0.7,
+      "fingerprint_inputs": ["missing_short_circuit", "files/src/core/elm327Commander.ts", "onData:O(n^2)"]
+    },
+    {
+      "id": "PRF-007",
+      "category": "hot_loop_allocation",
+      "severity": "medium",
+      "file": "files/src/renderer/store/appStore.ts",
+      "line": null,
+      "summary": "updatePIDReading rebuilds the entire liveData and history maps on every reading, triggering a full subscriber re-render even when the value didn't change.",
+      "evidence": "appStore.ts:updatePIDReading constructs new objects/maps per update; no value-changed short-circuit; subscribers re-render on identity change.",
+      "recommendation": "Short-circuit on value === previous in the action, and use shallow-merge per-PID (set state.liveData[pid] = reading) so unrelated subscribers don't re-render.",
+      "confidence": 0.7,
+      "fingerprint_inputs": ["hot_loop_allocation", "files/src/renderer/store/appStore.ts", "updatePIDReading:full-rebuild"]
+    },
+    {
+      "id": "PRF-008",
+      "category": "excessive_ipc_or_rerender",
+      "severity": "medium",
+      "file": "files/src/renderer/App.tsx",
+      "line": null,
+      "summary": "App root subscribes to the entire liveData object, so any single PID reading re-renders the root and recomputes derived counts.",
+      "evidence": "App.tsx selects the full liveData state and computes livePIDCount inline on every render.",
+      "recommendation": "Use a selector (`state => Object.keys(state.liveData).length`) and shallow-equal compare; or memoize the count derivation with `useMemo` keyed by the size.",
+      "confidence": 0.7,
+      "fingerprint_inputs": ["excessive_ipc_or_rerender", "files/src/renderer/App.tsx", "App:full-liveData-subscription"]
+    },
+    {
+      "id": "PRF-009",
+      "category": "redundant_recomputation",
+      "severity": "low",
+      "file": "files/src/renderer/screens/AllPIDsScreen.tsx",
+      "line": null,
+      "summary": "liveCount runs PID_CATALOG.filter on every render of AllPIDsScreen without memoization.",
+      "evidence": "AllPIDsScreen.tsx:~162 — PID_CATALOG.filter(...) called inline in render body.",
+      "recommendation": "Wrap in `useMemo(() => PID_CATALOG.filter(...), [liveData])` keyed on the relevant slice.",
+      "confidence": 0.7,
+      "fingerprint_inputs": ["redundant_recomputation", "files/src/renderer/screens/AllPIDsScreen.tsx", "liveCount:no-memo"]
+    }
+  ],
+  "scoring": {"pass_threshold": {"recall_high_or_above": 0.80, "recall_medium_or_above": 0.50, "max_false_positive_rate": 0.40, "severity_match_rate": 0.60}, "method": "Same scorer with category aliases tuned for performance."}
+}

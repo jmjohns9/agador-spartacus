@@ -1,0 +1,104 @@
+{
+  "review_type": "deps",
+  "scope": {
+    "root": "files",
+    "files": ["package.json", "package-lock.json"],
+    "siblings_checked_for_absence": [".github/workflows", ".gitlab-ci.yml", ".circleci/config.yml", "renovate.json", ".dependabot/config.yml"]
+  },
+  "notes": "Hand-labeled ground truth for review-deps. Focused on STRUCTURAL hygiene defects (semver discipline, CI/SCA, lockfile, pinning policy) — these are stable over time. Specific-CVE findings would decay with the registry and are out of scope for this eval.",
+  "findings": [
+    {
+      "id": "DEP-001",
+      "category": "outdated_major",
+      "severity": "high",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "electron pinned to ^31.0.0 — Electron 31 reached end-of-life on the official support schedule before the current quarter; the ^ range cannot escape the 31.x line.",
+      "evidence": "devDependencies.electron = ^31.0.0; Electron's support window covers the latest 3 majors, and ^31.0.0 prevents adoption of 32+ without manual bump. CVEs published against earlier majors are typically backported only to supported lines.",
+      "recommendation": "Bump to the latest supported Electron major (verify against https://www.electronjs.org/docs/latest/tutorial/electron-timelines) and re-test main/preload/renderer surface. Add a quarterly Electron-bump task to the maintenance cadence.",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["outdated_major", "files/package.json", "electron:^31"]
+    },
+    {
+      "id": "DEP-002",
+      "category": "precarious_pre_1_0",
+      "severity": "medium",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "@anthropic-ai/sdk pinned at ^0.104.1 — per semver, ^0.x.y only allows 0.x.* patch updates. Any minor release (including security-relevant ones) requires a manual bump.",
+      "evidence": "dependencies['@anthropic-ai/sdk'] = ^0.104.1; pre-1.0 caret behavior in npm semver does not permit minor upgrades.",
+      "recommendation": "Either bump to the latest published 0.x or, if a 1.0 has been published, migrate. Document the SDK as 'manual minor bumps required' in the maintenance docs until 1.0.",
+      "confidence": 0.95,
+      "fingerprint_inputs": ["precarious_pre_1_0", "files/package.json", "@anthropic-ai/sdk:^0.x"]
+    },
+    {
+      "id": "DEP-003",
+      "category": "missing_audit",
+      "severity": "medium",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "No automated dependency audit is wired into CI — there is no .github/workflows, .gitlab-ci.yml, .circleci, renovate.json, or dependabot config in the repo. Vulnerabilities published against pinned versions will be discovered only on manual inspection.",
+      "evidence": "Absence of any CI / bot configuration files at the repo root or under conventional paths; package.json scripts contain no 'audit' or 'snyk' / 'osv-scanner' step.",
+      "recommendation": "Add either (a) a GitHub Actions workflow running `npm audit --omit=dev --audit-level=high` on PR and weekly cron, or (b) enable Renovate / Dependabot with security-only updates auto-merged. Treat any high/critical advisory as a build failure.",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["missing_audit", "files/package.json", "no-ci-audit"]
+    },
+    {
+      "id": "DEP-004",
+      "category": "unpinned_runtime",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "No `engines` field — Node.js version is unconstrained. A developer or CI runner on a Node major Electron does not support will silently install incompatible native modules (serialport).",
+      "evidence": "package.json has no `engines.node` or `engines.npm` key.",
+      "recommendation": "Add `\"engines\": {\"node\": \">=20.0.0 <23.0.0\"}` matching the Node version bundled by the target Electron major, and `\"engineStrict\": true` in .npmrc to fail installs on mismatch.",
+      "confidence": 0.85,
+      "fingerprint_inputs": ["unpinned_runtime", "files/package.json", "no-engines"]
+    },
+    {
+      "id": "DEP-005",
+      "category": "missing_overrides",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "No `overrides` field — when a transitive vulnerability lands with no upstream patch, there is no documented mechanism to force-pin the affected version.",
+      "evidence": "package.json declares dependencies and devDependencies only; no `overrides` / `resolutions` block. lockfileVersion 3 has hundreds of transitive packages with no override capability declared.",
+      "recommendation": "Add an empty `\"overrides\": {}` block now to mark policy intent, plus a runbook entry pointing at `npm overrides` for emergency transitive pinning.",
+      "confidence": 0.7,
+      "fingerprint_inputs": ["missing_overrides", "files/package.json", "no-overrides"]
+    },
+    {
+      "id": "DEP-006",
+      "category": "loose_version_range",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "Every direct dependency uses caret ranges (^) — when combined with no committed CI audit, a compromised maintainer release within an allowed minor/patch range will be installed silently on the next CI build.",
+      "evidence": "All 8 dependencies and all 15 devDependencies use ^ prefixes (e.g. \"electron\": \"^31.0.0\", \"serialport\": \"^12.0.0\"). The lockfile mitigates this locally but `npm ci` on a fresh clone with a regenerated lock will pick the latest in-range.",
+      "recommendation": "Either (a) pin to exact versions for runtime deps that ship in the app bundle (`@anthropic-ai/sdk`, `electron`, `electron-store`, `serialport`), letting Renovate propose bumps, or (b) keep ^ ranges but enforce `npm ci` (not `npm install`) in every build path and gate on lockfile diff in CI.",
+      "confidence": 0.75,
+      "fingerprint_inputs": ["loose_version_range", "files/package.json", "all-caret"]
+    },
+    {
+      "id": "DEP-007",
+      "category": "outdated_major",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "electron-store ^8.0.0 is one major behind — electron-store 9 went ESM-only. The pin to 8.x may be load-bearing for the current CommonJS main process; either way, security fixes published only to 9+ are unreachable.",
+      "evidence": "dependencies['electron-store'] = ^8.0.0; the v8→v9 boundary is the ESM transition.",
+      "recommendation": "If the main process is migrating to ESM, bump to 9+ at the same time. Otherwise document that electron-store is intentionally pinned to the last CJS major and watch its release notes for backported security fixes.",
+      "confidence": 0.7,
+      "fingerprint_inputs": ["outdated_major", "files/package.json", "electron-store:^8"]
+    }
+  ],
+  "scoring": {
+    "pass_threshold": {
+      "recall_high_or_above": 0.80,
+      "recall_medium_or_above": 0.65,
+      "max_false_positive_rate": 0.35,
+      "severity_match_rate": 0.65
+    },
+    "method": "Same as security: fingerprint match first, then loose match by (file, category). Line numbers do not apply — these findings are file-level."
+  }
+}

@@ -1,0 +1,33 @@
+# Build artifacts
+files/node_modules/
+files/dist/
+files/build/
+
+# OS
+.DS_Store
+*.swp
+*~
+
+# Editor
+.vscode/
+.idea/
+
+# Logs / runtime
+*.log
+files/*.log
+
+# Local-only experimental data
+files.zip
+parts/
+
+# Documents (binary, not source-tracked)
+*.pages
+*.docx
+*.pdf
+
+# Eval run outputs go under eval/<type>/history/ — committed via PR
+# but `actual.json` is per-run, gitignore'd to avoid accidental local commits
+eval/*/actual.json
+
+# Local app config
+files/claude-config.json

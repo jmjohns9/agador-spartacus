@@ -1,0 +1,80 @@
+{
+  "review_type": "architecture",
+  "scope": {"root": "files/src", "globs": ["**/*.ts", "**/*.tsx"], "excludes": ["**/dist/**", "**/node_modules/**"]},
+  "notes": "Architecture ground truth — most subjective of the five. Focus on structural patterns: layering, dependency direction, boundary discipline, replaceability of side-effects. Lower thresholds than security/deps.",
+  "findings": [
+    {
+      "id": "ARC-001",
+      "category": "god_module",
+      "severity": "high",
+      "file": "files/src/main/main.ts",
+      "line": 1,
+      "summary": "main.ts is a god-module: window lifecycle, simulator wiring, real-serial connection, OBD session state, 9 IPC handlers, Claude assistant routing, log export, CSV export, app lifecycle — all in one 400-line file with no internal seam.",
+      "evidence": "main.ts holds: createWindow, startSimulator, releaseActivePort, connectToPort, wireELMEvents, startOBDManager, 9 ipcMain.handle blocks, claude:ask controller management, app lifecycle hooks. All in a flat module with shared module-level lets.",
+      "recommendation": "Split into: main/window.ts (BrowserWindow + lifecycle), main/session.ts (an AppSession class owning elm/obd/simulator/port), main/ipc/obd.ts + main/ipc/claude.ts + main/ipc/session.ts (handler registration grouped by concern). main.ts becomes ~30 lines of composition.",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["god_module", "files/src/main/main.ts", "main.ts:everything"]
+    },
+    {
+      "id": "ARC-002",
+      "category": "missing_abstraction",
+      "severity": "high",
+      "file": "files/src/main/main.ts",
+      "line": 68,
+      "summary": "No Transport abstraction between ELM327Commander and its two consumers (real SerialPort, simulator). The simulator branch is hand-wired with a FakeEmitter + setTimeout in startSimulator(), and the real branch is hand-wired with port.on('data')/port.write(). A third transport (USB-only adapter, network-bridged adapter, replay-from-log) requires copy-pasting either branch.",
+      "evidence": "startSimulator and connectToPort both construct an ELM327Commander(sendFn) by hand and route incoming bytes back via different shapes (EventEmitter vs port.on). No common Transport interface exists.",
+      "recommendation": "Define `interface ELMTransport { send(data: string): void; onData(cb: (chunk: string) => void): void; close(): Promise<void>; }`. SerialTransport and SimulatorTransport implement it. ELM327Commander accepts a Transport, not a sendFn + manual onData calls.",
+      "confidence": 0.85,
+      "fingerprint_inputs": ["missing_abstraction", "files/src/main/main.ts", "no-transport-interface"]
+    },
+    {
+      "id": "ARC-003",
+      "category": "wrong_layer_for_concern",
+      "severity": "medium",
+      "file": "files/src/core/obdProtocolManager.ts",
+      "line": 280,
+      "summary": "OBDProtocolManager embeds a DTC knowledge base (DTC_DB) — 39 hand-coded DTC descriptions, causes, repairs — inside the protocol layer. The protocol layer should know how to read codes from the bus; the knowledge of what they mean is a separate concern (and one likely to grow with each new vehicle platform).",
+      "evidence": "obdProtocolManager.ts:300–339 declares DTC_DB inline; getDTCDescription/Causes/Repair/Module look up from it. The PlatformProfile / GMT800 module nearby exists for exactly this kind of vehicle-specific data.",
+      "recommendation": "Move DTC_DB into files/src/core/dtcKnowledgeBase.ts (or per-platform under platforms/). Inject a DTCResolver into OBDProtocolManager. Generic SAE codes stay in core; platform-enhanced codes live in their platform module.",
+      "confidence": 0.85,
+      "fingerprint_inputs": ["wrong_layer_for_concern", "files/src/core/obdProtocolManager.ts", "DTC_DB:in-protocol-layer"]
+    },
+    {
+      "id": "ARC-004",
+      "category": "leaky_boundary",
+      "severity": "medium",
+      "file": "files/src/main/claudeAssistant.ts",
+      "line": 49,
+      "summary": "SessionContext crosses the renderer→main IPC boundary as a structurally-typed object with no validation. The main process trusts the renderer to send well-formed liveData/dtcs/recentLogs arrays — but it's also the only thing standing between malformed input and the Claude API.",
+      "evidence": "claudeAsk handler passes `context: SessionContext` straight through to formatContext, which interpolates fields directly into the prompt. No schema validation, no length cap, no shape check.",
+      "recommendation": "Add an IPC-boundary validator (zod or a hand-rolled `parseSessionContext(x: unknown): SessionContext`) that runs in the main process before askClaude is invoked. Reject malformed payloads with a typed error visible to the renderer.",
+      "confidence": 0.8,
+      "fingerprint_inputs": ["leaky_boundary", "files/src/main/claudeAssistant.ts", "SessionContext:no-validation"]
+    },
+    {
+      "id": "ARC-005",
+      "category": "circular_responsibility",
+      "severity": "medium",
+      "file": "files/src/core/elm327Commander.ts",
+      "line": 222,
+      "summary": "ELM327Commander includes OBDLink-specific helpers (setSleepTimer via STSLLT, setPowerControl via STPC). The class is named for a generic ELM327 protocol but mixes vendor-proprietary AT-command extensions. The vendor split should be explicit (subclass, decorator, or capability-detection layer).",
+      "evidence": "elm327Commander.ts:222–230 — readBatteryVoltage uses generic ATRV (OK), but setSleepTimer / setPowerControl issue STSLLT / STPC which are OBDLink-only ScanTool extensions. Comments admit this.",
+      "recommendation": "Extract OBDLink-specific commands into `OBDLinkCommander extends ELM327Commander`, OR add a `capabilities` map populated during initialize() that gates vendor commands. Either way: the base class should not silently expose vendor methods.",
+      "confidence": 0.75,
+      "fingerprint_inputs": ["circular_responsibility", "files/src/core/elm327Commander.ts", "vendor-mixed-in"]
+    },
+    {
+      "id": "ARC-006",
+      "category": "missing_seam_for_testing",
+      "severity": "medium",
+      "file": "files/src/core/pidCatalog.ts",
+      "line": 22,
+      "summary": "PID_CATALOG is a top-level static array with closures over pure helpers; PID_MAP is a singleton Map keyed by PID. There's no way to inject an alternate catalog for tests (e.g. a subset for fast unit tests, or a platform-overridden catalog for vehicles with extended PIDs).",
+      "evidence": "export const PID_CATALOG: PIDDefinition[] = [...]; export const PID_MAP = new Map(PID_CATALOG.map(p => [p.pid, p])); — both are module-level constants. obdProtocolManager imports PID_MAP directly.",
+      "recommendation": "Replace direct PID_MAP imports with a `getPidMap()` accessor or pass the catalog into OBDProtocolManager via the constructor. Lets platforms (GMT800 et al.) extend the catalog without monkey-patching globals.",
+      "confidence": 0.7,
+      "fingerprint_inputs": ["missing_seam_for_testing", "files/src/core/pidCatalog.ts", "PID_CATALOG:singleton"]
+    }
+  ],
+  "scoring": {"pass_threshold": {"recall_high_or_above": 0.50, "recall_medium_or_above": 0.40, "max_false_positive_rate": 0.50, "severity_match_rate": 0.55}, "method": "Architecture is the most subjective — thresholds matched to quality."}
+}
