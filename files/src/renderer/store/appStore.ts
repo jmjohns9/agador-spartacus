@@ -198,15 +198,26 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updatePIDReading: (reading) => {
     set((state) => {
-      // Update live data
-      const liveData = { ...state.liveData, [reading.pid]: reading };
+      const prev = state.liveData[reading.pid];
+      const valueChanged = !prev || prev.value !== reading.value;
+
+      if (!valueChanged) {
+        // Timestamp-only change — update the entry in-place without cloning the
+        // entire liveData map. History doesn't need a new point either.
+        prev.timestamp = reading.timestamp;
+        return {};
+      }
 
       // Append to history ring buffer
       const prevHistory = state.history[reading.pid] ?? [];
-      const newHistory = [...prevHistory, reading].slice(-state.historyMaxPoints);
-      const history = { ...state.history, [reading.pid]: newHistory };
+      const newHistory = prevHistory.length >= state.historyMaxPoints
+        ? [...prevHistory.slice(1), reading]
+        : [...prevHistory, reading];
 
-      return { liveData, history };
+      return {
+        liveData: { ...state.liveData, [reading.pid]: reading },
+        history: { ...state.history, [reading.pid]: newHistory },
+      };
     });
   },
 

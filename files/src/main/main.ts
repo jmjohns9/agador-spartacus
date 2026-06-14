@@ -53,6 +53,7 @@ let simulatorMode = false;
 let sessionLog: LogEntry[] = [];
 let activePort: any = null;       // currently open SerialPort (if any)
 let isConnecting = false;          // guard against concurrent connect attempts
+let debugSerial = false;           // set true to log every TX/RX byte over IPC
 
 // Ring-buffer cap so a long-lived connected session doesn't grow the log
 // array unboundedly (see eval/performance PRF-001 / eval/security SEC-004).
@@ -162,9 +163,10 @@ async function connectToPort(portPath: string): Promise<void> {
     activePort = port;
 
     const fakeSend = (data: string): void => {
-      // data already includes trailing \r from ELM327Commander.send()
-      const display = data.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
-      addLog({ timestamp: Date.now(), level: 'info', message: `TX → ${display}` });
+      if (debugSerial) {
+        const display = data.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+        addLog({ timestamp: Date.now(), level: 'info', message: `TX → ${display}` });
+      }
       port.write(data, (err: Error | null | undefined) => {
         if (err) addLog({ timestamp: Date.now(), level: 'error', message: `Serial write error: ${err.message}` });
       });
@@ -174,8 +176,10 @@ async function connectToPort(portPath: string): Promise<void> {
 
     port.on('data', (chunk: Buffer) => {
       const ascii = chunk.toString('ascii');
-      const display = ascii.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
-      addLog({ timestamp: Date.now(), level: 'info', message: `RX ← ${display}` });
+      if (debugSerial) {
+        const display = ascii.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+        addLog({ timestamp: Date.now(), level: 'info', message: `RX ← ${display}` });
+      }
       elm?.onData(ascii);
     });
     port.on('error', (err: Error) => {

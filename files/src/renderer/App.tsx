@@ -153,14 +153,15 @@ export function App(): React.ReactElement {
   }, [connectionStatus]);
 
   // ── Real telemetry stats for the status bar (no fake numbers) ─────────────
-  const liveData = useAppStore(s => s.liveData);
-  const { livePIDCount, readingsPerSec } = React.useMemo(() => {
+  // Derived selector: only re-renders App when the computed counts actually
+  // change, not on every PID reading (was PRF-004).
+  const { livePIDCount, readingsPerSec } = useAppStore((s) => {
     const now = Date.now();
-    const readings = Object.values(liveData);
+    const readings = Object.values(s.liveData);
     const fresh = readings.filter(r => now - r.timestamp < 5000);
     const lastSec = readings.filter(r => now - r.timestamp < 2000).length / 2;
     return { livePIDCount: fresh.length, readingsPerSec: lastSec.toFixed(1) };
-  }, [liveData]);
+  }, (a, b) => a.livePIDCount === b.livePIDCount && a.readingsPerSec === b.readingsPerSec);
 
   // Battery chip colour by actual health: charging ~14V, healthy ≥12.4, low <12.0
   const battColor = batteryVoltage <= 0 ? 'var(--tm)'
