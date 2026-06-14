@@ -51,7 +51,17 @@ export interface SessionContext {
   connectionStatus: string;
   protocol: string;
   liveData: Array<{ pid: string; name: string; value: number | string; unit: string }>;
-  dtcs: Array<{ code: string; status: string; description: string }>;
+  dtcs: Array<{
+    code: string;
+    status: string;
+    description: string;
+    // Optional richer fields surfaced from dtcCatalog.generated.ts — when
+    // present, the assistant grounds advice in the catalog instead of falling
+    // back to its training data for these codes.
+    module?: string;
+    likelyCauses?: string[];
+    repairSummary?: string;
+  }>;
   recentLogs: string[];          // newest last, capped by renderer
 }
 
@@ -78,9 +88,20 @@ function formatContext(ctx: SessionContext): string {
   } else {
     lines.push('Live readings: none (no data streaming)');
   }
-  lines.push(ctx.dtcs.length
-    ? 'DTCs: ' + ctx.dtcs.map(d => `${d.code} [${d.status}] ${d.description}`).join('; ')
-    : 'DTCs: none scanned/stored');
+  if (ctx.dtcs.length) {
+    lines.push('DTCs (stored fault codes — quote these when reasoning about the vehicle):');
+    for (const d of ctx.dtcs) {
+      lines.push(`  - ${d.code} [${d.status}]${d.module ? ` (${d.module})` : ''} — ${d.description}`);
+      if (d.likelyCauses?.length) {
+        lines.push(`      causes: ${d.likelyCauses.join('; ')}`);
+      }
+      if (d.repairSummary) {
+        lines.push(`      repair: ${d.repairSummary}`);
+      }
+    }
+  } else {
+    lines.push('DTCs: none scanned/stored');
+  }
   if (ctx.recentLogs.length) {
     lines.push('Recent app logs (newest last):');
     for (const l of ctx.recentLogs) lines.push(`  ${l}`);

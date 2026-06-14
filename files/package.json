@@ -9,7 +9,8 @@
     "watch:renderer": "webpack --config webpack.renderer.js --watch",
     "build": "tsc -p tsconfig.main.json && webpack --config webpack.renderer.js",
     "dist": "npm run build && electron-builder",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "gen:dtcs": "ts-node scripts/gen-dtc-catalog.ts"
   },
   "build": {
     "appId": "com.silveradodx.obd2",
@@ -36,6 +37,7 @@
     "css-loader": "^7.0.0",
     "electron": "^31.0.0",
     "electron-builder": "^24.0.0",
+    "exceljs": "^4.4.0",
     "html-webpack-plugin": "^5.0.0",
     "style-loader": "^4.0.0",
     "ts-loader": "^9.0.0",

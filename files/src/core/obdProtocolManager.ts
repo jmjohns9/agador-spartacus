@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { ELM327Commander } from './elm327Commander';
 import { PID_MAP, POLLING_FAST, POLLING_NORMAL, POLLING_SLOW } from './pidCatalog';
+import { DTC_CATALOG } from './dtcCatalog.generated';
 import { PIDReading, DTCCode, DTCType, DTCStatus } from '../shared/types';
 
 // ─── OBDProtocolManager ───────────────────────────────────────────────────────
@@ -276,64 +277,25 @@ export class OBDProtocolManager extends EventEmitter {
     this.emit('log', { timestamp: Date.now(), level: 'info', message: msg });
   }
 
-  // ── Built-in DTC database (common SAE J2012 + GM codes) ──────────────────────
+  // ── Catalog lookups — backed by dtcCatalog.generated.ts ─────────────────────
   private getDTCDescription(code: string): string {
-    return DTC_DB[code]?.description ?? `${code} — refer to factory service manual`;
+    return DTC_CATALOG[code]?.description ?? `${code} — refer to factory service manual`;
   }
 
   private getDTCCauses(code: string): string[] {
-    return DTC_DB[code]?.causes ?? ['Refer to factory service manual for this vehicle'];
+    return DTC_CATALOG[code]?.causes ?? ['Refer to factory service manual for this vehicle'];
   }
 
   private getDTCRepair(code: string): string {
-    return DTC_DB[code]?.repair ?? 'Refer to factory service manual and perform circuit testing per diagnostic chart.';
+    return DTC_CATALOG[code]?.repair ?? 'Refer to factory service manual and perform circuit testing per diagnostic chart.';
   }
 
   private getDTCModule(code: string): string {
+    const explicit = DTC_CATALOG[code]?.module;
+    if (explicit) return explicit;
     if (code.startsWith('B')) return 'BCM/IPC';
     if (code.startsWith('U')) return 'Network';
     if (code.startsWith('C')) return 'ABS/EBCM';
     return 'PCM';
   }
 }
-
-// ─── DTC knowledge base — one record per code ─────────────────────────────────
-interface DTCInfo { description: string; causes?: string[]; repair?: string; }
-
-const DTC_DB: { [code: string]: DTCInfo } = {
-  'B1982': {
-    description: 'Instrument Cluster — loss of Class II serial data from Body Control Module',
-    causes: ['Class II bus disruption or high resistance', 'Ground integrity at Instrument Cluster connector C2', 'Battery circuit draw keeping bus awake', 'Faulty Body Control Module'],
-    repair: 'Inspect Class II bus wiring. Check Instrument Cluster connector C2 ground. Test firewall-to-engine ground strap resistance — target below 0.1 Ω. Check TBC BATT fuse circuit for parasitic draw.',
-  },
-  'P0300': {
-    description: 'Random / multiple cylinder misfire detected',
-    causes: ['Worn or fouled spark plugs', 'Failed ignition coils or wires', 'Lean fuel trim amplifying misfires (P0171/P0174)', 'Low fuel pressure'],
-    repair: 'Inspect and replace spark plugs. Inspect ignition wires and coil packs. Address fuel trim lean condition first.',
-  },
-  'P0171': {
-    description: 'Fuel system lean — Bank 1',
-    causes: ['Vacuum leak at intake manifold gasket', 'Dirty or failed Mass Air Flow sensor', 'Evaporative Emission Control purge valve stuck open', 'Low fuel pressure'],
-    repair: 'Check all intake manifold gaskets and vacuum lines for leaks. Clean or replace Mass Air Flow sensor. Test Evaporative Emission Control purge valve.',
-  },
-  'U0100': {
-    description: 'Lost communication with Engine Control Module on the data bus',
-    causes: ['Body Control Module or Instrument Cluster preventing bus sleep', 'Faulty ground strap at firewall', 'Wiring fault on the data bus'],
-    repair: 'Diagnose bus parasitic draw first. Inspect Instrument Cluster and Body Control Module circuits.',
-  },
-  'B0429': { description: 'Heated seat module — driver seat temperature fault' },
-  'P0301': { description: 'Cylinder 1 misfire detected' },
-  'P0302': { description: 'Cylinder 2 misfire detected' },
-  'P0174': { description: 'Fuel system lean — Bank 2' },
-  'P0446': { description: 'Evaporative Emission Control vent control circuit fault' },
-  'P0442': { description: 'Evaporative Emission Control system — small leak detected' },
-  'P0449': { description: 'Evaporative Emission Control vent solenoid circuit fault' },
-  'P0128': { description: 'Coolant temperature below thermostat regulating temperature' },
-  'P0420': { description: 'Catalyst efficiency below threshold — Bank 1' },
-  'P0430': { description: 'Catalyst efficiency below threshold — Bank 2' },
-  'U1000': { description: 'Class II communication fault — general bus error' },
-  'C0265': { description: 'Anti-lock Brake Control Module relay circuit fault' },
-  'P0741': { description: 'Torque converter clutch circuit — stuck off' },
-  'P0753': { description: 'Shift solenoid A — electrical fault' },
-  'P0758': { description: 'Shift solenoid B — electrical fault' },
-};

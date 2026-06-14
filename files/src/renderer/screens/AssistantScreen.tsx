@@ -138,7 +138,14 @@ export function AssistantScreen(): React.ReactElement {
       value: typeof r.value === 'number' ? Math.round((r.value as number) * 100) / 100 : r.value,
       unit: r.unit,
     })),
-    dtcs: dtcs.map(d => ({ code: d.code, status: d.status, description: d.description })),
+    dtcs: dtcs.map(d => ({
+      code: d.code,
+      status: d.status,
+      description: d.description,
+      module: d.module,
+      likelyCauses: d.likelyCauses,
+      repairSummary: d.repairSummary,
+    })),
     recentLogs: log.slice(0, 30).reverse().map(e =>
       `${new Date(e.timestamp).toLocaleTimeString()} ${e.level.toUpperCase()} ${e.message}`),
   }), [vehicle, connectionStatus, protocol, liveData, dtcs, log]);
