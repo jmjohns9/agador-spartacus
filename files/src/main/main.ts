@@ -54,12 +54,22 @@ let sessionLog: LogEntry[] = [];
 let activePort: any = null;       // currently open SerialPort (if any)
 let isConnecting = false;          // guard against concurrent connect attempts
 
+// Ring-buffer cap so a long-lived connected session doesn't grow the log
+// array unboundedly (see eval/performance PRF-001 / eval/security SEC-004).
+const SESSION_LOG_MAX = 5000;
+
 function sendToRenderer(channel: string, data: unknown): void {
   mainWindow?.webContents.send(channel, data);
 }
 
 function addLog(entry: LogEntry): void {
   sessionLog.push(entry);
+  if (sessionLog.length > SESSION_LOG_MAX) {
+    // Drop the oldest 10% in one go — cheaper than splicing every push and
+    // keeps the array length bounded at SESSION_LOG_MAX with steady-state
+    // amortized O(1) cost.
+    sessionLog.splice(0, Math.floor(SESSION_LOG_MAX * 0.1));
+  }
   sendToRenderer('session:log-entry', entry);
 }
 
@@ -87,6 +97,9 @@ function startSimulator(): void {
 
   wireELMEvents();
 
+  // Fire-and-forget the init chain — but surface failures to the UI so a
+  // throw in elm.initialize() can't leave the renderer stuck in "connecting"
+  // forever (see eval/quality QLT-002).
   elm.initialize().then((info) => {
     sendToRenderer('obd:connection-status', {
       status: 'connected' as ConnectionStatus,
@@ -95,6 +108,13 @@ function startSimulator(): void {
     });
     addLog({ timestamp: Date.now(), level: 'ok', message: 'Simulator mode started — synthetic J1850 VPW session' });
     startOBDManager();
+  }).catch((err) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    addLog({ timestamp: Date.now(), level: 'error', message: `Simulator init failed: ${msg}` });
+    sendToRenderer('obd:connection-status', { status: 'error' as ConnectionStatus, adapterInfo: msg });
+    simulatorMode = false;
+    simulator = null;
+    elm = null;
   });
 }
 
@@ -212,10 +232,15 @@ function startOBDManager(): void {
 
   obd.on('log', (entry: LogEntry) => addLog(entry));
 
-  // Discover supported PIDs then start the polling loop
+  // Discover supported PIDs then start the polling loop. A throw in
+  // discoverSupportedPIDs would otherwise be silently dropped (see QLT-002).
   obd.discoverSupportedPIDs().then(() => {
     obd?.startPolling();
     addLog({ timestamp: Date.now(), level: 'info', message: 'Sequential PID polling started (fast every cycle, normal every 3rd, slow every 10th)' });
+  }).catch((err) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    addLog({ timestamp: Date.now(), level: 'error', message: `PID discovery failed: ${msg}` });
+    sendToRenderer('obd:connection-status', { status: 'error' as ConnectionStatus, adapterInfo: msg });
   });
 }
 

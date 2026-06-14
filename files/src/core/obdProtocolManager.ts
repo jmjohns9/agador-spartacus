@@ -45,8 +45,11 @@ export class OBDProtocolManager extends EventEmitter {
         }
 
         this.log(`PID support ${rangePID}: ${bytes.map(b => b.toString(16).padStart(2, '0')).join('')} — found ${this.supportedPIDs.size} so far`);
-      } catch {
-        // Some ranges may not be supported — continue
+      } catch (err) {
+        // Some ranges may not be supported — continue, but leave a breadcrumb
+        // so a real adapter fault isn't invisible (eval/quality QLT-001).
+        const msg = err instanceof Error ? err.message : String(err);
+        this.log(`PID support range ${rangePID} probe failed: ${msg}`);
       }
     }
 
@@ -129,8 +132,10 @@ export class OBDProtocolManager extends EventEmitter {
         };
         this.emit('pid-reading', reading);
       }
-    } catch {
-      // Non-fatal — retry next cycle
+    } catch (err) {
+      // Non-fatal — retry next cycle, but breadcrumb the failure (QLT-001).
+      const msg = err instanceof Error ? err.message : String(err);
+      this.log(`Battery voltage read failed: ${msg}`);
     }
   }
 
@@ -169,8 +174,11 @@ export class OBDProtocolManager extends EventEmitter {
       };
 
       this.emit('pid-reading', reading);
-    } catch {
-      // Individual PID failure — non-fatal, continue with next PID
+    } catch (err) {
+      // Individual PID failure — non-fatal, but breadcrumb so a systemic
+      // decode bug doesn't hide behind dozens of silent skips (QLT-001).
+      const msg = err instanceof Error ? err.message : String(err);
+      this.log(`PID ${pid} poll failed: ${msg}`);
     }
   }
 
@@ -196,8 +204,11 @@ export class OBDProtocolManager extends EventEmitter {
         const resp = await this.elm.send(mode, 5000);
         const dtcs = this.parseDTCResponse(mode, resp.raw, status);
         results.push(...dtcs);
-      } catch {
-        // Mode may not be supported on this vehicle
+      } catch (err) {
+        // Mode may not be supported on this vehicle — breadcrumb so a real
+        // bus fault doesn't look like a missing mode (QLT-001).
+        const msg = err instanceof Error ? err.message : String(err);
+        this.log(`DTC scan mode ${mode} failed: ${msg}`);
       }
     }
 
