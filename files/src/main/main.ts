@@ -238,9 +238,26 @@ function startOBDManager(): void {
 
   // Discover supported PIDs then start the polling loop. A throw in
   // discoverSupportedPIDs would otherwise be silently dropped (see QLT-002).
-  obd.discoverSupportedPIDs().then(() => {
+  obd.discoverSupportedPIDs().then(async () => {
     obd?.startPolling();
     addLog({ timestamp: Date.now(), level: 'info', message: 'Sequential PID polling started (fast every cycle, normal every 3rd, slow every 10th)' });
+
+    // Re-read the negotiated protocol now that the bus is active — init may
+    // have seen "STOPPED" if the engine was off at connect time.
+    try {
+      const protocol = await obd!.refreshProtocol();
+      sendToRenderer('obd:connection-status', {
+        status: 'connected' as ConnectionStatus,
+        protocol,
+        adapterInfo: elm?.getAdapterInfo()?.firmwareVersion ?? '',
+      });
+    } catch { /* non-fatal */ }
+
+    // Auto-detect VIN from ECM (Mode 09 PID 02)
+    try {
+      const vin = await obd!.readVIN();
+      if (vin) sendToRenderer('obd:vin-detected', vin);
+    } catch { /* non-fatal — not all vehicles support Mode 09 */ }
   }).catch((err) => {
     const msg = err instanceof Error ? err.message : String(err);
     addLog({ timestamp: Date.now(), level: 'error', message: `PID discovery failed: ${msg}` });

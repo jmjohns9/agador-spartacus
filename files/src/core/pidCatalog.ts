@@ -522,4 +522,4 @@ export const PID_MAP: Map<string, PIDDefinition> = new Map(
 
 export const POLLING_FAST   = ['010C', '0142'];  // battery voltage (ATRV) is polled separately every cycle
 export const POLLING_NORMAL = ['010D', '0105', '0104', '0111', '010F', '0110', '010B', '0106', '0107', '0108', '0109', '0114', '0115', '0118', '0119'];
-export const POLLING_SLOW   = ['012F', '015C', '0123', '015E', '0133', '010E', '0143', '012C', '012D', '012E', '01A4'];
+export const POLLING_SLOW   = ['012F', '015C', '0123', '015E', '0133', '010E', '0143', '0146', '012C', '012D', '012E', '01A4'];

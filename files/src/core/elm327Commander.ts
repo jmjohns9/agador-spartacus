@@ -47,6 +47,10 @@ export class ELM327Commander extends EventEmitter {
     this.sendFn = sendFn;
   }
 
+  getAdapterInfo(): Partial<AdapterInfo> {
+    return this.adapterInfo;
+  }
+
   // ── Called by the transport layer with each chunk of incoming bytes ──────────
   onData(chunk: string): void {
     this.recvBuf += chunk;
@@ -137,6 +141,37 @@ export class ELM327Commander extends EventEmitter {
     this.emit('protocol', this.adapterInfo.protocol);
 
     return this.adapterInfo as AdapterInfo;
+  }
+
+  async readProtocol(): Promise<string> {
+    const resp = await this.send('ATDP', 2000);
+    const protocol = resp.lines[0] ?? 'Unknown';
+    this.adapterInfo.protocol = protocol;
+    this.emit('protocol', protocol);
+    return protocol;
+  }
+
+  async readVIN(): Promise<string | null> {
+    const resp = await this.send('0902', 5000);
+    if (!resp.success || resp.raw.includes('NO DATA') || resp.raw.includes('ERROR')) return null;
+    const clean = resp.raw.replace(/[\s>]/g, '').toUpperCase();
+    const header = '4902';
+    const idx = clean.indexOf(header);
+    if (idx === -1) return null;
+    let hexPart = clean.substring(idx);
+    // Mode 09 PID 02 returns multiple frames; extract ASCII bytes after each 4902XX header
+    const vinBytes: number[] = [];
+    const framePattern = /4902(\w{2})((?:\w{2})*)/g;
+    let match: RegExpExecArray | null;
+    while ((match = framePattern.exec(hexPart)) !== null) {
+      const data = match[2];
+      for (let i = 0; i < data.length; i += 2) {
+        const byte = parseInt(data.substring(i, i + 2), 16);
+        if (byte >= 0x20 && byte <= 0x7E) vinBytes.push(byte);
+      }
+    }
+    if (vinBytes.length < 11) return null;
+    return String.fromCharCode(...vinBytes).trim();
   }
 
   // ── Send a raw AT or OBD command and wait for the prompt ─────────────────────

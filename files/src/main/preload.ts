@@ -53,6 +53,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('session:log-entry', (_e, entry) => cb(entry));
     return () => ipcRenderer.removeAllListeners('session:log-entry');
   },
+
+  onVINDetected: (cb: (vin: string) => void) => {
+    ipcRenderer.on('obd:vin-detected', (_e, vin) => cb(vin));
+    return () => ipcRenderer.removeAllListeners('obd:vin-detected');
+  },
 });
 
 // ── Type declaration for the renderer ─────────────────────────────────────────

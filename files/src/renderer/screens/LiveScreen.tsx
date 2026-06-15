@@ -10,6 +10,12 @@ import { PID_MAP } from '../../core/pidCatalog';
 function usePID(pid: string): number | string {
   const reading = useAppStore(s => s.liveData[pid]);
   if (!reading) return '—';
+  // Show stale engine-dependent PIDs as "—" when engine is off (RPM = 0)
+  const rpm = useAppStore(s => s.liveData['010C']);
+  if (pid !== '010C' && pid !== 'ATRV' && rpm && typeof rpm.value === 'number' && rpm.value === 0) {
+    const age = Date.now() - reading.timestamp;
+    if (age > 5000) return '—';
+  }
   return reading.value;
 }
 

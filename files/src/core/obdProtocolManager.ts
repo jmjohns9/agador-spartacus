@@ -22,6 +22,27 @@ export class OBDProtocolManager extends EventEmitter {
     this.elm = elm;
   }
 
+  async refreshProtocol(): Promise<string> {
+    const protocol = await this.elm.readProtocol();
+    this.log(`Protocol refreshed: ${protocol}`);
+    return protocol;
+  }
+
+  async readVIN(): Promise<string | null> {
+    const wasPolling = this.pollingActive;
+    this.pollingActive = false;
+    await this.sleep(300);
+
+    const vin = await this.elm.readVIN();
+    this.log(vin ? `VIN read: ${vin}` : 'VIN not available from ECM');
+
+    if (wasPolling) {
+      this.pollingActive = true;
+      this.runPollLoop();
+    }
+    return vin;
+  }
+
   // ── Discover which PIDs the ECM supports ─────────────────────────────────────
   async discoverSupportedPIDs(): Promise<Set<string>> {
     const supportRanges = ['0100', '0120', '0140', '0160'];

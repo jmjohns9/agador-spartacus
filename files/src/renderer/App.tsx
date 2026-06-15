@@ -35,6 +35,7 @@ declare global {
       onModuleState: (cb: (m: ModuleState) => void) => () => void;
       onConnectionStatus: (cb: (s: { status: string; protocol?: string; adapterInfo?: string }) => void) => () => void;
       onLogEntry: (cb: (e: LogEntry) => void) => () => void;
+      onVINDetected: (cb: (vin: string) => void) => () => void;
       claudeAsk: (payload: { question: string; context: unknown; history: unknown }) =>
         Promise<
           | { ok: true; text: string; model: string; usage: { input_tokens: number; output_tokens: number } }
@@ -123,6 +124,10 @@ export function App(): React.ReactElement {
       window.electronAPI.onDTCResult((d) => setDTCs(d)),
       window.electronAPI.onModuleState((m) => updateModule(m)),
       window.electronAPI.onLogEntry((e) => addLogEntry(e)),
+      window.electronAPI.onVINDetected((vin) => {
+        const v = useAppStore.getState().vehicle;
+        if (!v.vin) useAppStore.getState().setVehicle({ ...v, vin });
+      }),
     ];
 
     return () => cleanups.forEach(fn => fn?.());
