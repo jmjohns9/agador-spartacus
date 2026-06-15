@@ -1,6 +1,9 @@
 import React from 'react';
 import { useAppStore } from '../store/appStore';
-import { ScrollPane, SectionHeader, Grid, MetricTile, ArcGauge, Card, Badge } from '../components/layout/UIComponents';
+import {
+  ScrollPane, SectionHeader, Grid, DenseMetricTile, CompactArcGauge,
+  HeroCard, Card, Badge,
+} from '../components/layout/UIComponents';
 import { PID_MAP } from '../../core/pidCatalog';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -13,6 +16,10 @@ function usePID(pid: string): number | string {
 function usePIDNum(pid: string, fallback = 0): number {
   const v = usePID(pid);
   return typeof v === 'number' ? v : fallback;
+}
+
+function usePIDTimestamp(pid: string): number | undefined {
+  return useAppStore(s => s.liveData[pid]?.timestamp);
 }
 
 function fmt(pid: string, v: number | string): string {
@@ -49,7 +56,6 @@ function GearIndicator({ gear }: { gear: string | number }): React.ReactElement 
 // ─── TransmissionScreen ───────────────────────────────────────────────────────
 
 export function TransmissionScreen(): React.ReactElement {
-  const isDark  = useAppStore(s => s.isDarkMode);
   const speed   = usePIDNum('010D');
   const rpm     = usePIDNum('010C');
   const gear    = usePID('01A4');
@@ -65,29 +71,53 @@ export function TransmissionScreen(): React.ReactElement {
   return (
     <ScrollPane>
 
+      {/* ── Hero row — speed and RPM lead the screen ───────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
+        <HeroCard
+          label="Vehicle speed"
+          value={speedMph > 0 ? speedMph.toFixed(0) : '—'}
+          unit="mph"
+          subtext={`Raw: ${fmt('010D', usePID('010D'))} · VSS output shaft`}
+          valueColor="var(--tw)"
+          accentBorder="var(--gb)"
+          pid="010D"
+          sparkColor="var(--gb)"
+          staleAt={usePIDTimestamp('010D')}
+        />
+        <HeroCard
+          label="Engine RPM"
+          value={rpm > 0 ? rpm.toLocaleString() : '—'}
+          unit="rpm"
+          subtext={rpm === 0 ? 'Engine off' : rpm < 900 ? 'Idle' : 'Running'}
+          valueColor={rpm > 5500 ? 'var(--sa)' : 'var(--tw)'}
+          accentBorder="var(--pp)"
+          pid="010C"
+          sparkColor="var(--pp)"
+          staleAt={usePIDTimestamp('010C')}
+        />
+        <HeroCard
+          label="Engine load"
+          value={fmt('0104', usePID('0104'))}
+          subtext="TCC lock-up demand"
+          valueColor="var(--gb)"
+          pid="0104"
+          sparkColor="var(--gb)"
+          staleAt={usePIDTimestamp('0104')}
+        />
+      </div>
+
       {/* ── Primary gauges ─────────────────────────────────────────────── */}
       <SectionHeader>4L60-E transmission — live data</SectionHeader>
       <Grid cols={4}>
-        <ArcGauge
-          label="Vehicle speed"
-          value={speedMph}
-          min={0} max={120} unit="mph"
-          isDark={isDark}
-          color="var(--gb)"
-        />
-        <ArcGauge
-          label="Engine RPM"
-          value={rpm}
-          min={0} max={6000} unit="rpm"
-          warnHigh={5500} critHigh={6000}
-          isDark={isDark}
-        />
-        <MetricTile
+        <CompactArcGauge label="Speed" value={Math.round(speedMph)} max={120} unit="mph" color="var(--gb)" />
+        <CompactArcGauge label="RPM" value={rpm} max={6000} unit="/ 6,000" color="var(--pp)" />
+        <DenseMetricTile
           label="Road speed (raw)"
           value={fmt('010D', usePID('010D'))}
-          subtext={`${speedMph.toFixed(0)} mph · VSS on output shaft`}
+          accentBorder="var(--gb)"
+          subtext={`${speedMph.toFixed(0)} mph · VSS`}
         />
-        <MetricTile
+        <DenseMetricTile
           label="Engine load"
           value={fmt('0104', usePID('0104'))}
           subtext="TCC lock-up demand"
@@ -115,10 +145,10 @@ export function TransmissionScreen(): React.ReactElement {
             Torque converter clutch
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <MetricTile
-              label="TCC slip estimate"
+            <DenseMetricTile
+              label="TCC slip est"
               value={tccSlip > 0 ? `~${Math.round(tccSlip)} rpm` : '—'}
-              subtext={tccSlip > 200 ? 'High slip — TCC may be unlocked or slipping' : tccSlip > 0 ? 'Normal converter slip' : 'Requires highway speed data'}
+              subtext={tccSlip > 200 ? 'High slip — TCC may be unlocked' : tccSlip > 0 ? 'Normal converter slip' : 'Requires hwy speed'}
               valueColor={tccSlip > 200 ? 'var(--sa)' : 'var(--tm)'}
             />
           </div>

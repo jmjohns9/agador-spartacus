@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { gaugeArc, valueColor } from '../../theme/theme';
+import { useAppStore } from '../../store/appStore';
 
 // ─── Layout helpers ───────────────────────────────────────────────────────────
 
@@ -453,6 +454,306 @@ export function WaveBar({ color = 'var(--pp)', active = true }: { color?: string
           height: 8,
         }} />
       ))}
+    </div>
+  );
+}
+
+// ─── Sparkline — mini history chart for hero cards ───────────────────────────
+
+interface SparklineProps {
+  pid: string;
+  color: string;
+  height?: number;
+}
+
+export function Sparkline({ pid, color, height = 36 }: SparklineProps): React.ReactElement | null {
+  const history = useAppStore(s => s.history[pid]);
+  const points = useMemo(() => {
+    if (!history || history.length < 2) return null;
+    const nums = history
+      .map(r => (typeof r.value === 'number' ? r.value : null))
+      .filter((v): v is number => v !== null);
+    if (nums.length < 2) return null;
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    const range = max - min || 1;
+    const pad = range * 0.05;
+    const yMin = min - pad;
+    const yRange = range + pad * 2;
+    return nums.map((v, i) => {
+      const x = (i / (nums.length - 1)) * 200;
+      const y = height - ((v - yMin) / yRange) * height;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+  }, [history, height]);
+
+  if (!points) return null;
+  const gradId = `spark-${pid}`;
+
+  return (
+    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height, opacity: 0.35 }}>
+      <svg viewBox={`0 0 200 ${height}`} preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <polyline fill={`url(#${gradId})`} stroke="none" points={`0,${height} ${points} 200,${height}`} />
+        <polyline fill="none" stroke={color} strokeWidth="1.5" points={points} />
+      </svg>
+    </div>
+  );
+}
+
+// ─── HeroCard — large metric with sparkline overlay ──────────────────────────
+
+interface HeroCardProps {
+  label: string;
+  value: string | number;
+  unit?: string;
+  subtext?: string;
+  valueColor?: string;
+  accentBorder?: string;
+  pid: string;
+  sparkColor: string;
+  staleAt?: number;
+}
+
+export function HeroCard({
+  label, value, unit, subtext,
+  valueColor: vc = 'var(--tw)',
+  accentBorder,
+  pid, sparkColor,
+  staleAt,
+}: HeroCardProps): React.ReactElement {
+  const stale = useStaleness(staleAt, 3000);
+  return (
+    <div style={{
+      background: 'var(--bg2)',
+      border: '1px solid var(--br)',
+      borderLeft: accentBorder ? `3px solid ${accentBorder}` : undefined,
+      borderRadius: 4,
+      padding: '10px 12px',
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+      <div style={{
+        fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10,
+        letterSpacing: 1.4, textTransform: 'uppercase' as const,
+        color: 'var(--tm)', marginBottom: 4,
+        display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        <FreshnessDot staleAt={staleAt} stale={stale} />
+        {label}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+        <span style={{
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 32, fontWeight: 700, lineHeight: 1.1,
+          letterSpacing: -0.5, color: vc,
+          fontVariantNumeric: 'tabular-nums',
+          opacity: stale ? 0.4 : 1,
+          transition: 'opacity 200ms',
+        }}>
+          {value}
+        </span>
+        {unit && <span style={{ fontSize: 13, color: 'var(--tm)' }}>{unit}</span>}
+      </div>
+      {subtext && <div style={{ fontSize: 11, color: 'var(--tm)', marginTop: 2 }}>{subtext}</div>}
+      <Sparkline pid={pid} color={sparkColor} />
+    </div>
+  );
+}
+
+// ─── DenseMetricTile — compact Dash0-style metric card ───────────────────────
+
+interface DenseMetricTileProps {
+  label: string;
+  value: string | number;
+  unit?: string;
+  subtext?: string;
+  subtextColor?: string;
+  barPercent?: number;
+  barColor?: string;
+  valueColor?: string;
+  accentBorder?: string;
+  tooltip?: React.ReactNode;
+}
+
+export function DenseMetricTile({
+  label, value, unit, subtext, subtextColor,
+  barPercent, barColor = 'var(--pp)',
+  valueColor: vc = 'var(--tw)',
+  accentBorder,
+  tooltip,
+}: DenseMetricTileProps): React.ReactElement {
+  return (
+    <div
+      style={{
+        background: 'var(--bg2)',
+        border: '1px solid var(--br)',
+        borderLeft: accentBorder ? `2px solid ${accentBorder}` : undefined,
+        borderRadius: 4,
+        padding: '8px 10px',
+        position: 'relative',
+        transition: 'border-color 0.15s',
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,128,0,0.3)'; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--br)'; }}
+    >
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: 3,
+      }}>
+        <span style={{
+          fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+          letterSpacing: 1.2, textTransform: 'uppercase' as const,
+          color: 'var(--tm)',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>
+          {label}
+        </span>
+        {tooltip && <Tooltip content={tooltip} />}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+        <span style={{
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 20, fontWeight: 600, lineHeight: 1.2,
+          color: vc,
+          fontVariantNumeric: 'tabular-nums',
+        }}>
+          {value}
+        </span>
+        {unit && <span style={{ fontSize: 11, color: 'var(--tm)' }}>{unit}</span>}
+      </div>
+      {subtext && <div style={{ fontSize: 10, color: subtextColor ?? 'var(--tm)', marginTop: 1 }}>{subtext}</div>}
+      {barPercent !== undefined && (
+        <div style={{ height: 3, background: 'var(--bg4)', borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
+          <div style={{
+            height: '100%',
+            width: `${Math.min(100, Math.max(0, barPercent))}%`,
+            background: barColor,
+            borderRadius: 2,
+            transition: 'width 0.6s',
+          }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── CompactArcGauge — small Dash0-style gauge ───────────────────────────────
+
+interface CompactArcGaugeProps {
+  label: string;
+  value: number;
+  max: number;
+  unit: string;
+  color: string;
+}
+
+export function CompactArcGauge({ label, value, max, unit, color }: CompactArcGaugeProps): React.ReactElement {
+  const fraction = Math.min(1, Math.max(0, value / max));
+  const arcEnd = fractionToArcPoint(fraction);
+  return (
+    <div style={{
+      background: 'var(--bg2)', border: '1px solid var(--br)', borderRadius: 4,
+      padding: 10, display: 'flex', flexDirection: 'column', alignItems: 'center',
+    }}>
+      <div style={{
+        fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+        letterSpacing: 1.2, textTransform: 'uppercase' as const,
+        color: 'var(--tm)', marginBottom: 4,
+      }}>
+        {label}
+      </div>
+      <svg width="80" height="52" viewBox="0 0 80 52">
+        <path d="M 10 48 A 35 35 0 1 1 70 48" fill="none" stroke="var(--bg4)" strokeWidth="5" strokeLinecap="round" />
+        {fraction > 0.001 && (
+          <path d={`M 10 48 A 35 35 0 ${fraction > 0.5 ? 1 : 0} 1 ${arcEnd}`}
+            fill="none" stroke={color} strokeWidth="5" strokeLinecap="round" />
+        )}
+      </svg>
+      <div style={{
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 16, fontWeight: 600, color, marginTop: 2,
+      }}>
+        {typeof value === 'number' ? value.toLocaleString() : value}
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--tm)' }}>{unit}</div>
+    </div>
+  );
+}
+
+function fractionToArcPoint(fraction: number): string {
+  const startAngle = (5 * Math.PI) / 4;
+  const endAngle = -Math.PI / 4;
+  const totalSweep = startAngle - endAngle;
+  const angle = startAngle - fraction * totalSweep;
+  const cx = 40, cy = 48, r = 35;
+  const x = cx + r * Math.cos(angle);
+  const y = cy - r * Math.sin(angle);
+  return `${x.toFixed(1)} ${y.toFixed(1)}`;
+}
+
+// ─── StatusBar — Dash0-style connection status header ────────────────────────
+
+export function StatusBar(): React.ReactElement {
+  const connectionStatus = useAppStore(s => s.connectionStatus);
+  const protocol = useAppStore(s => s.protocol);
+  const liveData = useAppStore(s => s.liveData);
+  const [rate, setRate] = useState('0.0');
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const now = Date.now();
+      const recent = Object.values(liveData).filter(r => now - r.timestamp < 2000).length;
+      setRate((recent / 2).toFixed(1));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [liveData]);
+
+  const isConnected = connectionStatus === 'connected';
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '0 4px 10px',
+      borderBottom: '1px solid var(--br)',
+      marginBottom: 12,
+    }}>
+      <div style={{
+        fontFamily: "'Barlow Condensed', sans-serif",
+        fontSize: 13, letterSpacing: 1.2,
+        textTransform: 'uppercase' as const,
+        color: 'var(--tm)',
+      }}>
+        Agador Spartacus — Live telemetry
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: isConnected ? 'var(--sg)' : 'var(--tm)' }}>
+          <span style={{
+            width: 7, height: 7, borderRadius: '50%',
+            background: isConnected ? 'var(--sg)' : 'var(--tm)',
+            animation: isConnected ? 'statusPulse 2s infinite' : undefined,
+          }} />
+          {isConnected ? 'Connected' : connectionStatus}
+        </div>
+        {isConnected && (
+          <>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--tm)' }}>
+              {rate} readings/s
+            </div>
+            {protocol && protocol !== 'Unknown' && (
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--tm)' }}>
+                {protocol}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      <style>{`@keyframes statusPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
     </div>
   );
 }

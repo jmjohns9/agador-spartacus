@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAppStore, VehicleProfile, vehicleDisplayName } from '../store/appStore';
-import { Card, SectionHeader, Badge, AlertBanner, ScrollPane } from '../components/layout/UIComponents';
+import {
+  Card, SectionHeader, Badge, AlertBanner, ScrollPane, Button,
+} from '../components/layout/UIComponents';
 
 // ─── Port entry type (returned by main process serialport.list()) ─────────────
 
@@ -21,7 +23,11 @@ function VehicleEditor(): React.ReactElement {
 
   const field = (key: keyof VehicleProfile, label: string, placeholder: string, flex = 1) => (
     <div style={{ flex, minWidth: 90 }}>
-      <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 3 }}>
+      <div style={{
+        fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+        letterSpacing: 1.2, textTransform: 'uppercase',
+        color: 'var(--tm)', marginBottom: 3,
+      }}>
         {label}
       </div>
       <input
@@ -29,7 +35,12 @@ function VehicleEditor(): React.ReactElement {
         value={draft[key]}
         placeholder={placeholder}
         onChange={e => setDraft(d => ({ ...d, [key]: e.target.value }))}
-        style={{ width: '100%', padding: '6px 8px', fontSize: 12 }}
+        style={{
+          width: '100%', padding: '6px 8px', fontSize: 12,
+          background: 'var(--bg4)', border: '1px solid var(--br)', borderRadius: 3,
+          color: 'var(--tw)', fontFamily: "'JetBrains Mono', monospace",
+          outline: 'none',
+        }}
       />
     </div>
   );
@@ -49,13 +60,13 @@ function VehicleEditor(): React.ReactElement {
                 {[vehicle.vin && `VIN ${vehicle.vin}`, vehicle.engine, vehicle.nickname, vehicle.notes].filter(Boolean).join(' · ') || 'No details yet'}
               </div>
             </div>
-            <button
+            <Button
+              size="sm"
+              icon="ti-pencil"
               onClick={() => { setDraft(vehicle); setEditing(true); }}
-              style={{ background: 'var(--bg4)', border: '1px solid var(--br)', borderRadius: 3, padding: '7px 14px', cursor: 'pointer', color: 'var(--tw)', fontSize: 12 }}
             >
-              <i className="ti ti-pencil" style={{ fontSize: 13, marginRight: 5 }} />
               Edit
-            </button>
+            </Button>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -73,18 +84,16 @@ function VehicleEditor(): React.ReactElement {
               {field('notes', 'Notes for the assistant (known issues, mission)', 'e.g. chasing a parasitic battery drain', 1)}
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setEditing(false)}
-                style={{ background: 'var(--bg4)', border: '1px solid var(--br)', borderRadius: 3, padding: '7px 14px', cursor: 'pointer', color: 'var(--tm)', fontSize: 12 }}
-              >
+              <Button size="sm" onClick={() => setEditing(false)}>
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() => { setVehicle(draft); setEditing(false); }}
-                style={{ background: 'rgba(255,128,0,0.1)', border: '1px solid var(--pp)', borderRadius: 3, padding: '7px 16px', cursor: 'pointer', color: 'var(--pp)', fontSize: 12, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}
               >
                 Save vehicle
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -212,7 +221,7 @@ export function ConnectionScreen(): React.ReactElement {
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '4px 0' }}>
           {/* Status indicator */}
           <div style={{
-            width: 48, height: 48, borderRadius: '50%', flexShrink: 0,
+            width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
             background: isConnected ? 'rgba(0,201,110,0.1)' : 'var(--bg4)',
             border: `2px solid ${statusColor}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -220,16 +229,19 @@ export function ConnectionScreen(): React.ReactElement {
           }}>
             <i
               className={`ti ${isConnected ? 'ti-plug-connected' : isBusy ? 'ti-loader' : 'ti-plug'}`}
-              style={{ fontSize: 22, color: statusColor }}
+              style={{ fontSize: 20, color: statusColor }}
             />
           </div>
 
           <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 16, color: statusColor, letterSpacing: 0.5 }}>
+            <div style={{
+              fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+              fontSize: 15, color: statusColor, letterSpacing: 0.5,
+            }}>
               {statusLabel}
             </div>
             {isConnected && protocol && (
-              <div style={{ fontSize: 12, color: 'var(--tm)', marginTop: 3 }}>
+              <div style={{ fontSize: 11, color: 'var(--tm)', marginTop: 3 }}>
                 {protocol}
                 {adapterInfo && ` · ${adapterInfo}`}
               </div>
@@ -242,19 +254,9 @@ export function ConnectionScreen(): React.ReactElement {
           </div>
 
           {isConnected && (
-            <button
-              onClick={handleDisconnect}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                background: 'rgba(255,36,64,0.07)', border: '1px solid rgba(255,36,64,0.35)',
-                borderRadius: 3, padding: '8px 16px', cursor: 'pointer',
-                color: 'var(--sr)', fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif",
-                fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase',
-              }}
-            >
-              <i className="ti ti-plug-x" style={{ fontSize: 15 }} />
+            <Button variant="danger" icon="ti-plug-x" onClick={handleDisconnect}>
               Disconnect
-            </button>
+            </Button>
           )}
         </div>
       </Card>
@@ -271,7 +273,11 @@ export function ConnectionScreen(): React.ReactElement {
                 { label: 'Battery at OBD', value: batteryVoltage > 0 ? `${batteryVoltage.toFixed(3)} V` : '—' },
               ].map(({ label, value }) => (
                 <div key={label}>
-                  <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 4 }}>
+                  <div style={{
+                    fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+                    letterSpacing: 1.2, textTransform: 'uppercase',
+                    color: 'var(--tm)', marginBottom: 4,
+                  }}>
                     {label}
                   </div>
                   <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: 'var(--tw)' }}>
@@ -306,7 +312,8 @@ export function ConnectionScreen(): React.ReactElement {
                     width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
                     background: 'var(--bg4)', border: '1px solid var(--br)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 10, color: 'var(--pp)', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                    fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10,
+                    color: 'var(--pp)', fontWeight: 700,
                   }}>
                     {i + 1}
                   </div>
@@ -316,20 +323,13 @@ export function ConnectionScreen(): React.ReactElement {
             </div>
 
             {/* Scan button */}
-            <button
+            <Button
+              icon={scanning ? 'ti-loader' : 'ti-refresh'}
               onClick={scanPorts}
               disabled={scanning}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                background: 'var(--bg4)', border: '1px solid var(--br)',
-                borderRadius: 3, padding: '8px 14px', cursor: scanning ? 'not-allowed' : 'pointer',
-                color: scanning ? 'var(--tm)' : 'var(--tw)',
-                fontSize: 12, fontFamily: "'Barlow', sans-serif",
-              }}
             >
-              <i className={`ti ${scanning ? 'ti-loader' : 'ti-refresh'}`} style={{ fontSize: 14, animation: scanning ? 'spin 1s linear infinite' : 'none' }} />
               {scanning ? 'Scanning…' : 'Scan Ports'}
-            </button>
+            </Button>
           </Card>
 
           {/* Port list */}
@@ -343,8 +343,14 @@ export function ConnectionScreen(): React.ReactElement {
             if (visiblePorts.length === 0) return null;
             return (
             <Card padding={0}>
-              <div style={{ padding: '8px 12px', background: 'var(--bg4)', borderBottom: '1px solid var(--br)' }}>
-                <span style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase' }}>
+              <div style={{
+                padding: '8px 12px', background: 'var(--bg4)', borderBottom: '1px solid var(--br)',
+              }}>
+                <span style={{
+                  fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+                  letterSpacing: 1.2, textTransform: 'uppercase',
+                  color: 'var(--tm)',
+                }}>
                   {visiblePorts.length} {visiblePorts.length === 1 ? 'adapter' : 'adapters'} found
                 </span>
               </div>
@@ -360,7 +366,9 @@ export function ConnectionScreen(): React.ReactElement {
                     borderBottom: i < visiblePorts.length - 1 ? '1px solid var(--bg3)' : 'none',
                     background: 'transparent',
                     border: '1px solid transparent',
+                    borderRadius: 0,
                     boxShadow: selectedPort === port.path ? 'inset 0 0 0 1px var(--pp)' : 'none',
+                    transition: 'background 0.1s',
                   }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
@@ -383,10 +391,14 @@ export function ConnectionScreen(): React.ReactElement {
                   />
 
                   <div style={{ flex: 1, minWidth: 0 }} title={port.path /* full path on hover for debugging */}>
-                    <div style={{ fontFamily: "'Barlow', sans-serif", fontSize: 14, color: 'var(--tw)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
+                    <div style={{
+                      fontFamily: "'Barlow Condensed', sans-serif", fontSize: 14,
+                      color: 'var(--tw)', overflow: 'hidden', textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap', fontWeight: 700, letterSpacing: 0.3,
+                    }}>
                       {friendlyPortName(port)}
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--tm)', marginTop: 2 }}>
+                    <div style={{ fontSize: 10, color: 'var(--tm)', marginTop: 2 }}>
                       {port.isOBD
                         ? 'Bluetooth · OBD-II adapter'
                         : port.path.startsWith('/dev/cu.') || port.path.startsWith('/dev/tty.')
@@ -427,7 +439,7 @@ export function ConnectionScreen(): React.ReactElement {
                   width: '100%', padding: '16px', cursor: ready ? 'pointer' : 'not-allowed',
                   background: ready ? 'var(--pp)' : 'var(--bg4)',
                   border: `1px solid ${ready ? 'var(--pp)' : 'var(--br)'}`,
-                  borderRadius: 3,
+                  borderRadius: 4,
                   color: ready ? '#0B0B0B' : 'var(--tm)',
                   fontSize: 15, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
                   letterSpacing: 0.8, textTransform: 'uppercase',
@@ -466,10 +478,16 @@ export function ConnectionScreen(): React.ReactElement {
           { cmd: 'STDI',   desc: 'OBDLink device info (OBDLink-specific)' },
           { cmd: 'ATRV',   desc: 'Live battery voltage — first reading' },
         ].map(({ cmd, desc }, i, arr) => (
-          <div key={cmd} style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '7px 12px', borderBottom: i < arr.length - 1 ? '1px solid var(--bg3)' : 'none',
-          }}>
+          <div
+            key={cmd}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '7px 12px', borderBottom: i < arr.length - 1 ? '1px solid var(--bg3)' : 'none',
+              transition: 'background 0.1s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+          >
             <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--pp)', width: 52, flexShrink: 0 }}>
               {cmd}
             </span>

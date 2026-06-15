@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useAppStore } from '../store/appStore';
 import { PID_CATALOG } from '../../core/pidCatalog';
 import { PIDCategory } from '../../shared/types';
-import { ScrollPane, SectionHeader, Card, Badge } from '../components/layout/UIComponents';
+import { ScrollPane, SectionHeader, Card, Badge, Button } from '../components/layout/UIComponents';
 
 // ─── Category metadata ────────────────────────────────────────────────────────
 
@@ -67,7 +67,12 @@ function PIDRow({ pid, liveValue, onExpand, expanded }: {
         </span>
 
         {/* Category badge */}
-        <span style={{ fontSize: 10, color: catColor, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.3, textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span style={{
+          fontSize: 9, color: catColor,
+          fontFamily: "'Barlow Condensed', sans-serif",
+          letterSpacing: 1.0, textTransform: 'uppercase',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
           {CATEGORY_LABELS[pid.category]}
         </span>
 
@@ -77,7 +82,7 @@ function PIDRow({ pid, liveValue, onExpand, expanded }: {
         </span>
 
         {/* Unit */}
-        <span style={{ fontSize: 11, color: 'var(--tm)', fontFamily: "'JetBrains Mono', monospace" }}>
+        <span style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'JetBrains Mono', monospace" }}>
           {pid.unit}
         </span>
 
@@ -95,26 +100,42 @@ function PIDRow({ pid, liveValue, onExpand, expanded }: {
 
       {/* Expanded detail */}
       {expanded && (
-        <div style={{ background: 'var(--bg4)', borderTop: '1px solid var(--bg3)', padding: '12px 16px', display: 'grid', gridTemplateColumns: '1fr 220px', gap: 20 }}>
+        <div style={{
+          background: 'var(--bg2)', borderTop: '1px solid var(--br)',
+          padding: '12px 16px', display: 'grid', gridTemplateColumns: '1fr 220px', gap: 20,
+          border: '1px solid var(--br)', borderRadius: 4, margin: '0 8px 8px',
+        }}>
           <div>
             <div style={{ fontSize: 12, color: 'var(--tw)', fontWeight: 500, marginBottom: 6 }}>{pid.name}</div>
-            <div style={{ fontSize: 12, color: 'var(--tm)', lineHeight: 1.6, marginBottom: 10 }}>{pid.description}</div>
+            <div style={{ fontSize: 11, color: 'var(--tm)', lineHeight: 1.6, marginBottom: 10 }}>{pid.description}</div>
             {pid.formula && (
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--pp)', background: 'var(--bg3)', padding: '5px 8px', borderRadius: 2, display: 'inline-block' }}>
+              <div style={{
+                fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--pp)',
+                background: 'var(--bg3)', padding: '5px 8px', borderRadius: 3,
+                border: '1px solid var(--br)', display: 'inline-block',
+              }}>
                 {pid.formula}
               </div>
             )}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div>
-              <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 3 }}>Range</div>
+              <div style={{
+                fontSize: 9, color: 'var(--tm)',
+                fontFamily: "'Barlow Condensed', sans-serif",
+                letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 3,
+              }}>Range</div>
               <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--tw)' }}>
                 {pid.min} – {pid.max} {pid.unit}
               </span>
             </div>
             {pid.warnHigh !== undefined && (
               <div>
-                <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 3 }}>Warning threshold</div>
+                <div style={{
+                  fontSize: 9, color: 'var(--tm)',
+                  fontFamily: "'Barlow Condensed', sans-serif",
+                  letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 3,
+                }}>Warning threshold</div>
                 <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--sa)' }}>
                   {pid.warnHigh !== undefined && `High: ${pid.warnHigh}`}
                   {pid.warnLow  !== undefined && ` · Low: ${pid.warnLow}`}
@@ -122,8 +143,12 @@ function PIDRow({ pid, liveValue, onExpand, expanded }: {
               </div>
             )}
             <div>
-              <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 3 }}>Live value</div>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 15, color: hasLive ? catColor : 'var(--bs)' }}>
+              <div style={{
+                fontSize: 9, color: 'var(--tm)',
+                fontFamily: "'Barlow Condensed', sans-serif",
+                letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 3,
+              }}>Live value</div>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 20, fontWeight: 600, color: hasLive ? catColor : 'var(--bs)' }}>
                 {valStr}
               </span>
             </div>
@@ -177,7 +202,7 @@ export function AllPIDsScreen(): React.ReactElement {
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-        padding: '7px 10px', background: 'var(--bg3)', borderBottom: '1px solid var(--br)',
+        padding: '7px 10px', background: 'var(--bg2)', borderBottom: '1px solid var(--br)',
         flexShrink: 0,
       }}>
         <input
@@ -185,13 +210,22 @@ export function AllPIDsScreen(): React.ReactElement {
           placeholder="Search PID, name, or unit…"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{ padding: '4px 8px', fontSize: 12, width: 220, height: 28 }}
+          style={{
+            padding: '4px 8px', fontSize: 11, width: 220, height: 28,
+            background: 'var(--bg3)', border: '1px solid var(--br)', borderRadius: 3,
+            color: 'var(--tw)', fontFamily: "'JetBrains Mono', monospace",
+          }}
         />
 
         <select
           value={filterCategory}
           onChange={e => setFilterCategory(e.target.value as PIDCategory | 'ALL')}
-          style={{ padding: '4px 6px', fontSize: 12, height: 28 }}
+          style={{
+            padding: '4px 6px', fontSize: 11, height: 28,
+            background: 'var(--bg3)', border: '1px solid var(--br)', borderRadius: 3,
+            color: 'var(--tw)', fontFamily: "'Barlow Condensed', sans-serif",
+            letterSpacing: 0.4, textTransform: 'uppercase',
+          }}
         >
           <option value="ALL">All categories</option>
           {CATEGORY_ORDER.map(c => (
@@ -199,7 +233,7 @@ export function AllPIDsScreen(): React.ReactElement {
           ))}
         </select>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--tm)', cursor: 'pointer', userSelect: 'none' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--tm)', cursor: 'pointer', userSelect: 'none' }}>
           <input
             type="checkbox"
             checked={showLiveOnly}
@@ -211,18 +245,18 @@ export function AllPIDsScreen(): React.ReactElement {
 
         <div style={{ flex: 1 }} />
 
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--tm)' }}>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--tm)' }}>
           {liveCount} live · {filtered.length} shown · {PID_CATALOG.length} total
         </span>
 
         {search || filterCategory !== 'ALL' || showLiveOnly ? (
-          <button
+          <Button
+            size="sm"
+            icon="ti-x"
             onClick={() => { setSearch(''); setFilterCategory('ALL'); setShowLiveOnly(false); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--bg4)', border: '1px solid var(--br)', borderRadius: 2, padding: '0 8px', height: 28, cursor: 'pointer', color: 'var(--tm)', fontSize: 12 }}
           >
-            <i className="ti ti-x" style={{ fontSize: 12 }} />
             Clear filters
-          </button>
+          </Button>
         ) : null}
       </div>
 
@@ -230,11 +264,15 @@ export function AllPIDsScreen(): React.ReactElement {
       <div style={{
         display: 'grid', gridTemplateColumns: '52px 90px 1fr 90px 120px 30px',
         gap: 6, padding: '5px 12px',
-        background: 'var(--bg4)', borderBottom: '1px solid var(--br)',
+        background: 'var(--bg3)', borderBottom: '1px solid var(--br)',
         flexShrink: 0,
       }}>
         {['PID', 'Category', 'Parameter', 'Unit', 'Live value', ''].map(h => (
-          <span key={h} style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase' }}>
+          <span key={h} style={{
+            fontSize: 9, color: 'var(--tm)',
+            fontFamily: "'Barlow Condensed', sans-serif",
+            letterSpacing: 1.2, textTransform: 'uppercase',
+          }}>
             {h}
           </span>
         ))}
@@ -252,11 +290,15 @@ export function AllPIDsScreen(): React.ReactElement {
               {/* Category subheader */}
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 6,
-                padding: '6px 12px', background: 'var(--bg3)', borderBottom: '1px solid var(--br)',
+                padding: '6px 12px', background: 'var(--bg2)', borderBottom: '1px solid var(--br)',
                 position: 'sticky', top: 0, zIndex: 2,
               }}>
                 <div style={{ width: 3, height: 12, background: CATEGORY_COLORS[cat], borderRadius: 1, flexShrink: 0 }} />
-                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 10, letterSpacing: 1.5, color: CATEGORY_COLORS[cat], textTransform: 'uppercase' }}>
+                <span style={{
+                  fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                  fontSize: 10, letterSpacing: 1.5, color: CATEGORY_COLORS[cat],
+                  textTransform: 'uppercase',
+                }}>
                   {CATEGORY_LABELS[cat]}
                 </span>
                 <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--tm)', marginLeft: 4 }}>

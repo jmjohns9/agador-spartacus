@@ -49,7 +49,7 @@ function MsgAction({ icon, label, onClick }: { icon: string; label: string; onCl
         display: 'inline-flex', alignItems: 'center', gap: 4,
         background: 'transparent', border: '1px solid var(--br)', borderRadius: 3,
         padding: '3px 7px', cursor: 'pointer', color: 'var(--tm)',
-        fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase',
+        fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9, letterSpacing: 1.0, textTransform: 'uppercase',
       }}
     >
       <i className={`ti ${icon}`} style={{ fontSize: 11 }} />
@@ -308,9 +308,16 @@ export function AssistantScreen(): React.ReactElement {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative' }}>
 
       {/* ── Top bar: identity + 2 toggles + overflow ─────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--br)', flexShrink: 0 }}>
-        <i className="ti ti-sparkles" style={{ fontSize: 18, color: 'var(--pp)' }} />
-        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--tw)' }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px',
+        borderBottom: '1px solid var(--br)', flexShrink: 0,
+        background: 'var(--bg2)',
+      }}>
+        <i className="ti ti-sparkles" style={{ fontSize: 16, color: 'var(--pp)' }} />
+        <span style={{
+          fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+          fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', color: 'var(--tw)',
+        }}>
           Claude diagnostic assistant
         </span>
         <Badge
@@ -359,7 +366,11 @@ export function AssistantScreen(): React.ReactElement {
               background: 'var(--bg2)', border: '1px solid var(--br)', borderRadius: 4,
               minWidth: 260, padding: 6, boxShadow: '0 6px 24px rgba(0,0,0,0.35)',
             }}>
-              <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', padding: '4px 8px' }}>
+              <div style={{
+                fontSize: 9, color: 'var(--tm)',
+                fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                letterSpacing: 1.2, textTransform: 'uppercase', padding: '4px 8px',
+              }}>
                 Model
               </div>
               {config?.models.map(m => (
@@ -371,7 +382,7 @@ export function AssistantScreen(): React.ReactElement {
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
                     background: 'transparent', border: 'none', borderRadius: 3,
-                    padding: '6px 8px', cursor: 'pointer', color: 'var(--tw)', fontSize: 12,
+                    padding: '6px 8px', cursor: 'pointer', color: 'var(--tw)', fontSize: 11,
                   }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg3)'; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
@@ -386,7 +397,7 @@ export function AssistantScreen(): React.ReactElement {
                 role="menuitem"
                 onClick={() => { exportChat(); setShowMenu(false); }}
                 disabled={messages.length === 0}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', background: 'transparent', border: 'none', borderRadius: 3, padding: '6px 8px', cursor: messages.length ? 'pointer' : 'not-allowed', color: messages.length ? 'var(--tw)' : 'var(--tm)', fontSize: 12 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', background: 'transparent', border: 'none', borderRadius: 3, padding: '6px 8px', cursor: messages.length ? 'pointer' : 'not-allowed', color: messages.length ? 'var(--tw)' : 'var(--tm)', fontSize: 11 }}
                 onMouseEnter={e => { if (messages.length) (e.currentTarget as HTMLElement).style.background = 'var(--bg3)'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
@@ -397,7 +408,7 @@ export function AssistantScreen(): React.ReactElement {
                 role="menuitem"
                 onClick={() => { clearChat(); setShowMenu(false); }}
                 disabled={messages.length === 0}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', background: 'transparent', border: 'none', borderRadius: 3, padding: '6px 8px', cursor: messages.length ? 'pointer' : 'not-allowed', color: messages.length ? 'var(--sr)' : 'var(--tm)', fontSize: 12 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', background: 'transparent', border: 'none', borderRadius: 3, padding: '6px 8px', cursor: messages.length ? 'pointer' : 'not-allowed', color: messages.length ? 'var(--sr)' : 'var(--tm)', fontSize: 11 }}
                 onMouseEnter={e => { if (messages.length) (e.currentTarget as HTMLElement).style.background = 'var(--bg3)'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
@@ -411,24 +422,36 @@ export function AssistantScreen(): React.ReactElement {
 
       {/* ── Snapshot preview ─────────────────────────────────────────── */}
       {showSnapshot && (
-        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--br)', background: 'var(--bg2)', flexShrink: 0 }}>
-          <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 6 }}>
-            <i className="ti ti-eye" style={{ fontSize: 12, marginRight: 5 }} />
+        <div style={{
+          padding: '10px 14px', borderBottom: '1px solid var(--br)',
+          background: 'var(--bg2)', flexShrink: 0,
+        }}>
+          <div style={{
+            fontSize: 9, color: 'var(--tm)',
+            fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+            letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 6,
+          }}>
+            <i className="ti ti-eye" style={{ fontSize: 11, marginRight: 5 }} />
             What Claude sees with every question
           </div>
           <pre style={{
-            margin: 0, padding: '8px 10px', background: 'var(--bg3)', border: '1px solid var(--br)', borderRadius: 3,
-            fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--tw)',
+            margin: 0, padding: '8px 10px',
+            background: 'var(--bg3)', border: '1px solid var(--br)', borderRadius: 4,
+            fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--tw)',
             whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 180, overflowY: 'auto',
+            scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent',
           }}>{snapshotPreview}</pre>
         </div>
       )}
 
       {/* ── Setup panel ──────────────────────────────────────────────── */}
       {showSetup && (
-        <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--br)', background: 'var(--bg2)', flexShrink: 0 }}>
-          <div style={{ fontSize: 12, color: 'var(--tm)', marginBottom: 8, lineHeight: 1.6 }}>
-            Paste your Claude API key (starts with <code style={{ fontFamily: "'JetBrains Mono', monospace" }}>sk-ant-</code>).
+        <div style={{
+          padding: '12px 14px', borderBottom: '1px solid var(--br)',
+          background: 'var(--bg2)', flexShrink: 0,
+        }}>
+          <div style={{ fontSize: 11, color: 'var(--tm)', marginBottom: 8, lineHeight: 1.6 }}>
+            Paste your Claude API key (starts with <code style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--pp)' }}>sk-ant-</code>).
             Get one at <span style={{ color: 'var(--gb)' }}>console.anthropic.com</span> → API Keys.
             The key is stored locally on this Mac only{config?.hasKey ? ` — current key ends in ${config.keyHint}` : ''}.
             {config?.hasKey && <> Current model: <strong style={{ color: 'var(--tw)' }}>{currentModelLabel}</strong> (change via the ⋯ menu).</>}
@@ -441,7 +464,12 @@ export function AssistantScreen(): React.ReactElement {
               aria-label="Claude API key"
               onChange={e => setKeyDraft(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') saveSetup(); }}
-              style={{ flex: 1, padding: '8px 10px', fontSize: 12, fontFamily: "'JetBrains Mono', monospace" }}
+              style={{
+                flex: 1, padding: '8px 10px', fontSize: 11,
+                fontFamily: "'JetBrains Mono', monospace",
+                background: 'var(--bg3)', border: '1px solid var(--br)', borderRadius: 3,
+                color: 'var(--tw)',
+              }}
             />
             <Button variant="primary" onClick={saveSetup} disabled={!keyDraft.trim() && !config?.hasKey}>
               Save
@@ -452,14 +480,14 @@ export function AssistantScreen(): React.ReactElement {
           <button
             onClick={() => setShowAdvanced(a => !a)}
             aria-expanded={showAdvanced}
-            style={{ marginTop: 12, background: 'none', border: 'none', color: 'var(--tm)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+            style={{ marginTop: 12, background: 'none', border: 'none', color: 'var(--tm)', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
           >
             <i className={`ti ${showAdvanced ? 'ti-chevron-down' : 'ti-chevron-right'}`} style={{ fontSize: 12 }} />
             Advanced — custom system prompt
           </button>
           {showAdvanced && config && (
             <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 11, color: 'var(--tm)', marginBottom: 6, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 10, color: 'var(--tm)', marginBottom: 6, lineHeight: 1.5 }}>
                 Override the assistant's built-in instructions. Leave blank to use the default
                 ({config.defaultSystemPrompt.length} chars). The session snapshot is appended automatically.
               </div>
@@ -469,7 +497,13 @@ export function AssistantScreen(): React.ReactElement {
                 placeholder={config.defaultSystemPrompt}
                 rows={6}
                 aria-label="Custom system prompt"
-                style={{ width: '100%', padding: '8px 10px', fontSize: 11, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.5, boxSizing: 'border-box' }}
+                style={{
+                  width: '100%', padding: '8px 10px', fontSize: 10,
+                  fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.5,
+                  boxSizing: 'border-box',
+                  background: 'var(--bg3)', border: '1px solid var(--br)', borderRadius: 3,
+                  color: 'var(--tw)',
+                }}
               />
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                 <Button variant="primary" onClick={saveCustomPrompt}>Save prompt</Button>
@@ -481,17 +515,32 @@ export function AssistantScreen(): React.ReactElement {
       )}
 
       {/* ── Conversation ─────────────────────────────────────────────── */}
-      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div ref={scrollRef} style={{
+        flex: 1, overflowY: 'auto', padding: '14px',
+        display: 'flex', flexDirection: 'column', gap: 10,
+        scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent',
+      }}>
         {messages.length === 0 && !busy && (
           <div style={{ margin: 'auto', maxWidth: 620, textAlign: 'center' }}>
-            <i className="ti ti-sparkles" style={{ fontSize: 34, color: 'var(--pp)' }} />
-            <div style={{ fontSize: 14, color: 'var(--tw)', margin: '10px 0 4px', fontWeight: 500 }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: 4,
+              background: 'rgba(255,128,0,0.08)', border: '1px solid rgba(255,128,0,0.25)',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              marginBottom: 12,
+            }}>
+              <i className="ti ti-sparkles" style={{ fontSize: 24, color: 'var(--pp)' }} />
+            </div>
+            <div style={{
+              fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+              fontSize: 13, letterSpacing: 0.8, textTransform: 'uppercase',
+              color: 'var(--tw)', marginBottom: 6,
+            }}>
               Ask Claude about {vehicleDisplayName(vehicle) !== 'No vehicle set' ? vehicleDisplayName(vehicle) : 'this vehicle'}, live
             </div>
-            <div style={{ fontSize: 12, color: 'var(--tm)', lineHeight: 1.6, marginBottom: 16 }}>
+            <div style={{ fontSize: 11, color: 'var(--tm)', lineHeight: 1.6, marginBottom: 16 }}>
               Every question includes a snapshot of the current session — live readings,
               DTCs, and recent logs — so answers are grounded in what the app is actually seeing.
-              Type <code style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--pp)' }}>/</code> for slash commands.
+              Type <code style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--pp)', fontSize: 10 }}>/</code> for slash commands.
             </div>
           </div>
         )}
@@ -501,27 +550,32 @@ export function AssistantScreen(): React.ReactElement {
           return (
             <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
               <div style={{
-                maxWidth: '80%', padding: '10px 13px', borderRadius: 8, fontSize: 13, lineHeight: 1.6,
+                maxWidth: '80%', padding: '10px 13px', borderRadius: 4, fontSize: 12, lineHeight: 1.6,
                 whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                background: m.role === 'user' ? 'rgba(255,128,0,0.10)'
-                  : m.role === 'error' ? 'rgba(255,36,64,0.07)' : 'var(--bg3)',
-                border: `1px solid ${m.role === 'user' ? 'rgba(255,128,0,0.3)'
-                  : m.role === 'error' ? 'rgba(255,36,64,0.35)' : 'var(--br)'}`,
+                background: m.role === 'user' ? 'rgba(255,128,0,0.07)'
+                  : m.role === 'error' ? 'rgba(255,36,64,0.05)' : 'var(--bg2)',
+                border: `1px solid ${m.role === 'user' ? 'rgba(255,128,0,0.25)'
+                  : m.role === 'error' ? 'rgba(255,36,64,0.3)' : 'var(--br)'}`,
                 color: m.role === 'error' ? 'var(--sr)' : 'var(--tw)',
               }}>
                 {m.role === 'assistant' && (
-                  <div style={{ fontSize: 10, color: 'var(--pp)', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{
+                    fontSize: 9, color: 'var(--pp)',
+                    fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                    letterSpacing: 1.2, textTransform: 'uppercase',
+                    marginBottom: 5, display: 'flex', alignItems: 'center', gap: 8,
+                  }}>
                     <span>
-                      <i className="ti ti-sparkles" style={{ fontSize: 11, marginRight: 4 }} />
+                      <i className="ti ti-sparkles" style={{ fontSize: 10, marginRight: 4 }} />
                       Claude
                     </span>
                     {m.model && (
-                      <span style={{ color: 'var(--tm)', fontFamily: "'JetBrains Mono', monospace", fontWeight: 400, letterSpacing: 0 }}>
+                      <span style={{ color: 'var(--tm)', fontFamily: "'JetBrains Mono', monospace", fontWeight: 400, letterSpacing: 0, fontSize: 9 }}>
                         {m.model.replace('claude-', '')}
                       </span>
                     )}
                     {m.usage && (
-                      <span style={{ color: 'var(--tm)', fontFamily: "'JetBrains Mono', monospace", fontWeight: 400, letterSpacing: 0 }}>
+                      <span style={{ color: 'var(--tm)', fontFamily: "'JetBrains Mono', monospace", fontWeight: 400, letterSpacing: 0, fontSize: 9 }}>
                         · {m.usage.input_tokens}↑ {m.usage.output_tokens}↓
                       </span>
                     )}
@@ -545,11 +599,16 @@ export function AssistantScreen(): React.ReactElement {
         {busy && (
           <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
             <div aria-live="polite" style={{
-              maxWidth: '80%', padding: '10px 13px', borderRadius: 8, fontSize: 13, lineHeight: 1.6,
+              maxWidth: '80%', padding: '10px 13px', borderRadius: 4, fontSize: 12, lineHeight: 1.6,
               whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-              background: 'var(--bg3)', border: '1px solid var(--pp)', color: 'var(--tw)',
+              background: 'var(--bg2)', border: '1px solid var(--pp)', color: 'var(--tw)',
             }}>
-              <div style={{ fontSize: 10, color: 'var(--pp)', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{
+                fontSize: 9, color: 'var(--pp)',
+                fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                letterSpacing: 1.2, textTransform: 'uppercase',
+                marginBottom: 5, display: 'flex', alignItems: 'center', gap: 6,
+              }}>
                 <i className="ti ti-loader" style={{ fontSize: 11, animation: 'spin 1s linear infinite' }} />
                 Claude {streamingText ? 'is replying' : 'is reading the session data'}…
               </div>
@@ -569,14 +628,17 @@ export function AssistantScreen(): React.ReactElement {
             title={q.prompt}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
-              background: 'var(--bg3)', border: '1px solid var(--br)', borderRadius: 14,
-              padding: '5px 11px', cursor: (busy || !config?.hasKey) ? 'not-allowed' : 'pointer',
-              color: (busy || !config?.hasKey) ? 'var(--tm)' : 'var(--tw)', fontSize: 11,
+              background: 'var(--bg2)', border: '1px solid var(--br)', borderRadius: 3,
+              padding: '5px 10px', cursor: (busy || !config?.hasKey) ? 'not-allowed' : 'pointer',
+              color: (busy || !config?.hasKey) ? 'var(--tm)' : 'var(--tw)',
+              fontSize: 10, fontFamily: "'Barlow Condensed', sans-serif",
+              letterSpacing: 0.4, textTransform: 'uppercase',
+              transition: 'border-color 0.15s',
             }}
-            onMouseEnter={e => { if (!busy && config?.hasKey) (e.currentTarget as HTMLElement).style.borderColor = 'var(--pp)'; }}
+            onMouseEnter={e => { if (!busy && config?.hasKey) (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,128,0,0.3)'; }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--br)'; }}
           >
-            <i className={`ti ${q.icon}`} style={{ fontSize: 12, color: 'var(--pp)' }} />
+            <i className={`ti ${q.icon}`} style={{ fontSize: 11, color: 'var(--pp)' }} />
             {q.label}
           </button>
         ))}
@@ -585,17 +647,21 @@ export function AssistantScreen(): React.ReactElement {
       {/* ── Slash command hints ──────────────────────────────────────── */}
       {slashHints.length > 0 && (
         <div style={{ padding: '6px 14px 0', flexShrink: 0 }}>
-          <div style={{ background: 'var(--bg2)', border: '1px solid var(--br)', borderRadius: 4, padding: 6, maxHeight: 160, overflowY: 'auto' }}>
+          <div style={{
+            background: 'var(--bg2)', border: '1px solid var(--br)', borderRadius: 4,
+            padding: 6, maxHeight: 160, overflowY: 'auto',
+            scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent',
+          }}>
             {slashHints.map(c => (
               <button
                 key={c.cmd}
                 onClick={() => { setInput(c.cmd); }}
-                style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: '4px 8px', cursor: 'pointer', color: 'var(--tw)', display: 'flex', alignItems: 'center', gap: 10 }}
+                style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: '4px 8px', cursor: 'pointer', color: 'var(--tw)', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 3 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg3)'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
-                <code style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--pp)', minWidth: 70 }}>{c.cmd}</code>
-                <span style={{ fontSize: 11, color: 'var(--tm)' }}>{c.description}</span>
+                <code style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--pp)', minWidth: 70 }}>{c.cmd}</code>
+                <span style={{ fontSize: 10, color: 'var(--tm)' }}>{c.description}</span>
               </button>
             ))}
           </div>
@@ -603,7 +669,11 @@ export function AssistantScreen(): React.ReactElement {
       )}
 
       {/* ── Input ────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 8, padding: '10px 14px 12px', borderTop: '1px solid var(--br)', flexShrink: 0, marginTop: 8 }}>
+      <div style={{
+        display: 'flex', gap: 8, padding: '10px 14px 12px',
+        borderTop: '1px solid var(--br)', flexShrink: 0, marginTop: 8,
+        background: 'var(--bg2)',
+      }}>
         <input
           type="text"
           placeholder={config?.hasKey ? 'Ask about the vehicle, a reading, a fault code… or type / for shortcuts' : 'Add your API key in Settings first'}
@@ -612,7 +682,11 @@ export function AssistantScreen(): React.ReactElement {
           aria-label="Message to Claude"
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) send(input); }}
-          style={{ flex: 1, padding: '10px 12px', fontSize: 13 }}
+          style={{
+            flex: 1, padding: '8px 12px', fontSize: 12,
+            background: 'var(--bg3)', border: '1px solid var(--br)', borderRadius: 3,
+            color: 'var(--tw)', fontFamily: "'JetBrains Mono', monospace",
+          }}
         />
         {busy ? (
           <Button variant="danger" icon="ti-player-stop" onClick={cancel}>
@@ -631,7 +705,13 @@ export function AssistantScreen(): React.ReactElement {
       </div>
 
       {copyToast && (
-        <div role="status" style={{ position: 'absolute', bottom: 70, left: '50%', transform: 'translateX(-50%)', background: 'var(--bg4)', border: '1px solid var(--pp)', color: 'var(--pp)', borderRadius: 3, padding: '5px 12px', fontSize: 11, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+        <div role="status" style={{
+          position: 'absolute', bottom: 70, left: '50%', transform: 'translateX(-50%)',
+          background: 'var(--bg2)', border: '1px solid var(--pp)', color: 'var(--pp)',
+          borderRadius: 3, padding: '5px 12px', fontSize: 9,
+          fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+          letterSpacing: 1.0, textTransform: 'uppercase',
+        }}>
           {copyToast}
         </div>
       )}

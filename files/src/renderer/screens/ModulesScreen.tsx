@@ -1,6 +1,8 @@
 import React from 'react';
 import { useAppStore } from '../store/appStore';
-import { ScrollPane, SectionHeader, Card, Badge, AlertBanner, WaveBar } from '../components/layout/UIComponents';
+import {
+  ScrollPane, SectionHeader, Card, Badge, AlertBanner, WaveBar, Button,
+} from '../components/layout/UIComponents';
 import { ModuleStatus } from '../../shared/types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -52,19 +54,27 @@ export function ModulesScreen(): React.ReactElement {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
-      {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: 'var(--bg3)', borderBottom: '1px solid var(--br)', flexShrink: 0 }}>
-        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11, color: 'var(--tm)', flex: 1 }}>
+      {/* Toolbar — Dash0-style dense header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '7px 10px', background: 'var(--bg2)', borderBottom: '1px solid var(--br)',
+        flexShrink: 0,
+      }}>
+        <span style={{
+          fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10,
+          letterSpacing: 1.2, textTransform: 'uppercase',
+          color: 'var(--tm)', flex: 1,
+        }}>
           {modules.length} modules known · {aliveModules.length} alive · {sleepingModules.length} sleeping · {rogueModules.length} rogue
         </span>
-        <button
+        <Button
+          size="sm"
+          icon="ti-refresh"
           onClick={handleScan}
           disabled={connectionStatus !== 'connected'}
-          style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--bg4)', border: '1px solid var(--br)', borderRadius: 2, padding: '0 10px', height: 28, cursor: connectionStatus === 'connected' ? 'pointer' : 'not-allowed', color: connectionStatus === 'connected' ? 'var(--tw)' : 'var(--tm)', fontSize: 12 }}
         >
-          <i className="ti ti-refresh" style={{ fontSize: 13 }} />
           Scan modules
-        </button>
+        </Button>
       </div>
 
       <ScrollPane>
@@ -101,21 +111,35 @@ export function ModulesScreen(): React.ReactElement {
           </Card>
         ) : (
           <Card padding={0}>
-            {/* Header row */}
-            <div style={{ display: 'grid', gridTemplateColumns: '50px 1fr 80px 80px 90px 130px', gap: 8, padding: '6px 12px', background: 'var(--bg4)', borderBottom: '1px solid var(--br)' }}>
+            {/* Header row — Dash0-style dense column labels */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: '50px 1fr 80px 80px 90px 130px',
+              gap: 8, padding: '6px 12px',
+              background: 'var(--bg4)', borderBottom: '1px solid var(--br)',
+            }}>
               {['Addr', 'Module', 'Latency', 'Awake', 'Bus', 'Status'].map(h => (
-                <span key={h} style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase' }}>{h}</span>
+                <span key={h} style={{
+                  fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+                  letterSpacing: 1.2, textTransform: 'uppercase',
+                  color: 'var(--tm)',
+                }}>{h}</span>
               ))}
             </div>
             {modules.map((mod, i) => {
               const color = STATUS_COLOR[mod.status];
               return (
-                <div key={mod.address} style={{
-                  display: 'grid', gridTemplateColumns: '50px 1fr 80px 80px 90px 130px',
-                  gap: 8, padding: '10px 12px', alignItems: 'center',
-                  borderBottom: i < modules.length - 1 ? '1px solid var(--bg3)' : 'none',
-                  background: mod.status === 'rogue' ? 'rgba(255,36,64,0.04)' : 'transparent',
-                }}>
+                <div
+                  key={mod.address}
+                  style={{
+                    display: 'grid', gridTemplateColumns: '50px 1fr 80px 80px 90px 130px',
+                    gap: 8, padding: '10px 12px', alignItems: 'center',
+                    borderBottom: i < modules.length - 1 ? '1px solid var(--bg3)' : 'none',
+                    background: mod.status === 'rogue' ? 'rgba(255,36,64,0.04)' : 'transparent',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={e => { if (mod.status !== 'rogue') (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = mod.status === 'rogue' ? 'rgba(255,36,64,0.04)' : 'transparent'; }}
+                >
                   <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color }}>
                     {mod.address}
                   </span>
@@ -146,11 +170,17 @@ export function ModulesScreen(): React.ReactElement {
             { addr: '0xA0', name: 'HVAC Control Module',                          parasitic: true,  note: 'Blend door actuator can draw ~0.1 A if module stays awake.' },
             { addr: '0xC0', name: 'Radio / Head Unit',                            parasitic: true,  note: 'Aftermarket radios a major draw source (0.2–1.5 A). Check memory wire.' },
           ].map(({ addr, name, parasitic, note }, i, arr) => (
-            <div key={addr} style={{
-              display: 'grid', gridTemplateColumns: '50px 1fr auto', gap: 10,
-              padding: '9px 12px', borderBottom: i < arr.length - 1 ? '1px solid var(--bg3)' : 'none',
-              alignItems: 'flex-start',
-            }}>
+            <div
+              key={addr}
+              style={{
+                display: 'grid', gridTemplateColumns: '50px 1fr auto', gap: 10,
+                padding: '9px 12px', borderBottom: i < arr.length - 1 ? '1px solid var(--bg3)' : 'none',
+                alignItems: 'flex-start',
+                transition: 'background 0.1s',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+            >
               <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--tm)', paddingTop: 1 }}>{addr}</span>
               <div>
                 <div style={{ fontSize: 12, color: 'var(--tw)', marginBottom: 3 }}>{name}</div>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../store/appStore';
 import { LogLevel } from '../../shared/types';
-import { Badge } from '../components/layout/UIComponents';
+import { Badge, Button, ScrollPane, SectionHeader, Card } from '../components/layout/UIComponents';
 
 // ─── Level metadata ───────────────────────────────────────────────────────────
 
@@ -69,11 +69,19 @@ export function LogsScreen(): React.ReactElement {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
       {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: 'var(--bg3)', borderBottom: '1px solid var(--br)', flexShrink: 0 }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+        background: 'var(--bg2)', borderBottom: '1px solid var(--br)', flexShrink: 0,
+      }}>
         <select
           value={filterLevel}
           onChange={e => setFilterLevel(e.target.value as LogLevel | 'ALL')}
-          style={{ padding: '4px 6px', fontSize: 12, height: 28 }}
+          style={{
+            padding: '4px 6px', fontSize: 11, height: 28,
+            background: 'var(--bg3)', border: '1px solid var(--br)', borderRadius: 3,
+            color: 'var(--tw)', fontFamily: "'Barlow Condensed', sans-serif",
+            letterSpacing: 0.4, textTransform: 'uppercase',
+          }}
         >
           <option value="ALL">All levels</option>
           <option value="ok">OK</option>
@@ -92,33 +100,47 @@ export function LogsScreen(): React.ReactElement {
           value={markerText}
           onChange={e => setMarkerText(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') handleAddMarker(); }}
-          style={{ padding: '4px 8px', fontSize: 12, width: 200, height: 28 }}
+          style={{
+            padding: '4px 8px', fontSize: 11, width: 200, height: 28,
+            background: 'var(--bg3)', border: '1px solid var(--br)', borderRadius: 3,
+            color: 'var(--tw)', fontFamily: "'JetBrains Mono', monospace",
+          }}
         />
-        <button
-          onClick={handleAddMarker}
-          disabled={!markerText.trim()}
-          style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--bg4)', border: '1px solid var(--br)', borderRadius: 2, padding: '0 10px', height: 28, cursor: markerText.trim() ? 'pointer' : 'not-allowed', color: markerText.trim() ? 'var(--tw)' : 'var(--tm)', fontSize: 12 }}
-        >
-          <i className="ti ti-flag" style={{ fontSize: 13 }} />
+        <Button size="sm" icon="ti-flag" onClick={handleAddMarker} disabled={!markerText.trim()}>
           Mark
-        </button>
-
-        <button
-          onClick={handleExport}
-          disabled={log.length === 0}
-          style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--bg4)', border: '1px solid var(--br)', borderRadius: 2, padding: '0 10px', height: 28, cursor: log.length > 0 ? 'pointer' : 'not-allowed', color: log.length > 0 ? 'var(--tw)' : 'var(--tm)', fontSize: 12 }}
-        >
-          <i className="ti ti-download" style={{ fontSize: 13 }} />
+        </Button>
+        <Button size="sm" icon="ti-download" onClick={handleExport} disabled={log.length === 0}>
           Export
-        </button>
+        </Button>
 
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--tm)' }}>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--tm)' }}>
           {filtered.length} entries
         </span>
       </div>
 
+      {/* Column headers */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '130px 52px 1fr',
+        gap: 10, padding: '5px 12px',
+        background: 'var(--bg3)', borderBottom: '1px solid var(--br)',
+        flexShrink: 0,
+      }}>
+        {['Timestamp', 'Level', 'Message'].map(h => (
+          <span key={h} style={{
+            fontSize: 9, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif",
+            letterSpacing: 1.2, textTransform: 'uppercase',
+          }}>
+            {h}
+          </span>
+        ))}
+      </div>
+
       {/* Log entries */}
-      <div style={{ flex: 1, overflowY: 'auto', fontFamily: "'JetBrains Mono', monospace", fontSize: 11, scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent' }}>
+      <div style={{
+        flex: 1, overflowY: 'auto',
+        fontFamily: "'JetBrains Mono', monospace", fontSize: 11,
+        scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent',
+      }}>
         {filtered.length === 0 ? (
           <div style={{ padding: '30px 20px', textAlign: 'center', fontSize: 12, color: 'var(--tm)' }}>
             {log.length === 0 ? 'No log entries — connect the adapter to start recording.' : 'No entries match the selected level filter.'}
@@ -131,16 +153,14 @@ export function LogsScreen(): React.ReactElement {
               borderBottom: '1px solid var(--bg3)',
               background: entry.level === 'error' ? 'rgba(255,36,64,0.03)' : entry.level === 'warn' ? 'rgba(255,179,0,0.02)' : 'transparent',
             }}>
-              <span style={{ color: 'var(--tm)', fontSize: 10, paddingTop: 1 }}>
+              <span style={{ color: 'var(--tm)', fontSize: 10, paddingTop: 1, fontFamily: "'JetBrains Mono', monospace" }}>
                 {new Date(entry.timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                 <span style={{ color: 'var(--bs)', fontSize: 10 }}>
                   .{String(entry.timestamp % 1000).padStart(3, '0')}
                 </span>
               </span>
-              <span style={{ color: LEVEL_COLOR[entry.level], fontWeight: 500, fontSize: 10 }}>
-                {entry.level.toUpperCase().padEnd(5)}
-              </span>
-              <span style={{ color: 'var(--tw)', lineHeight: 1.5, wordBreak: 'break-word' }}>
+              <Badge label={entry.level.toUpperCase()} variant={LEVEL_VARIANT[entry.level]} />
+              <span style={{ color: 'var(--tw)', lineHeight: 1.5, wordBreak: 'break-word', fontSize: 11 }}>
                 {entry.message}
                 {entry.pid   && <span style={{ color: 'var(--tm)' }}> [{entry.pid}]</span>}
                 {entry.value !== undefined && <span style={{ color: 'var(--pp)' }}> = {String(entry.value)}</span>}

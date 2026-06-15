@@ -1,6 +1,9 @@
 import React from 'react';
 import { useAppStore } from '../store/appStore';
-import { ScrollPane, SectionHeader, Grid, MetricTile, ArcGauge, Card, Badge } from '../components/layout/UIComponents';
+import {
+  ScrollPane, SectionHeader, Grid, DenseMetricTile, CompactArcGauge,
+  HeroCard, Card, Badge,
+} from '../components/layout/UIComponents';
 import { PID_MAP } from '../../core/pidCatalog';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -15,6 +18,10 @@ function usePIDNum(pid: string, fallback = 0): number {
   return typeof v === 'number' ? v : fallback;
 }
 
+function usePIDTimestamp(pid: string): number | undefined {
+  return useAppStore(s => s.liveData[pid]?.timestamp);
+}
+
 function fmt(pid: string, v: number | string): string {
   if (v === '—') return '—';
   const def = PID_MAP.get(pid);
@@ -25,18 +32,15 @@ function fmt(pid: string, v: number | string): string {
 // ─── HVACScreen ───────────────────────────────────────────────────────────────
 
 export function HVACScreen(): React.ReactElement {
-  const isDark   = useAppStore(s => s.isDarkMode);
   const dtcs     = useAppStore(s => s.dtcs);
   const rpm      = usePIDNum('010C');
 
   const ambientF = usePIDNum('0146', 0);
   const coolantF = usePIDNum('0105', 0);
-  const iatF     = usePIDNum('010F', 0);
 
   // Timestamps lifted to top of component (hook rules)
   const coolantAt = useAppStore(s => s.liveData['0105']?.timestamp);
   const ambientAt = useAppStore(s => s.liveData['0146']?.timestamp);
-  const iatAt     = useAppStore(s => s.liveData['010F']?.timestamp);
 
   // Infer A/C compressor state from engine load jump (crude heuristic)
   // A real implementation would use BCM data via SW-CAN
@@ -54,14 +58,14 @@ export function HVACScreen(): React.ReactElement {
   return (
     <ScrollPane>
 
-      {/* ── Hero — coolant temperature leads the screen ─────────────── */}
-      <Grid cols={4}>
-        <MetricTile
-          prominence="hero"
-          label="Coolant temperature — heater source"
+      {/* ── Hero row — coolant temperature leads the screen ─────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
+        <HeroCard
+          label="Coolant — heater source"
           value={coolantF > 0 ? coolantF.toFixed(0) : '—'}
           unit="°F"
           valueColor={coolantF > 230 ? 'var(--sr)' : coolantF > 215 ? 'var(--sa)' : coolantF > 180 ? 'var(--sg)' : coolantF > 0 ? 'var(--gb)' : 'var(--tm)'}
+          accentBorder={coolantF > 230 ? 'var(--sr)' : 'var(--sg)'}
           subtext={
             coolantF <= 0 ? 'No reading' :
             coolantF > 230 ? 'OVERHEATING — stop and investigate' :
@@ -70,57 +74,56 @@ export function HVACScreen(): React.ReactElement {
             coolantF > 100 ? 'Warming up — heater still cool' :
             'Cold start'
           }
+          pid="0105"
+          sparkColor="var(--sg)"
           staleAt={coolantAt}
         />
-
-        <MetricTile
+        <HeroCard
           label="Ambient outside"
           value={ambientF > 0 ? `${ambientF.toFixed(0)}` : '—'}
           unit="°F"
-          subtext={engineOn ? 'Front bumper sensor' : 'Reading may be biased by engine heat'}
+          subtext={engineOn ? 'Bumper sensor' : 'May be biased by engine heat'}
+          pid="0146"
+          sparkColor="var(--gb)"
           staleAt={ambientAt}
         />
-
-        <MetricTile
+        <HeroCard
           label="Heater effectiveness"
           value={heaterDelta > 0 ? `+${heaterDelta.toFixed(0)}` : '—'}
-          unit="°F Δ"
+          unit="°F delta"
           subtext={heaterDelta > 100 ? 'Strong heat available' : heaterDelta > 50 ? 'Moderate — still warming' : heaterDelta > 0 ? 'Low — coolant cold' : 'Coolant − ambient delta'}
           valueColor={heaterDelta > 100 ? 'var(--sg)' : heaterDelta > 50 ? 'var(--sa)' : 'var(--tm)'}
+          pid="0105"
+          sparkColor="var(--sa)"
         />
-      </Grid>
+      </div>
 
       {/* ── Detailed sensors ────────────────────────────────────────── */}
       <SectionHeader>Temperature sensors</SectionHeader>
       <Grid cols={4}>
-        <ArcGauge
-          label="Coolant (heater source)"
+        <CompactArcGauge
+          label="Coolant"
           value={coolantF}
-          min={32} max={240} unit="°F"
-          warnLow={140} warnHigh={220}
-          critHigh={235}
-          isDark={isDark}
+          max={240}
+          unit="°F"
           color={coolantF < 140 ? 'var(--gb)' : coolantF > 220 ? 'var(--sr)' : 'var(--sg)'}
-          staleAt={coolantAt}
         />
-        <ArcGauge
-          label="Ambient outside"
+        <CompactArcGauge
+          label="Ambient"
           value={ambientF}
-          min={-20} max={120} unit="°F"
-          isDark={isDark}
+          max={120}
+          unit="°F"
           color="var(--gb)"
-          staleAt={ambientAt}
         />
-        <MetricTile
-          label="Intake air temperature"
+        <DenseMetricTile
+          label="Intake air temp"
           value={fmt('010F', usePID('010F'))}
-          subtext="At MAF housing · affected by blower heat"
-          staleAt={iatAt}
+          subtext="At MAF housing · blower heat"
         />
-        <MetricTile
-          label="Heater effectiveness"
+        <DenseMetricTile
+          label="Heater delta"
           value={heaterDelta > 0 ? `+${heaterDelta.toFixed(0)} °F` : '—'}
-          subtext="Coolant − ambient delta · higher = better heat"
+          subtext="Coolant − ambient · higher = better"
           valueColor={heaterDelta > 100 ? 'var(--sg)' : heaterDelta > 50 ? 'var(--sa)' : 'var(--tm)'}
         />
       </Grid>

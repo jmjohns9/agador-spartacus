@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import { useAppStore, selectBatteryVoltage, selectVoltageTrend } from '../store/appStore';
 import {
-  ScrollPane, SectionHeader, Grid, MetricTile, ArcGauge, Card, AlertBanner, Badge,
+  ScrollPane, SectionHeader, Grid, DenseMetricTile, CompactArcGauge,
+  HeroCard, Card, AlertBanner, Badge,
 } from '../components/layout/UIComponents';
 import { PID_MAP } from '../../core/pidCatalog';
 
@@ -100,12 +101,10 @@ function VoltageTimeline(): React.ReactElement {
 // ─── ElectricalScreen ─────────────────────────────────────────────────────────
 
 export function ElectricalScreen(): React.ReactElement {
-  const isDark       = useAppStore(s => s.isDarkMode);
   const batteryV     = useAppStore(selectBatteryVoltage);
   const batteryAt    = useAppStore(s => s.liveData['ATRV']?.timestamp);
   const voltageTrend = useAppStore(selectVoltageTrend);
   const history      = useAppStore(s => s.history['ATRV'] ?? []);
-  const connectionStatus = useAppStore(s => s.connectionStatus);
 
   const ecmV      = usePIDNum('0142');
 
@@ -152,79 +151,67 @@ export function ElectricalScreen(): React.ReactElement {
         <AlertBanner message={`High wiring resistance — ${wiringDrop.toFixed(2)} V drop between battery and ECM. Check grounds and battery cables.`} variant="warn" />
       )}
 
-      {/* ── Hero — battery voltage leads the screen ─────────────────── */}
-      <Grid cols={4}>
-        <MetricTile
-          prominence="hero"
-          label={`Battery voltage (ATRV) — ${voltageLabel.toLowerCase()}`}
+      {/* ── Hero row — battery voltage leads the screen ────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
+        <HeroCard
+          label={`Battery (ATRV) — ${voltageLabel.toLowerCase()}`}
           value={batteryV > 0 ? batteryV.toFixed(2) : '—'}
           unit="V"
           valueColor={voltageColor}
+          accentBorder="#9B8AFF"
           subtext={
             batteryV <= 0 ? 'No reading' :
             batteryV < 12.0 ? 'Critical — risk of failed start' :
-            batteryV < 12.4 ? 'Discharged — investigate parasitic draw' :
-            batteryV < 13.2 ? 'Healthy at rest' : 'Charging — alternator producing'
+            batteryV < 12.4 ? 'Discharged — investigate draw' :
+            batteryV < 13.2 ? 'Healthy at rest' : 'Charging — alternator'
           }
+          pid="ATRV"
+          sparkColor="#9B8AFF"
           staleAt={batteryAt}
         />
-
-        <MetricTile
+        <HeroCard
           label="Voltage trend"
           value={voltageTrend === 'stable' ? 'Stable' : voltageTrend === 'dropping' ? 'Dropping' : 'Critical'}
           valueColor={voltageTrend === 'stable' ? 'var(--sg)' : voltageTrend === 'dropping' ? 'var(--sa)' : 'var(--sr)'}
           subtext={voltDropRate > 0.001 ? `−${voltDropRate.toFixed(3)} V/min` : 'No drain detected'}
+          pid="ATRV"
+          sparkColor="var(--tm)"
         />
-
-        <MetricTile
+        <HeroCard
           label="Discharge rate"
           value={voltDropRate > 0 ? `${(voltDropRate * 1000).toFixed(1)}` : '—'}
           unit="mV/min"
           subtext={voltDropRate > 5 ? 'High — investigate draw' : voltDropRate > 1 ? 'Moderate drain' : 'Normal self-discharge'}
           valueColor={voltDropRate > 5 ? 'var(--sr)' : voltDropRate > 1 ? 'var(--sa)' : 'var(--sg)'}
+          pid="ATRV"
+          sparkColor="var(--sa)"
         />
-      </Grid>
+      </div>
 
       {/* ── Detailed battery panel ─────────────────────────────────── */}
       <SectionHeader>Battery &amp; charging system</SectionHeader>
       <Grid cols={4}>
-        <div style={{
-          background: 'var(--bg2)',
-          border: `1px solid ${batteryV < 12.0 ? 'rgba(255,36,64,0.4)' : batteryV < 12.4 ? 'rgba(255,179,0,0.3)' : 'var(--br)'}`,
-          borderRadius: 3, padding: 10,
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-        }}>
-          <span style={{ fontSize: 11, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.6, textTransform: 'uppercase' }}>
-            Battery voltage (ATRV)
-          </span>
-          <ArcGauge
-            value={batteryV > 0 ? batteryV : 0}
-            min={11.6} max={13.0}
-            label="" unit="V"
-            color={voltageColor}
-            isDark={isDark}
-            staleAt={batteryAt}
-          />
-          <span style={{ fontSize: 12, color: voltageColor, fontFamily: "'Barlow Condensed', sans-serif" }}>
-            {voltageLabel}
-          </span>
-        </div>
-
-        <MetricTile
-          label="ECM supply rail voltage"
+        <CompactArcGauge
+          label="Battery V"
+          value={batteryV > 0 ? Math.round(batteryV * 100) / 100 : 0}
+          max={13}
+          unit="volts"
+          color={voltageColor}
+        />
+        <DenseMetricTile
+          label="ECM supply rail"
           value={ecmV > 0 ? `${ecmV.toFixed(3)} V` : '—'}
-          subtext={wiringDrop > 0 ? `${wiringDrop.toFixed(3)} V wiring drop (${wiringDrop > 0.3 ? 'HIGH — check grounds' : 'Normal'})` : 'Compare to battery voltage'}
+          accentBorder="#9B8AFF"
+          subtext={wiringDrop > 0 ? `${wiringDrop.toFixed(3)} V drop (${wiringDrop > 0.3 ? 'HIGH' : 'OK'})` : 'Compare to battery V'}
           valueColor={wiringDrop > 0.3 ? 'var(--sa)' : 'var(--sg)'}
         />
-
-        <MetricTile
+        <DenseMetricTile
           label="Voltage trend"
           value={voltageTrend === 'stable' ? 'Stable' : voltageTrend === 'dropping' ? 'Dropping' : 'Critical drop'}
           valueColor={voltageTrend === 'stable' ? 'var(--sg)' : voltageTrend === 'dropping' ? 'var(--sa)' : 'var(--sr)'}
-          subtext={voltDropRate > 0.001 ? `−${voltDropRate.toFixed(3)} V/min discharge rate` : 'No significant drain detected'}
+          subtext={voltDropRate > 0.001 ? `−${voltDropRate.toFixed(3)} V/min` : 'No drain detected'}
         />
-
-        <MetricTile
+        <DenseMetricTile
           label="Discharge rate"
           value={voltDropRate > 0 ? `${(voltDropRate * 1000).toFixed(1)} mV/min` : '—'}
           subtext={voltDropRate > 5 ? 'High — investigate draw' : voltDropRate > 1 ? 'Moderate drain' : 'Normal self-discharge'}
@@ -293,7 +280,7 @@ export function ElectricalScreen(): React.ReactElement {
 
         <Card>
           <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>
-            Parasitic draw current thresholds
+            Parasitic draw thresholds
           </div>
           {[
             { range: '< 25 mA',   label: 'Normal standby draw (all modules sleeping)', ok: true },
@@ -316,26 +303,26 @@ export function ElectricalScreen(): React.ReactElement {
       {/* ── Live electrical data ────────────────────────────────────────── */}
       <SectionHeader>Live electrical readings</SectionHeader>
       <Grid cols={4}>
-        <MetricTile
-          label="Barometric pressure"
+        <DenseMetricTile
+          label="Barometric"
           value={fmt('0133', usePID('0133'))}
-          subtext="Atmospheric ref for altitude correction"
+          subtext="Altitude correction ref"
         />
-        <MetricTile
-          label="Absolute throttle load"
+        <DenseMetricTile
+          label="Abs throttle load"
           value={fmt('0143', usePID('0143'))}
-          subtext="Speed-independent load reference"
+          subtext="Speed-independent ref"
         />
-        <MetricTile
+        <DenseMetricTile
           label="Fuel type"
-          value={typeof usePID('0149') === 'string' ? usePID('0149') : 'Gasoline'}
-          subtext="Fuel system configuration"
+          value={typeof usePID('0149') === 'string' ? usePID('0149') as string : 'Gasoline'}
+          subtext="Fuel system config"
           valueColor="var(--tm)"
         />
-        <MetricTile
-          label="Engine fuel rate"
+        <DenseMetricTile
+          label="Fuel rate"
           value={fmt('015E', usePID('015E'))}
-          subtext="Instantaneous fuel consumption"
+          subtext="Instantaneous consumption"
         />
       </Grid>
 

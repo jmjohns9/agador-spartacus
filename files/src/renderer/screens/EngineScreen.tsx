@@ -1,7 +1,8 @@
 import React from 'react';
 import { useAppStore } from '../store/appStore';
 import {
-  ScrollPane, SectionHeader, Grid, MetricTile, ArcGauge, Card, Tooltip, TipContent,
+  ScrollPane, SectionHeader, Grid, DenseMetricTile, CompactArcGauge,
+  HeroCard, Card, Tooltip, TipContent,
 } from '../components/layout/UIComponents';
 import { PID_MAP } from '../../core/pidCatalog';
 
@@ -27,32 +28,6 @@ function fmt(pid: string, v: number | string): string {
   const def = PID_MAP.get(pid);
   if (!def || typeof v !== 'number') return String(v);
   return def.format(v);
-}
-
-// Narrow horizontal spark-line from the last N history readings
-function Sparkline({ pid, color = 'var(--pp)' }: { pid: string; color?: string }): React.ReactElement {
-  const history = useAppStore(s => s.history[pid] ?? []);
-  const recent  = history.slice(-60);
-
-  if (recent.length < 2) {
-    return <div style={{ height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <span style={{ fontSize: 10, color: 'var(--tm)' }}>No data</span>
-    </div>;
-  }
-
-  const values = recent.map(r => typeof r.value === 'number' ? r.value : 0);
-  const min    = Math.min(...values);
-  const max    = Math.max(...values);
-  const range  = max - min || 1;
-  const w      = 120;
-  const h      = 28;
-  const pts    = values.map((v, i) => `${(i / (values.length - 1)) * w},${h - ((v - min) / range) * (h - 4) - 2}`).join(' ');
-
-  return (
-    <svg width={w} height={h} style={{ overflow: 'visible' }}>
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
-  );
 }
 
 // Dual-bar fuel trim visualiser (STFT + LTFT side by side)
@@ -96,8 +71,6 @@ function FuelTrimBar({ pid, label }: { pid: string; label: string }): React.Reac
 // ─── EngineScreen ─────────────────────────────────────────────────────────────
 
 export function EngineScreen(): React.ReactElement {
-  const isDark = useAppStore(s => s.isDarkMode);
-
   const rpm       = usePIDNum('010C');
   const coolantF  = usePIDNum('0105');
   const oilTempF  = usePIDNum('015C');
@@ -105,7 +78,6 @@ export function EngineScreen(): React.ReactElement {
   const load      = usePIDNum('0104');
   const maf       = usePIDNum('0110');
   const map_kpa   = usePIDNum('010B');
-  const timing    = usePIDNum('010E');
 
   const stftB1 = usePIDNum('0106');
   const ltftB1 = usePIDNum('0107');
@@ -118,131 +90,109 @@ export function EngineScreen(): React.ReactElement {
   return (
     <ScrollPane>
 
-      {/* ── Hero — engine speed leads the screen ─────────────────────── */}
-      <Grid cols={4}>
-        <MetricTile
-          prominence="hero"
+      {/* ── Hero row — primary engine metrics with sparklines ──────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
+        <HeroCard
           label="Engine speed"
           value={rpm > 0 ? rpm.toLocaleString() : '—'}
           unit="rpm"
           subtext={rpm === 0 ? 'No reading — engine off or bus quiet' : rpm < 900 ? 'Steady at idle' : rpm < 2500 ? 'Cruise / light load' : 'Under load'}
           valueColor={rpm > 6000 ? 'var(--sr)' : rpm > 5500 ? 'var(--sa)' : 'var(--tw)'}
+          accentBorder="var(--pp)"
+          pid="010C"
+          sparkColor="var(--pp)"
           staleAt={usePIDTimestamp('010C')}
         />
-        <MetricTile
+        <HeroCard
           label="Engine load"
           value={fmt('0104', usePID('0104'))}
           subtext={load > 85 ? 'High — sustained load' : load > 0 ? 'Within range' : '—'}
-          valueColor={load > 85 ? 'var(--sa)' : 'var(--tw)'}
+          valueColor={load > 85 ? 'var(--sa)' : 'var(--gb)'}
+          pid="0104"
+          sparkColor="var(--gb)"
           staleAt={usePIDTimestamp('0104')}
         />
-        <MetricTile
-          label="Throttle position"
+        <HeroCard
+          label="Throttle pos"
           value={fmt('0111', usePID('0111'))}
           subtext={throttle < 5 ? 'Closed' : throttle < 30 ? 'Light' : throttle < 70 ? 'Moderate' : 'Heavy'}
+          pid="0111"
+          sparkColor="var(--tm)"
           staleAt={usePIDTimestamp('0111')}
         />
-      </Grid>
+      </div>
 
       {/* ── Detailed gauges ─────────────────────────────────────────── */}
       <SectionHeader>Engine performance</SectionHeader>
       <Grid cols={4}>
-        <ArcGauge
-          label="Engine speed"
-          value={rpm}
-          min={0} max={6000} unit="rpm"
-          warnHigh={5500} critHigh={6000}
-          isDark={isDark}
-          staleAt={usePIDTimestamp('010C')}
-        />
-        <ArcGauge
-          label="Engine load"
-          value={load}
-          min={0} max={100} unit="%"
-          warnHigh={85}
-          isDark={isDark} color="var(--gb)"
-          staleAt={usePIDTimestamp('0104')}
-        />
-        <ArcGauge
-          label="Throttle position"
-          value={throttle}
-          min={0} max={100} unit="%"
-          isDark={isDark}
-          staleAt={usePIDTimestamp('0111')}
-        />
-        <ArcGauge
-          label="Ignition advance"
-          value={timing}
-          min={-20} max={40} unit="° BTDC"
-          isDark={isDark} color="var(--gb)"
-          staleAt={usePIDTimestamp('010E')}
-        />
+        <CompactArcGauge label="RPM" value={rpm} max={6000} unit="/ 6,000" color="var(--pp)" />
+        <CompactArcGauge label="Load" value={load} max={100} unit="of max" color="var(--gb)" />
+        <CompactArcGauge label="Throttle" value={throttle} max={100} unit="position" color="var(--tw)" />
+        <CompactArcGauge label="Timing" value={usePIDNum('010E')} max={60} unit="° BTDC" color="var(--gb)" />
       </Grid>
 
       {/* ── Temperature gauges ─────────────────────────────────────────── */}
       <SectionHeader>Thermal management</SectionHeader>
       <Grid cols={4}>
-        <MetricTile
-          label="Engine coolant temperature"
+        <DenseMetricTile
+          label="Coolant temp"
           value={fmt('0105', usePID('0105'))}
           barPercent={((coolantF - 68) / (240 - 68)) * 100}
           barColor={coolantF > 230 ? 'var(--sr)' : coolantF > 215 ? 'var(--sa)' : 'var(--sg)'}
           valueColor={coolantF > 230 ? 'var(--sr)' : coolantF > 215 ? 'var(--sa)' : 'var(--sg)'}
           subtext={coolantF > 230 ? 'OVERHEATING' : coolantF > 215 ? 'High — monitor closely' : coolantF > 180 ? 'Normal operating range' : coolantF > 0 ? 'Warming up' : '—'}
           tooltip={<TipContent name="Engine Coolant Temperature" description="Temperature at the thermostat housing. Drives fuel enrichment, ignition timing, and cooling fan control." formula="(byte A − 40) × 9 ÷ 5 + 32" range="0105 · Normal: 195–220 °F · Overheat threshold: 240 °F" />}
-          staleAt={usePIDTimestamp('0105')}
         />
-        <MetricTile
-          label="Engine oil temperature"
+        <DenseMetricTile
+          label="Oil temp"
           value={fmt('015C', usePID('015C'))}
           barPercent={((oilTempF - 68) / (270 - 68)) * 100}
           barColor={oilTempF > 260 ? 'var(--sr)' : oilTempF > 240 ? 'var(--sa)' : 'var(--sg)'}
           valueColor={oilTempF > 260 ? 'var(--sr)' : 'var(--sg)'}
-          subtext="Sump temperature · Normal: 180–230 °F"
+          subtext="Sump temp · Normal: 180–230 °F"
           tooltip={<TipContent name="Engine Oil Temperature" description="Oil sump temperature. High oil temp degrades lubrication film and accelerates wear. Allow warmup before hard acceleration." formula="(byte A − 40) × 9 ÷ 5 + 32" range="015C · Normal: 180–230 °F" />}
-          staleAt={usePIDTimestamp('015C')}
         />
-        <MetricTile
-          label="Intake air temperature"
+        <DenseMetricTile
+          label="Intake air"
           value={fmt('010F', usePID('010F'))}
           subtext="At MAF sensor housing"
           tooltip={<TipContent name="Intake Air Temperature" description="Air temperature at the MAF / IAT sensor. Hot intake air reduces air density, cutting power and triggering timing retard." formula="(byte A − 40) × 9 ÷ 5 + 32" range="010F · Should be ambient + 10–15 °F" />}
-          staleAt={usePIDTimestamp('010F')}
         />
-        <MetricTile
-          label="Ambient outside temperature"
+        <DenseMetricTile
+          label="Ambient air"
           value={fmt('0146', usePID('0146'))}
-          subtext="Front bumper sensor"
+          subtext="Bumper sensor"
           tooltip={<TipContent name="Ambient Air Temperature" description="Outside air temperature. Used to correct battery state-of-health estimates and fuel calculations at extreme temperatures." formula="(byte A − 40) × 9 ÷ 5 + 32" range="0146" />}
-          staleAt={usePIDTimestamp('0146')}
         />
       </Grid>
 
       {/* ── Air & fuel ─────────────────────────────────────────────────── */}
       <SectionHeader>Air &amp; fuel delivery</SectionHeader>
       <Grid cols={4}>
-        <MetricTile
-          label="Mass Air Flow rate"
+        <DenseMetricTile
+          label="MAF rate"
           value={fmt('0110', usePID('0110'))}
-          subtext={`Typical V8 idle: 4–6 g/s · current: ${maf > 0 ? maf + ' g/s' : '—'}`}
+          unit="g/s"
+          subtext={`V8 idle: 4–6 g/s · now: ${maf > 0 ? maf + ' g/s' : '—'}`}
           tooltip={<TipContent name="Mass Air Flow Rate" description="Grams of air entering the intake per second. Core ECM input for fuel injection quantity calculation." formula="((A × 256) + B) ÷ 100" range="0110 · Idle: 4–6 g/s · WOT: 100+ g/s" />}
         />
-        <MetricTile
-          label="Intake manifold pressure"
+        <DenseMetricTile
+          label="MAP"
           value={fmt('010B', usePID('010B'))}
-          subtext={`${map_kpa > 0 ? (map_kpa < 50 ? 'Low — good vacuum at idle' : 'Rising — under load') : '—'}`}
+          subtext={`${map_kpa > 0 ? (map_kpa < 50 ? 'Low — good vacuum' : 'Rising — under load') : '—'}`}
           tooltip={<TipContent name="Intake Manifold Absolute Pressure" description="Absolute pressure inside the intake manifold. Low at idle due to vacuum; rises toward atmospheric at WOT." formula="byte A × 0.14504 (kPa→psi)" range="010B · Idle: 6–9 psi · WOT: ~14.7 psi" />}
         />
-        <MetricTile
-          label="Fuel rail pressure"
+        <DenseMetricTile
+          label="Fuel rail"
           value={fmt('0123', usePID('0123'))}
-          subtext="Returnless fuel rail spec: 55–60 psi"
+          valueColor="var(--sg)"
+          subtext="Spec 55–60 psi"
           tooltip={<TipContent name="Fuel Rail Gauge Pressure" description="Fuel pressure at the rail above atmospheric. The 5.3 L uses a returnless fuel rail regulated by the ECM." formula="((A × 256) + B) × 10 kPa → × 0.14504 psi" range="0123 · Spec: 55–60 psi" />}
         />
-        <MetricTile
-          label="Fuel injection timing"
+        <DenseMetricTile
+          label="Inj timing"
           value={fmt('015D', usePID('015D'))}
-          subtext="Advance angle relative to TDC"
+          subtext="Advance angle · BTDC"
           tooltip={<TipContent name="Fuel Injection Timing" description="Crank angle at which injection begins relative to top dead center. Advanced under load." formula="((A × 256) + B) ÷ 128 − 210" range="015D" />}
         />
       </Grid>
@@ -290,14 +240,14 @@ export function EngineScreen(): React.ReactElement {
       <SectionHeader>Oxygen sensors</SectionHeader>
       <Grid cols={4}>
         {[
-          { pid: '0114', name: 'B1 Upstream', sub: 'Pre-cat · should sweep 0.1–0.9 V' },
-          { pid: '0115', name: 'B1 Downstream', sub: 'Post-cat · steady ~0.65 V = cat OK' },
-          { pid: '0118', name: 'B2 Upstream', sub: 'Pre-cat · should sweep 0.1–0.9 V' },
-          { pid: '0119', name: 'B2 Downstream', sub: 'Post-cat · steady ~0.65 V = cat OK' },
+          { pid: '0114', name: 'B1 upstream', sub: 'Pre-cat · sweeping 0.1–0.9 V' },
+          { pid: '0115', name: 'B1 downstream', sub: 'Post-cat · steady ~0.65 V = OK' },
+          { pid: '0118', name: 'B2 upstream', sub: 'Pre-cat · sweeping 0.1–0.9 V' },
+          { pid: '0119', name: 'B2 downstream', sub: 'Post-cat · steady ~0.65 V = OK' },
         ].map(({ pid, name, sub }) => (
-          <MetricTile
+          <DenseMetricTile
             key={pid}
-            label={`O2 sensor — ${name}`}
+            label={`O2 ${name}`}
             value={fmt(pid, usePID(pid))}
             subtext={sub}
             valueColor="var(--sg)"
@@ -308,48 +258,31 @@ export function EngineScreen(): React.ReactElement {
       {/* ── Emissions & EVAP ───────────────────────────────────────────── */}
       <SectionHeader>Emissions &amp; EVAP control</SectionHeader>
       <Grid cols={4}>
-        <MetricTile
-          label="EGR commanded position"
+        <DenseMetricTile
+          label="EGR commanded"
           value={fmt('012C', usePID('012C'))}
-          subtext="0% at idle is normal"
+          subtext="0% at idle — normal"
           tooltip={<TipContent name="EGR Valve — Commanded Position" description="Exhaust Gas Recirculation valve position commanded by the ECM. Reduces NOx at cruise; 0% at idle." formula="(byte A ÷ 255) × 100" range="012C · Idle: 0% · Cruise: 10–25%" />}
         />
-        <MetricTile
-          label="EGR position error"
+        <DenseMetricTile
+          label="EGR error"
           value={fmt('012D', usePID('012D'))}
           valueColor={Math.abs(usePIDNum('012D')) > 15 ? 'var(--sa)' : 'var(--tw)'}
-          subtext="Commanded vs actual — high = stuck valve"
+          subtext="Cmd vs actual — high = stuck"
           tooltip={<TipContent name="EGR Error" description="Deviation between commanded and actual EGR position. Stuck or leaking valve causes high error and potential lean misfire." formula="((A − 128) ÷ 128) × 100" range="012D · Normal: ±5% · Fault: ±15%+" />}
         />
-        <MetricTile
-          label="EVAP purge valve duty"
+        <DenseMetricTile
+          label="EVAP purge"
           value={fmt('012E', usePID('012E'))}
           subtext="0% at idle — rises at cruise"
           tooltip={<TipContent name="EVAP Purge Valve Duty Cycle" description="Canister purge valve duty. Stuck open at idle introduces fuel vapour and causes a lean code (P0446)." formula="(byte A ÷ 255) × 100" range="012E · Idle: 0% · Cruise: up to 100%" />}
         />
-        <MetricTile
-          label="Fuel system status — Bank 1"
-          value={typeof usePID('012A') === 'string' ? usePID('012A') : 'Closed loop'}
+        <DenseMetricTile
+          label="Fuel status"
+          value={typeof usePID('012A') === 'string' ? usePID('012A') as string : 'Closed loop'}
           valueColor="var(--sg)"
-          subtext="Closed loop = O2 sensor feedback active"
+          subtext="O2 feedback active"
         />
-      </Grid>
-
-      {/* ── History trend ──────────────────────────────────────────────── */}
-      <SectionHeader>RPM &amp; load trend — last 60 readings</SectionHeader>
-      <Grid cols={2}>
-        <Card>
-          <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>
-            Engine RPM
-          </div>
-          <Sparkline pid="010C" color="var(--pp)" />
-        </Card>
-        <Card>
-          <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>
-            Engine load %
-          </div>
-          <Sparkline pid="0104" color="var(--gb)" />
-        </Card>
       </Grid>
 
     </ScrollPane>
