@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAppStore, selectBatteryVoltage, selectActiveDTCCount, selectParasiteRiskScore, selectVoltageTrend } from '../store/appStore';
+import { FreezeFrame, ReportPayload, LogEntry } from '../../shared/types';
 import {
   ScrollPane, SectionHeader, Grid, Card, DenseMetricTile, CompactArcGauge, Badge, AlertBanner,
 } from '../components/layout/UIComponents';
@@ -63,11 +64,50 @@ export function HealthScreen(): React.ReactElement {
   const connectionStatus = useAppStore(s => s.connectionStatus);
   const adapterInfo  = useAppStore(s => s.adapterInfo);
   const protocol     = useAppStore(s => s.protocol);
+  const vehicle      = useAppStore(s => s.vehicle);
+  const checklist    = useAppStore(s => s.checklist);
+  const log          = useAppStore(s => s.log);
+  const atrvHistory  = useAppStore(s => s.history['ATRV'] ?? []);
 
   const batteryV     = useAppStore(selectBatteryVoltage);
   const activeDTCs   = useAppStore(selectActiveDTCCount);
   const riskScore    = useAppStore(selectParasiteRiskScore);
   const voltageTrend = useAppStore(selectVoltageTrend);
+
+  const [exporting, setExporting] = useState(false);
+
+  const exportReport = async () => {
+    setExporting(true);
+    try {
+      const freezeFrames = await window.electronAPI.storage.getFreezeFrames() as FreezeFrame[];
+      const payload: ReportPayload = {
+        vehicle: {
+          nickname: vehicle.nickname ?? '',
+          year:     vehicle.year ?? '',
+          make:     vehicle.make ?? '',
+          model:    vehicle.model ?? '',
+          engine:   vehicle.engine ?? '',
+          vin:      vehicle.vin ?? '',
+          notes:    vehicle.notes ?? '',
+        },
+        batteryVoltage: batteryV,
+        voltageHistory: atrvHistory.map(r => r.value as number),
+        milOn:          dtcs.some(d => d.status === 'active'),
+        dtcs,
+        modules,
+        checklist,
+        freezeFrames,
+        log:            (log as LogEntry[]).filter(e => e.level === 'error' || e.level === 'warn').slice(-100),
+        reportDate:     Date.now(),
+        adapterInfo:    adapterInfo ?? '',
+        protocol:       protocol ?? '',
+        appVersion:     '1.0.0',
+      };
+      await window.electronAPI.reportGenerate(payload);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const coolantF     = usePIDNum('0105', 0);
   const rpm          = usePIDNum('010C', 0);
@@ -83,6 +123,22 @@ export function HealthScreen(): React.ReactElement {
   return (
     <ScrollPane>
 
+      {/* ── Export button ──────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+        <button
+          disabled={exporting}
+          onClick={exportReport}
+          style={{
+            padding: '4px 10px', background: 'var(--bg4)', border: '1px solid var(--br)',
+            color: exporting ? 'var(--tm)' : 'var(--tw)', fontSize: 11, cursor: exporting ? 'not-allowed' : 'pointer',
+            display: 'flex', alignItems: 'center', gap: 6, opacity: exporting ? 0.6 : 1,
+          }}
+        >
+          <i className={`ti ${exporting ? 'ti-loader-2' : 'ti-file-report'}`} style={{ fontSize: 12 }} />
+          {exporting ? 'Generating…' : 'Export Report'}
+        </button>
+      </div>
+
       {/* ── Critical alerts ────────────────────────────────────────────────── */}
       {batteryV > 0 && batteryV < 12.0 && (
         <AlertBanner
@@ -97,12 +153,14 @@ export function HealthScreen(): React.ReactElement {
         />
       )}
       {voltageTrend === 'critical' && (
-        <AlertBanner message="Rapid voltage drop detected — possible active parasitic draw. Navigate to Draw screen." variant="crit" />
+        <AlertBanner message="Rapid voltage drop detected — possible active parasitic draw." variant="crit" action="Go to Draw" onAction={() => useAppStore.getState().setActiveScreen('parasite')} />
       )}
       {rogueModules > 0 && (
         <AlertBanner
-          message={`${rogueModules} module${rogueModules > 1 ? 's' : ''} awake after engine-off — parasitic draw suspect. Check Modules screen.`}
+          message={`${rogueModules} module${rogueModules > 1 ? 's' : ''} awake after engine-off — parasitic draw suspect.`}
           variant="warn"
+          action="Modules"
+          onAction={() => useAppStore.getState().setActiveScreen('modules')}
         />
       )}
 
@@ -124,15 +182,15 @@ export function HealthScreen(): React.ReactElement {
           style={{
             background: 'var(--bg2)',
             border: `1px solid ${milOn ? 'rgba(255,36,64,0.4)' : 'var(--br)'}`,
-            borderRadius: 4, padding: 10,
+            borderRadius: 0, padding: 10,
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
             transition: 'border-color 0.15s',
           }}
-          onMouseEnter={e => { if (!milOn) (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,128,0,0.3)'; }}
+          onMouseEnter={e => { if (!milOn) (e.currentTarget as HTMLElement).style.borderColor = 'var(--bs)'; }}
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = milOn ? 'rgba(255,36,64,0.4)' : 'var(--br)'; }}
         >
           <span style={{
-            fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
             letterSpacing: 1.2, textTransform: 'uppercase',
             color: 'var(--tm)',
           }}>
@@ -148,7 +206,7 @@ export function HealthScreen(): React.ReactElement {
             <i className="ti ti-engine" style={{ fontSize: 20, color: milOn ? 'var(--sr)' : 'var(--bs)' }} />
           </div>
           <span style={{
-            fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10,
+            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 10,
             color: milOn ? 'var(--sr)' : 'var(--sg)',
           }}>
             {milOn ? `ON — ${activeDTCs} active fault${activeDTCs !== 1 ? 's' : ''}` : connectionStatus === 'connected' ? 'OFF — No active faults' : 'Not connected'}
@@ -160,29 +218,29 @@ export function HealthScreen(): React.ReactElement {
           style={{
             background: 'var(--bg2)',
             border: `1px solid ${riskScore > 5 ? 'rgba(255,36,64,0.4)' : riskScore > 2 ? 'rgba(255,179,0,0.3)' : 'var(--br)'}`,
-            borderRadius: 4, padding: 10,
+            borderRadius: 0, padding: 10,
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
             transition: 'border-color 0.15s',
           }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,128,0,0.3)'; }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--bs)'; }}
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = riskScore > 5 ? 'rgba(255,36,64,0.4)' : riskScore > 2 ? 'rgba(255,179,0,0.3)' : 'var(--br)'; }}
         >
           <span style={{
-            fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
             letterSpacing: 1.2, textTransform: 'uppercase',
             color: 'var(--tm)',
           }}>
             Parasite risk score
           </span>
           <div style={{
-            fontFamily: "'JetBrains Mono', monospace", fontSize: 32, fontWeight: 600,
+            fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 32, fontWeight: 600,
             color: riskColor(riskScore), lineHeight: 1,
           }}>
             {connectionStatus === 'connected' ? riskScore.toFixed(1) : '—'}
           </div>
           <span style={{ fontSize: 10, color: 'var(--tm)' }}>out of 10</span>
           <span style={{
-            fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10,
+            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 10,
             color: riskColor(riskScore),
           }}>
             {connectionStatus === 'connected' ? riskLabel(riskScore) : 'Not connected'}
@@ -304,12 +362,12 @@ export function HealthScreen(): React.ReactElement {
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--tm)', width: 38, flexShrink: 0 }}>
+                <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--tm)', width: 38, flexShrink: 0 }}>
                   {mod.address}
                 </span>
                 <span style={{ fontSize: 12, color: 'var(--tw)', flex: 1 }}>{mod.name}</span>
                 {mod.latencyMs > 0 && (
-                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--tm)' }}>
+                  <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--tm)' }}>
                     {mod.latencyMs} ms
                   </span>
                 )}
