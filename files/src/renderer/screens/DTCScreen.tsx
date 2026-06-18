@@ -24,6 +24,13 @@ const TYPE_VARIANT: Record<DTCType, 'crit' | 'warn' | 'info' | 'muted'> = {
 
 // ─── DTCRow ───────────────────────────────────────────────────────────────────
 
+type CarsXEResult =
+  | { state: 'idle' }
+  | { state: 'loading' }
+  | { state: 'ok'; description: string; causes: string[]; repair: string }
+  | { state: 'error'; error: string }
+  | { state: 'no-key' };
+
 function DTCRow({ dtc, expanded, onToggle, hasFreezeFrame, onViewFreezeFrame }: {
   dtc: DTCCode;
   expanded: boolean;
@@ -31,6 +38,21 @@ function DTCRow({ dtc, expanded, onToggle, hasFreezeFrame, onViewFreezeFrame }: 
   hasFreezeFrame: boolean;
   onViewFreezeFrame: () => void;
 }): React.ReactElement {
+  const [carsxe, setCarsxe] = React.useState<CarsXEResult>({ state: 'idle' });
+
+  React.useEffect(() => {
+    if (!expanded || carsxe.state !== 'idle') return;
+    setCarsxe({ state: 'loading' });
+    window.electronAPI.carsxeDecode(dtc.code).then(res => {
+      if (!res.ok) {
+        if (res.error.includes('CARSXE_API_KEY')) setCarsxe({ state: 'no-key' });
+        else setCarsxe({ state: 'error', error: res.error });
+      } else {
+        setCarsxe({ state: 'ok', description: res.description, causes: res.causes, repair: res.repair });
+      }
+    }).catch(e => setCarsxe({ state: 'error', error: String(e) }));
+  }, [expanded]);
+
   const ago = (ms: number) => {
     const s = Math.floor((Date.now() - ms) / 1000);
     if (s < 60)   return `${s}s ago`;
@@ -115,28 +137,60 @@ function DTCRow({ dtc, expanded, onToggle, hasFreezeFrame, onViewFreezeFrame }: 
           padding: '12px 16px', display: 'flex', gap: 24,
         }}>
 
-          {/* Left: causes + repair */}
+          {/* Left: causes + repair (CarsXE enriched when available) */}
           <div style={{ flex: 1, minWidth: 0 }}>
+            {carsxe.state === 'loading' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--tm)', marginBottom: 10 }}>
+                <i className="ti ti-loader-2" style={{ fontSize: 13, animation: 'spin 1s linear infinite' }} />
+                Looking up {dtc.code} via CarsXE…
+              </div>
+            )}
+
+            {carsxe.state === 'ok' && carsxe.description && (
+              <>
+                <div style={{
+                  fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
+                  letterSpacing: 1.2, textTransform: 'uppercase',
+                  color: 'var(--pp)', marginBottom: 4,
+                }}>
+                  CarsXE definition
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--tw)', marginBottom: 10, lineHeight: 1.6 }}>{carsxe.description}</div>
+              </>
+            )}
+
             <div style={{
               fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
               letterSpacing: 1.2, textTransform: 'uppercase',
               color: 'var(--tm)', marginBottom: 8,
             }}>
-              Likely causes
+              {carsxe.state === 'ok' && carsxe.causes.length > 0 ? 'CarsXE — likely causes' : 'Likely causes'}
             </div>
             <ol style={{ paddingLeft: 16, margin: 0 }}>
-              {dtc.likelyCauses.map((c, i) => (
+              {(carsxe.state === 'ok' && carsxe.causes.length > 0 ? carsxe.causes : dtc.likelyCauses).map((c, i) => (
                 <li key={i} style={{ fontSize: 12, color: 'var(--tw)', marginBottom: 4, lineHeight: 1.5 }}>{c}</li>
               ))}
             </ol>
+
             <div style={{
               fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
               letterSpacing: 1.2, textTransform: 'uppercase',
               color: 'var(--tm)', marginTop: 12, marginBottom: 6,
             }}>
-              Repair procedure
+              {carsxe.state === 'ok' && carsxe.repair ? 'CarsXE — tech notes' : 'Repair procedure'}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--tw)', lineHeight: 1.6 }}>{dtc.repairSummary}</div>
+            <div style={{ fontSize: 12, color: 'var(--tw)', lineHeight: 1.6 }}>
+              {carsxe.state === 'ok' && carsxe.repair ? carsxe.repair : dtc.repairSummary}
+            </div>
+
+            {carsxe.state === 'no-key' && (
+              <div style={{ marginTop: 10, fontSize: 10, color: 'var(--tm)', fontFamily: "'JetBrains Mono','Roboto Mono',monospace" }}>
+                Set CARSXE_API_KEY to enable live DTC lookup
+              </div>
+            )}
+            {carsxe.state === 'error' && (
+              <div style={{ marginTop: 10, fontSize: 10, color: 'var(--sa)' }}>CarsXE: {carsxe.error}</div>
+            )}
           </div>
 
           {/* Right: metadata */}

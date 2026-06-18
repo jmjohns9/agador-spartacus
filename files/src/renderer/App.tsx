@@ -74,6 +74,10 @@ declare global {
         deleteFreezeFrame: (id: string) => Promise<boolean>;
       };
       reportGenerate: (payload: ReportPayload) => Promise<string>;
+      carsxeDecode: (code: string) => Promise<
+        | { ok: true; description: string; causes: string[]; repair: string }
+        | { ok: false; error: string }
+      >;
     };
   }
 }
@@ -491,6 +495,7 @@ export function App(): React.ReactElement {
         ::-webkit-scrollbar-thumb { background: var(--br); }
         ::-webkit-scrollbar-thumb:hover { background: var(--bs); }
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+        @keyframes spin  { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
         @keyframes waveAnim { 0%,100%{transform:scaleY(.2)} 50%{transform:scaleY(1)} }
 
         @keyframes screenIn {

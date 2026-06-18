@@ -83,6 +83,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteFreezeFrame:  (id: string): Promise<boolean>               => ipcRenderer.invoke('storage:delete-freeze-frame', { id }),
   },
   reportGenerate: (payload: ReportPayload): Promise<string> => ipcRenderer.invoke('report:generate', payload),
+  carsxeDecode: (code: string): Promise<{ ok: true; description: string; causes: string[]; repair: string } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('carsxe:decode', { code }),
 });
 
 // ── Type declaration for the renderer ─────────────────────────────────────────

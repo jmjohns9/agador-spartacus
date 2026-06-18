@@ -534,6 +534,26 @@ ipcMain.handle('report:generate', async (_event: Electron.IpcMainInvokeEvent, pa
   return outPath;
 });
 
+ipcMain.handle('carsxe:decode', async (_event: Electron.IpcMainInvokeEvent, { code }: { code: string }) => {
+  const apiKey = process.env.CARSXE_API_KEY ?? '';
+  if (!apiKey) return { ok: false, error: 'CARSXE_API_KEY not set' };
+  try {
+    const url = `https://api.carsxe.com/obdcodesdecoder?key=${apiKey}&code=${encodeURIComponent(code)}&source=claude_plugin`;
+    const res  = await fetch(url);
+    if (!res.ok) return { ok: false, error: `CarsXE HTTP ${res.status}` };
+    const d: any = await res.json();
+    const description = d.definition ?? d.description ?? d.code_description ?? '';
+    const rawCauses   = d.possible_causes ?? d.causes ?? '';
+    const causes: string[] = typeof rawCauses === 'string'
+      ? rawCauses.split(/[;,\n]/).map((s: string) => s.trim()).filter(Boolean)
+      : Array.isArray(rawCauses) ? rawCauses : [];
+    const repair = d.tech_notes ?? d.tips ?? d.repair ?? '';
+    return { ok: true, description, causes, repair };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+});
+
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 // App name — shown in the menu bar and as the Dock icon tooltip.
