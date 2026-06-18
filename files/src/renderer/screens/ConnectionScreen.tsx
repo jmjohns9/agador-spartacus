@@ -529,7 +529,7 @@ export function ConnectionScreen(): React.ReactElement {
                   color: ready ? '#0B0B0B' : 'var(--tm)',
                   fontSize: 15, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
                   letterSpacing: 0.8, textTransform: 'uppercase',
-                  
+
                   transition: 'transform 0.08s, box-shadow 0.12s, background 0.12s',
                 }}
                 onMouseEnter={e => { if (ready) (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'; }}
@@ -544,6 +544,71 @@ export function ConnectionScreen(): React.ReactElement {
               </button>
             );
           })()}
+
+          {/* ── Built-in Emulator ─────────────────────────────────────── */}
+          <SectionHeader>Built-in Emulator</SectionHeader>
+          <Card>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+              {/* Icon */}
+              <div style={{
+                width: 44, height: 44, flexShrink: 0,
+                background: 'rgba(63,185,80,0.08)',
+                border: '1px solid rgba(63,185,80,0.25)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <i className="ti ti-cpu" style={{ fontSize: 22, color: 'var(--gb)' }} />
+              </div>
+
+              {/* Description */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                  fontWeight: 700, fontSize: 14, color: 'var(--tw)', marginBottom: 4,
+                }}>
+                  2004 Silverado 1500 Z71 — J1850 VPW
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--tm)', lineHeight: 1.6, marginBottom: 10 }}>
+                  Runs a full OBD-II session in-process — no adapter required. Sensor
+                  values drift realistically, battery voltage decays over time, and the
+                  session pre-loads three fault codes to exercise the DTC scanner.
+                </div>
+
+                {/* Spec chips */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                  {[
+                    { icon: 'ti-alert-triangle', label: 'B1982 · P0300 · U0100', color: 'var(--sr)', bg: 'rgba(248,81,73,0.08)' },
+                    { icon: 'ti-battery-2',      label: '12.89 V → 11.8 V drain', color: 'var(--sa)', bg: 'rgba(210,153,34,0.08)' },
+                    { icon: 'ti-engine',          label: 'RPM · Temps · Trims · O₂', color: 'var(--pp)', bg: 'rgba(33,136,255,0.08)' },
+                    { icon: 'ti-clock',           label: 'IPC awake after engine-off', color: 'var(--gb)', bg: 'rgba(63,185,80,0.08)' },
+                  ].map(({ icon, label, color, bg }) => (
+                    <div key={label} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      padding: '3px 8px',
+                      background: bg,
+                      border: `1px solid ${color}30`,
+                    }}>
+                      <i className={`ti ${icon}`} style={{ fontSize: 11, color }} />
+                      <span style={{
+                        fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
+                        fontSize: 10, color,
+                      }}>
+                        {label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <Button
+                  variant="primary"
+                  icon={isBusy ? 'ti-loader' : 'ti-play'}
+                  disabled={isBusy}
+                  onClick={() => handleConnect('SIMULATOR')}
+                >
+                  {isBusy ? 'Connecting…' : 'Launch Emulator'}
+                </Button>
+              </div>
+            </div>
+          </Card>
         </>
       )}
 
