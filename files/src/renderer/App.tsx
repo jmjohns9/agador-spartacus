@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useAppStore, selectBatteryVoltage, selectActiveDTCCount, vehicleDisplayName } from './store/appStore';
 import { buildCSSVars, FONTS } from './theme/theme';
 import { PIDReading, DTCCode, ModuleState, LogEntry, SessionSnapshot, DataRecording, FreezeFrame, StorageConfig, StorageInfo, ReportPayload } from '../shared/types';
@@ -21,6 +21,7 @@ import { LogsScreen }         from './screens/LogsScreen';
 import { EcuBusScreen }       from './screens/EcuBusScreen';
 import { SettingsScreen }     from './screens/SettingsScreen';
 import { DataLoggerScreen }  from './screens/DataLoggerScreen';
+import { FreezeFrameScreen } from './screens/FreezeFrameScreen';
 
 declare global {
   interface Window {
@@ -136,6 +137,8 @@ export function App(): React.ReactElement {
   const batteryVoltage = useAppStore(selectBatteryVoltage);
   const activeDTCCount = useAppStore(selectActiveDTCCount);
   const vehicle        = useAppStore(s => s.vehicle);
+  const dtcs           = useAppStore(s => s.dtcs);
+  const liveData       = useAppStore(s => s.liveData);
 
   // ── Inject CSS variables on mount and when theme changes ──────────────────
   useEffect(() => {
@@ -194,11 +197,32 @@ export function App(): React.ReactElement {
     return () => clearInterval(id);
   }, [sessionStartMs]);
 
+  // ── Freeze-frame auto-capture on new DTC detection ───────────────────────
+  const knownDTCCodes = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    for (const dtc of dtcs) {
+      if (!knownDTCCodes.current.has(dtc.code)) {
+        knownDTCCodes.current.add(dtc.code);
+        const ff: FreezeFrame = {
+          id:          `ff_${Date.now()}_${dtc.code}`,
+          dtcCode:     dtc.code,
+          capturedAt:  Date.now(),
+          vehicleName: vehicleDisplayName(vehicle),
+          liveData:    Object.fromEntries(
+            Object.entries(liveData).map(([pid, r]) => [pid, { value: r.value, timestamp: r.timestamp }])
+          ),
+        };
+        window.electronAPI.storage.saveFreezeFrame(ff).catch(() => {/* non-blocking */});
+      }
+    }
+  }, [dtcs]);
+
   // ── Auto-navigate to connection screen when disconnected ─────────────────
   useEffect(() => {
     if (connectionStatus === 'disconnected' || connectionStatus === 'error') {
       const current = useAppStore.getState().activeScreen;
-      if (current !== 'assistant' && current !== 'logs' && current !== 'settings' && current !== 'logger') setActiveScreen('connect');
+      if (current !== 'assistant' && current !== 'logs' && current !== 'settings' && current !== 'logger' && current !== 'freezeframes') setActiveScreen('connect');
     }
   }, [connectionStatus]);
 
@@ -430,6 +454,7 @@ export function App(): React.ReactElement {
             {activeScreen === 'logs'         && <LogsScreen />}
             {activeScreen === 'settings'     && <SettingsScreen />}
             {activeScreen === 'logger'       && <DataLoggerScreen />}
+            {activeScreen === 'freezeframes' && <FreezeFrameScreen />}
           </div>
         </div>
       </div>

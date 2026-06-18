@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
-import { DTCCode, DTCType, DTCStatus } from '../../shared/types';
+import { DTCCode, DTCType, DTCStatus, FreezeFrame } from '../../shared/types';
 import {
   ScrollPane, SectionHeader, Card, Badge, AlertBanner, Button,
 } from '../components/layout/UIComponents';
@@ -24,10 +24,12 @@ const TYPE_VARIANT: Record<DTCType, 'crit' | 'warn' | 'info' | 'muted'> = {
 
 // ─── DTCRow ───────────────────────────────────────────────────────────────────
 
-function DTCRow({ dtc, expanded, onToggle }: {
+function DTCRow({ dtc, expanded, onToggle, hasFreezeFrame, onViewFreezeFrame }: {
   dtc: DTCCode;
   expanded: boolean;
   onToggle: () => void;
+  hasFreezeFrame: boolean;
+  onViewFreezeFrame: () => void;
 }): React.ReactElement {
   const ago = (ms: number) => {
     const s = Math.floor((Date.now() - ms) / 1000);
@@ -61,7 +63,7 @@ function DTCRow({ dtc, expanded, onToggle }: {
 
         {/* Code — monospace PID style */}
         <span style={{
-          fontFamily: "'JetBrains Mono', monospace", fontSize: 13, fontWeight: 500,
+          fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 13, fontWeight: 500,
           color: dtc.status === 'active' ? 'var(--sr)' : 'var(--tw)',
           width: 54, flexShrink: 0,
         }}>
@@ -75,7 +77,7 @@ function DTCRow({ dtc, expanded, onToggle }: {
 
         {/* Module — dense Barlow Condensed label */}
         <span style={{
-          fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+          fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
           letterSpacing: 1.2, textTransform: 'uppercase',
           color: 'var(--tm)', flexShrink: 0,
         }}>
@@ -87,10 +89,22 @@ function DTCRow({ dtc, expanded, onToggle }: {
         <Badge label={dtc.status} variant={STATUS_VARIANT[dtc.status]} />
 
         {/* Last seen */}
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--tm)', width: 50, textAlign: 'right', flexShrink: 0 }}>
+        <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--tm)', width: 50, textAlign: 'right', flexShrink: 0 }}>
           {ago(dtc.lastSeen)}
         </span>
 
+        <button
+          title={hasFreezeFrame ? 'View freeze frame' : 'No freeze frame captured yet'}
+          onClick={e => { e.stopPropagation(); if (hasFreezeFrame) onViewFreezeFrame(); }}
+          style={{
+            background: 'none', border: 'none', padding: '2px 4px',
+            cursor: hasFreezeFrame ? 'pointer' : 'default',
+            color: hasFreezeFrame ? 'var(--gb)' : 'var(--br)',
+            flexShrink: 0,
+          }}
+        >
+          <i className="ti ti-camera" style={{ fontSize: 12 }} />
+        </button>
         <i className={`ti ti-chevron-${expanded ? 'up' : 'down'}`} style={{ fontSize: 13, color: 'var(--tm)', flexShrink: 0 }} />
       </div>
 
@@ -104,7 +118,7 @@ function DTCRow({ dtc, expanded, onToggle }: {
           {/* Left: causes + repair */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
-              fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+              fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
               letterSpacing: 1.2, textTransform: 'uppercase',
               color: 'var(--tm)', marginBottom: 8,
             }}>
@@ -116,7 +130,7 @@ function DTCRow({ dtc, expanded, onToggle }: {
               ))}
             </ol>
             <div style={{
-              fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+              fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
               letterSpacing: 1.2, textTransform: 'uppercase',
               color: 'var(--tm)', marginTop: 12, marginBottom: 6,
             }}>
@@ -129,37 +143,37 @@ function DTCRow({ dtc, expanded, onToggle }: {
           <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10, minWidth: 160 }}>
             <div>
               <div style={{
-                fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
                 letterSpacing: 1.2, textTransform: 'uppercase',
                 color: 'var(--tm)', marginBottom: 3,
               }}>Code</div>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 15, color: 'var(--pp)' }}>{dtc.code}</span>
+              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 15, color: 'var(--pp)' }}>{dtc.code}</span>
             </div>
             <div>
               <div style={{
-                fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
                 letterSpacing: 1.2, textTransform: 'uppercase',
                 color: 'var(--tm)', marginBottom: 3,
               }}>Module</div>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--tw)' }}>{dtc.module}</span>
+              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--tw)' }}>{dtc.module}</span>
             </div>
             <div>
               <div style={{
-                fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
                 letterSpacing: 1.2, textTransform: 'uppercase',
                 color: 'var(--tm)', marginBottom: 3,
               }}>First seen</div>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--tw)' }}>
+              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--tw)' }}>
                 {new Date(dtc.firstSeen).toLocaleTimeString()}
               </span>
             </div>
             <div>
               <div style={{
-                fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
                 letterSpacing: 1.2, textTransform: 'uppercase',
                 color: 'var(--tm)', marginBottom: 3,
               }}>Last seen</div>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--tw)' }}>
+              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--tw)' }}>
                 {new Date(dtc.lastSeen).toLocaleTimeString()}
               </span>
             </div>
@@ -179,11 +193,20 @@ function DTCRow({ dtc, expanded, onToggle }: {
 export function DTCScreen(): React.ReactElement {
   const dtcs              = useAppStore(s => s.dtcs);
   const connectionStatus  = useAppStore(s => s.connectionStatus);
+  const setActiveScreen      = useAppStore(s => s.setActiveScreen);
+  const setFreezeFrameFilter = useAppStore(s => s.setFreezeFrameFilter);
 
   const [expandedCode, setExpandedCode] = useState<string | null>(null);
+  const [freezeFrameCodes, setFreezeFrameCodes] = useState<Set<string>>(new Set());
   const [filterType,   setFilterType]   = useState<DTCType | 'ALL'>('ALL');
   const [filterStatus, setFilterStatus] = useState<DTCStatus | 'ALL'>('ALL');
   const [search,       setSearch]       = useState('');
+
+  useEffect(() => {
+    window.electronAPI.storage.getFreezeFrames().then((ffs: unknown) => {
+      setFreezeFrameCodes(new Set((ffs as FreezeFrame[]).map((f: FreezeFrame) => f.dtcCode)));
+    });
+  }, []);
 
   const filtered = useMemo(() => {
     return dtcs.filter(d => {
@@ -221,7 +244,7 @@ export function DTCScreen(): React.ReactElement {
       {/* ── Toolbar — Dash0-style dense header bar ────────────────────────── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: '7px 10px', background: 'var(--bg2)', borderBottom: '1px solid var(--br)',
+        padding: '7px 10px', background: 'var(--bg2)', borderBottom: '2px solid var(--br)',
         flexShrink: 0,
       }}>
         {/* Search */}
@@ -232,8 +255,8 @@ export function DTCScreen(): React.ReactElement {
           onChange={e => setSearch(e.target.value)}
           style={{
             padding: '4px 8px', fontSize: 11, width: 220, height: 28,
-            background: 'var(--bg4)', border: '1px solid var(--br)', borderRadius: 3,
-            color: 'var(--tw)', fontFamily: "'JetBrains Mono', monospace",
+            background: 'var(--bg4)', border: '2px solid var(--br)', borderRadius: 0,
+            color: 'var(--tw)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
             outline: 'none',
           }}
         />
@@ -244,8 +267,8 @@ export function DTCScreen(): React.ReactElement {
           onChange={e => setFilterType(e.target.value as DTCType | 'ALL')}
           style={{
             padding: '4px 6px', fontSize: 11, height: 28,
-            background: 'var(--bg4)', border: '1px solid var(--br)', borderRadius: 3,
-            color: 'var(--tw)', fontFamily: "'Barlow Condensed', sans-serif",
+            background: 'var(--bg4)', border: '2px solid var(--br)', borderRadius: 0,
+            color: 'var(--tw)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
           }}
         >
           <option value="ALL">All types</option>
@@ -261,8 +284,8 @@ export function DTCScreen(): React.ReactElement {
           onChange={e => setFilterStatus(e.target.value as DTCStatus | 'ALL')}
           style={{
             padding: '4px 6px', fontSize: 11, height: 28,
-            background: 'var(--bg4)', border: '1px solid var(--br)', borderRadius: 3,
-            color: 'var(--tw)', fontFamily: "'Barlow Condensed', sans-serif",
+            background: 'var(--bg4)', border: '2px solid var(--br)', borderRadius: 0,
+            color: 'var(--tw)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
           }}
         >
           <option value="ALL">All statuses</option>
@@ -275,7 +298,7 @@ export function DTCScreen(): React.ReactElement {
         <div style={{ flex: 1 }} />
 
         {/* Counters */}
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--tm)' }}>
+        <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--tm)' }}>
           {filtered.length} of {dtcs.length} codes
         </span>
 
@@ -354,6 +377,8 @@ export function DTCScreen(): React.ReactElement {
                 dtc={dtc}
                 expanded={expandedCode === dtc.code}
                 onToggle={() => setExpandedCode(expandedCode === dtc.code ? null : dtc.code)}
+                hasFreezeFrame={freezeFrameCodes.has(dtc.code)}
+                onViewFreezeFrame={() => { setFreezeFrameFilter(dtc.code); setActiveScreen('freezeframes'); }}
               />
             ))}
           </Card>
@@ -378,15 +403,15 @@ export function DTCScreen(): React.ReactElement {
               style={{
                 display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
                 borderBottom: i < arr.length - 1 ? '1px solid var(--bg3)' : 'none',
-                background: dtcs.find(d => d.code === code) ? 'rgba(255,128,0,0.04)' : 'transparent',
+                background: dtcs.find(d => d.code === code) ? 'rgba(255,87,34,0.04)' : 'transparent',
                 transition: 'background 0.1s',
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = dtcs.find(d => d.code === code) ? 'rgba(255,128,0,0.08)' : 'var(--bg4)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = dtcs.find(d => d.code === code) ? 'rgba(255,128,0,0.04)' : 'transparent'; }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = dtcs.find(d => d.code === code) ? 'rgba(255,87,34,0.06)' : 'var(--bg4)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = dtcs.find(d => d.code === code) ? 'rgba(255,87,34,0.04)' : 'transparent'; }}
             >
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--tm)', width: 44, flexShrink: 0 }}>{code}</span>
+              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--tm)', width: 44, flexShrink: 0 }}>{code}</span>
               <span style={{
-                fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
                 letterSpacing: 1.2, textTransform: 'uppercase',
                 color: 'var(--tm)', width: 32, flexShrink: 0,
               }}>{mod}</span>
