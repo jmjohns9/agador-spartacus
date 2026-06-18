@@ -179,6 +179,118 @@ export interface ParasiticDrawState {
   checklist: ParasiticChecklistItem[];
 }
 
+// ─── EcuBus-Pro Integration ───────────────────────────────────────────────────
+
+export type CANBusType = 'CAN' | 'CAN-FD';
+export type CANDirection = 'TX' | 'RX';
+
+export interface CANFrame {
+  id: number;
+  idHex: string;
+  dlc: number;
+  data: number[];
+  dataHex: string;
+  timestamp: number;
+  delta: number;
+  channel: number;
+  direction: CANDirection;
+  busType: CANBusType;
+  isExtended: boolean;
+  count: number;
+}
+
+export type UDSServiceId =
+  | 0x10 | 0x11 | 0x14 | 0x19 | 0x22 | 0x23 | 0x24
+  | 0x27 | 0x28 | 0x2E | 0x2F | 0x31 | 0x34 | 0x35
+  | 0x36 | 0x37 | 0x3D | 0x3E | 0x85 | 0x87;
+
+export interface UDSService {
+  sid: number;
+  name: string;
+  shortName: string;
+  description: string;
+  subFunctions?: { id: number; name: string }[];
+}
+
+export interface UDSRequest {
+  id: string;
+  timestamp: number;
+  txId: number;
+  rxId: number;
+  serviceId: number;
+  serviceName: string;
+  subFunction?: number;
+  payload: number[];
+  payloadHex: string;
+  rawRequest: string;
+}
+
+export interface UDSResponse {
+  id: string;
+  requestId: string;
+  timestamp: number;
+  positive: boolean;
+  serviceId: number;
+  data: number[];
+  dataHex: string;
+  rawResponse: string;
+  nrc?: number;
+  nrcName?: string;
+}
+
+export interface CANSignal {
+  name: string;
+  messageId: number;
+  messageName: string;
+  startBit: number;
+  length: number;
+  byteOrder: 'little_endian' | 'big_endian';
+  factor: number;
+  offset: number;
+  min: number;
+  max: number;
+  unit: string;
+  value: number;
+  rawValue: number;
+  timestamp: number;
+}
+
+export interface LINFrame {
+  id: number;
+  idHex: string;
+  dlc: number;
+  data: number[];
+  dataHex: string;
+  timestamp: number;
+  direction: 'master' | 'slave';
+  checksum: number;
+  checksumType: 'classic' | 'enhanced';
+  error?: string;
+}
+
+export interface DoIPEntity {
+  ip: string;
+  port: number;
+  logicalAddress: number;
+  eid: string;
+  gid: string;
+  vin: string;
+  entityType: 'gateway' | 'node';
+  status: 'online' | 'offline' | 'busy';
+}
+
+export interface EcuBusScript {
+  id: string;
+  name: string;
+  code: string;
+  language: 'typescript' | 'capl';
+  lastRun?: number;
+  status: 'idle' | 'running' | 'error' | 'success';
+  output: string[];
+}
+
+export type EcuBusSubTab = 'can' | 'uds' | 'transmit' | 'signals' | 'script' | 'lin' | 'doip';
+
 // ─── IPC (Electron Inter-Process Communication) ───────────────────────────────
 
 export interface IPCChannels {
@@ -200,4 +312,71 @@ export interface IPCChannels {
   'obd:connection-status': { status: ConnectionStatus; protocol?: OBDProtocol; adapterInfo?: string };
   'obd:error': { message: string };
   'session:log-entry': LogEntry;
+}
+
+// ─── Storage ──────────────────────────────────────────────────────────────────
+
+export interface StorageConfig {
+  backend: 'local' | 'sqlite';
+}
+
+export interface SnapshotPID {
+  value: number | string;
+  timestamp: number;
+}
+
+export interface SessionSnapshot {
+  id: string;
+  name: string;
+  savedAt: number;
+  vehicleName: string;
+  liveData: Record<string, SnapshotPID>;
+  voltageHistory: number[];
+  dtcs: Array<{ code: string; description: string; status: string; module: string }>;
+  sessionStartMs: number | null;
+}
+
+export interface DataRecording {
+  id: string;
+  name: string;
+  startedAt: number;
+  endedAt: number;
+  durationMs: number;
+  sampleIntervalMs: number;
+  pids: string[];
+  sampleCount: number;
+  markers: Array<{ timestamp: number; label: string }>;
+  samples: Array<{ timestamp: number; values: Record<string, number | string> }>;
+}
+
+export interface FreezeFrame {
+  id: string;
+  dtcCode: string;
+  capturedAt: number;
+  vehicleName: string;
+  liveData: Record<string, SnapshotPID>;
+}
+
+export interface StorageInfo {
+  localPath: string;
+  sqlitePath: string;
+  localSizeBytes: number;
+  sqliteSizeBytes: number;
+  counts: { snapshots: number; recordings: number; freezeFrames: number };
+}
+
+export interface ReportPayload {
+  vehicle: { nickname: string; year: string; make: string; model: string; engine: string; vin: string; notes: string };
+  batteryVoltage: number;
+  voltageHistory: number[];
+  milOn: boolean;
+  dtcs: DTCCode[];
+  modules: ModuleState[];
+  checklist: ParasiticChecklistItem[];
+  freezeFrames: FreezeFrame[];
+  log: LogEntry[];
+  reportDate: number;
+  adapterInfo: string;
+  protocol: string;
+  appVersion: string;
 }

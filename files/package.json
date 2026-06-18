@@ -30,13 +30,14 @@
     ]
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
     "concurrently": "^8.0.0",
     "css-loader": "^7.0.0",
-    "electron": "^31.0.0",
-    "electron-builder": "^24.0.0",
+    "electron": "^42.4.1",
+    "electron-builder": "^26.15.3",
     "exceljs": "^4.4.0",
     "html-webpack-plugin": "^5.0.0",
     "style-loader": "^4.0.0",
@@ -50,6 +51,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
     "@tabler/icons-webfont": "^3.44.0",
+    "better-sqlite3": "^12.11.1",
     "electron-store": "^8.0.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
