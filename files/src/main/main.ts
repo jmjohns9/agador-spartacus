@@ -508,7 +508,7 @@ ipcMain.handle('storage:delete-freeze-frame', (_e: Electron.IpcMainInvokeEvent, 
 
 ipcMain.handle('report:generate', async (_event: Electron.IpcMainInvokeEvent, payload: unknown) => {
   const os = require('os') as typeof import('os');
-  const outDir = path.join(os.homedir(), 'Documents', 'SilveradoDX');
+  const outDir = path.join(os.homedir(), 'Documents', 'AgadorSpartacus');
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
   const filename = `diagnostic-report-${new Date().toISOString().split('T')[0]}.pdf`;

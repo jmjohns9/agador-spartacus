@@ -137,7 +137,7 @@ export function SettingsScreen(): React.ReactElement {
         About
       </div>
       <div style={{ background: 'var(--bg3)', border: '2px solid var(--br)', padding: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {infoRow('App', 'Silverado DX v1.0.0')}
+        {infoRow('App', 'Project Agador Spartacus v1.0.0')}
         {typeof process !== 'undefined' && process.versions?.electron && infoRow('Electron', process.versions.electron)}
         {typeof process !== 'undefined' && process.versions?.node && infoRow('Node', process.versions.node)}
         <div style={{ marginTop: 8 }}>
