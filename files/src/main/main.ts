@@ -1,6 +1,7 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import * as path from 'path';
 import { EventEmitter } from 'events';
+import { execFile } from 'child_process';
 import { ELM327Commander } from '../core/elm327Commander';
 import { ELM327Simulator } from '../core/elm327Simulator';
 import { OBDProtocolManager } from '../core/obdProtocolManager';
@@ -8,6 +9,7 @@ import { PIDReading, DTCCode, ModuleState, ConnectionStatus, LogEntry } from '..
 import { GMT800 } from '../core/platforms/gmt800';
 import { askClaude, loadConfig as loadClaudeConfig, saveConfig as saveClaudeConfig, SessionContext, ChatTurn, CLAUDE_MODELS, DEFAULT_SYSTEM_PROMPT } from './claudeAssistant';
 import * as fs from 'fs';
+import { StorageService } from './storageService';
 
 // SerialPort is a native module — use require() to avoid dynamic import issues in Electron
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -24,11 +26,12 @@ function createWindow(): void {
     minWidth: 1100,
     minHeight: 700,
     titleBarStyle: 'hiddenInset',
-    backgroundColor: '#07080A',
+    backgroundColor: '#121212',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: false,
     },
     title: 'Project Agador Spartacus',
   });
@@ -54,6 +57,8 @@ let sessionLog: LogEntry[] = [];
 let activePort: any = null;       // currently open SerialPort (if any)
 let isConnecting = false;          // guard against concurrent connect attempts
 let debugSerial = false;           // set true to log every TX/RX byte over IPC
+
+const storage = new StorageService();
 
 // Ring-buffer cap so a long-lived connected session doesn't grow the log
 // array unboundedly (see eval/performance PRF-001 / eval/security SEC-004).
@@ -209,6 +214,7 @@ async function connectToPort(portPath: string): Promise<void> {
 
     addLog({ timestamp: Date.now(), level: 'ok', message: `Connected — ${info.firmwareVersion} — Protocol: ${info.protocol} — Battery: ${info.voltage}` });
 
+    startRSSIPolling();
     startOBDManager();
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -219,6 +225,40 @@ async function connectToPort(portPath: string): Promise<void> {
   } finally {
     isConnecting = false;
   }
+}
+
+let rssiTimer: ReturnType<typeof setInterval> | null = null;
+
+function startRSSIPolling(): void {
+  stopRSSIPolling();
+  rssiTimer = setInterval(() => {
+    execFile('system_profiler', ['SPBluetoothDataType', '-json'], { timeout: 5000 }, (err, stdout) => {
+      if (err) { sendToRenderer('obd:bt-rssi', null); return; }
+      try {
+        const data = JSON.parse(stdout);
+        const bt = data.SPBluetoothDataType?.[0];
+        const devices = bt?.device_connected ?? bt?.devices_connected ?? [];
+        for (const d of devices) {
+          const keys = Object.keys(d);
+          for (const k of keys) {
+            if (/obd|elm|obdlink/i.test(k)) {
+              const rssi = d[k]?.device_rssi;
+              if (typeof rssi === 'number') {
+                sendToRenderer('obd:bt-rssi', rssi);
+                return;
+              }
+            }
+          }
+        }
+        sendToRenderer('obd:bt-rssi', null);
+      } catch { sendToRenderer('obd:bt-rssi', null); }
+    });
+  }, 3000);
+}
+
+function stopRSSIPolling(): void {
+  if (rssiTimer) { clearInterval(rssiTimer); rssiTimer = null; }
+  sendToRenderer('obd:bt-rssi', null);
 }
 
 function wireELMEvents(): void {
@@ -305,6 +345,7 @@ ipcMain.handle('obd:connect', async (_event, { port }: { port: string }) => {
 ipcMain.handle('obd:disconnect', async () => {
   obd?.stopPolling();
   obd = null;
+  stopRSSIPolling();
   // Actually close the serial port so the lock is released for the next session
   await releaseActivePort();
   elm = null;
@@ -331,6 +372,25 @@ ipcMain.handle('obd:check-modules', async () => {
   // seeds its module list from the resolved platform profile; for the simulator
   // (a GMT800 vehicle) we return that platform's module map.
   return simulatorMode ? GMT800.modules : [];
+});
+
+ipcMain.handle('obd:decode-vin', async (_event, { vin }: { vin: string }) => {
+  try {
+    const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/${encodeURIComponent(vin)}?format=json`);
+    const json: any = await res.json();
+    const r = json.Results?.[0];
+    if (!r) return null;
+    return {
+      year: r.ModelYear ?? '',
+      make: r.Make ?? '',
+      model: r.Model ?? '',
+      engine: [r.DisplacementL ? `${r.DisplacementL}L` : '', r.EngineCylinders ? `${r.EngineCylinders}-cyl` : '', r.FuelTypePrimary ?? ''].filter(Boolean).join(' '),
+      trim: r.Trim ?? '',
+      transmission: r.TransmissionStyle ?? '',
+    };
+  } catch {
+    return null;
+  }
 });
 
 ipcMain.handle('session:export-log', async (_event, { filename }: { filename: string }) => {
@@ -424,6 +484,56 @@ ipcMain.handle('session:export-csv', async (_event, { data, filename }: { data: 
   addLog({ timestamp: Date.now(), level: 'ok', message: `Session data exported to ${filePath}` });
 });
 
+// ─── Storage service ──────────────────────────────────────────────────────────
+
+ipcMain.handle('storage:get-config',  ()                        => storage.getConfig());
+ipcMain.handle('storage:set-config',  (_e: Electron.IpcMainInvokeEvent, u: Partial<import('../shared/types').StorageConfig>) => { storage.setConfig(u); return true; });
+ipcMain.handle('storage:migrate',     (_e: Electron.IpcMainInvokeEvent, { to }: { to: 'local' | 'sqlite' }) => { storage.migrate(to); return true; });
+ipcMain.handle('storage:get-info',    ()                        => storage.getInfo());
+ipcMain.handle('storage:open-data-folder', () => shell.openPath(app.getPath('userData')));
+
+ipcMain.handle('storage:save-snapshot',    (_e: Electron.IpcMainInvokeEvent, snap: import('../shared/types').SessionSnapshot) => storage.saveSnapshot(snap));
+ipcMain.handle('storage:get-snapshots',    ()                        => storage.getSnapshots());
+ipcMain.handle('storage:delete-snapshot',  (_e: Electron.IpcMainInvokeEvent, { id }: { id: string }) => { storage.deleteSnapshot(id); return true; });
+
+ipcMain.handle('storage:save-recording',   (_e: Electron.IpcMainInvokeEvent, rec: import('../shared/types').DataRecording) => storage.saveRecording(rec));
+ipcMain.handle('storage:get-recordings',   ()                        => storage.getRecordings());
+ipcMain.handle('storage:delete-recording', (_e: Electron.IpcMainInvokeEvent, { id }: { id: string }) => { storage.deleteRecording(id); return true; });
+
+ipcMain.handle('storage:save-freeze-frame',   (_e: Electron.IpcMainInvokeEvent, ff: import('../shared/types').FreezeFrame) => storage.saveFreezeFrame(ff));
+ipcMain.handle('storage:get-freeze-frames',   (_e: Electron.IpcMainInvokeEvent, { dtcCode }: { dtcCode?: string } = {}) => storage.getFreezeFrames(dtcCode));
+ipcMain.handle('storage:delete-freeze-frame', (_e: Electron.IpcMainInvokeEvent, { id }: { id: string }) => { storage.deleteFreezeFrame(id); return true; });
+
+// ─── PDF report ───────────────────────────────────────────────────────────────
+
+ipcMain.handle('report:generate', async (_event: Electron.IpcMainInvokeEvent, payload: unknown) => {
+  const os = require('os') as typeof import('os');
+  const outDir = path.join(os.homedir(), 'Documents', 'SilveradoDX');
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+
+  const filename = `diagnostic-report-${new Date().toISOString().split('T')[0]}.pdf`;
+  const outPath  = path.join(outDir, filename);
+
+  const win = new BrowserWindow({
+    show: false, width: 900, height: 1200,
+    webPreferences: { contextIsolation: false, nodeIntegration: false },
+  });
+
+  const templatePath = path.join(app.getAppPath(), 'assets', 'report.html');
+  await win.loadFile(templatePath);
+  await win.webContents.executeJavaScript(
+    `window.__REPORT_DATA__ = ${JSON.stringify(payload)}; if (typeof render === 'function') render(window.__REPORT_DATA__);`
+  );
+  await new Promise(r => setTimeout(r, 300));
+
+  const pdfBuffer = await win.webContents.printToPDF({ printBackground: false, pageSize: 'Letter' });
+  win.destroy();
+
+  fs.writeFileSync(outPath, pdfBuffer);
+  shell.openPath(outPath);
+  return outPath;
+});
+
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 // App name — shown in the menu bar and as the Dock icon tooltip.
@@ -436,7 +546,7 @@ app.whenReady().then(() => {
   // Dock icon for dev mode (packaged builds get it from electron-builder's icon config)
   if (process.platform === 'darwin') {
     const iconPath = path.join(app.getAppPath(), 'build', 'icon-1024.png');
-    if (fs.existsSync(iconPath)) app.dock.setIcon(iconPath);
+    if (fs.existsSync(iconPath)) app.dock?.setIcon(iconPath);
   }
   createWindow();
 });

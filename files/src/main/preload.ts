@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { PIDReading, DTCCode, ModuleState, ConnectionStatus, LogEntry } from '../shared/types';
+import { PIDReading, DTCCode, ModuleState, ConnectionStatus, LogEntry, SessionSnapshot, DataRecording, FreezeFrame, StorageConfig, StorageInfo, ReportPayload } from '../shared/types';
 
 // ─── Secure IPC Bridge (contextIsolation: true) ────────────────────────────────
 // All communication between the renderer (React) and main process
@@ -58,6 +58,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('obd:vin-detected', (_e, vin) => cb(vin));
     return () => ipcRenderer.removeAllListeners('obd:vin-detected');
   },
+
+  onBtRSSI: (cb: (rssi: number | null) => void) => {
+    ipcRenderer.on('obd:bt-rssi', (_e, rssi) => cb(rssi));
+    return () => ipcRenderer.removeAllListeners('obd:bt-rssi');
+  },
+
+  decodeVIN: (vin: string) => ipcRenderer.invoke('obd:decode-vin', { vin }),
+
+  storage: {
+    getConfig:          (): Promise<StorageConfig>                    => ipcRenderer.invoke('storage:get-config'),
+    setConfig:          (u: Partial<StorageConfig>): Promise<boolean>  => ipcRenderer.invoke('storage:set-config', u),
+    migrate:            (to: 'local' | 'sqlite'): Promise<boolean>    => ipcRenderer.invoke('storage:migrate', { to }),
+    getInfo:            (): Promise<StorageInfo>                      => ipcRenderer.invoke('storage:get-info'),
+    openDataFolder:     (): Promise<void>                             => ipcRenderer.invoke('storage:open-data-folder'),
+    saveSnapshot:       (snap: SessionSnapshot): Promise<string>      => ipcRenderer.invoke('storage:save-snapshot', snap),
+    getSnapshots:       (): Promise<SessionSnapshot[]>                => ipcRenderer.invoke('storage:get-snapshots'),
+    deleteSnapshot:     (id: string): Promise<boolean>               => ipcRenderer.invoke('storage:delete-snapshot', { id }),
+    saveRecording:      (rec: DataRecording): Promise<string>         => ipcRenderer.invoke('storage:save-recording', rec),
+    getRecordings:      (): Promise<DataRecording[]>                  => ipcRenderer.invoke('storage:get-recordings'),
+    deleteRecording:    (id: string): Promise<boolean>               => ipcRenderer.invoke('storage:delete-recording', { id }),
+    saveFreezeFrame:    (ff: FreezeFrame): Promise<string>            => ipcRenderer.invoke('storage:save-freeze-frame', ff),
+    getFreezeFrames:    (dtcCode?: string): Promise<FreezeFrame[]>    => ipcRenderer.invoke('storage:get-freeze-frames', { dtcCode }),
+    deleteFreezeFrame:  (id: string): Promise<boolean>               => ipcRenderer.invoke('storage:delete-freeze-frame', { id }),
+  },
+  reportGenerate: (payload: ReportPayload): Promise<string> => ipcRenderer.invoke('report:generate', payload),
 });
 
 // ── Type declaration for the renderer ─────────────────────────────────────────
