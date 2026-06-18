@@ -20,6 +20,7 @@ import { CompareScreen }      from './screens/CompareScreen';
 import { LogsScreen }         from './screens/LogsScreen';
 import { EcuBusScreen }       from './screens/EcuBusScreen';
 import { SettingsScreen }     from './screens/SettingsScreen';
+import { DataLoggerScreen }  from './screens/DataLoggerScreen';
 
 declare global {
   interface Window {
@@ -197,7 +198,7 @@ export function App(): React.ReactElement {
   useEffect(() => {
     if (connectionStatus === 'disconnected' || connectionStatus === 'error') {
       const current = useAppStore.getState().activeScreen;
-      if (current !== 'assistant' && current !== 'logs' && current !== 'settings') setActiveScreen('connect');
+      if (current !== 'assistant' && current !== 'logs' && current !== 'settings' && current !== 'logger') setActiveScreen('connect');
     }
   }, [connectionStatus]);
 
@@ -428,6 +429,7 @@ export function App(): React.ReactElement {
             {activeScreen === 'compare'      && <CompareScreen />}
             {activeScreen === 'logs'         && <LogsScreen />}
             {activeScreen === 'settings'     && <SettingsScreen />}
+            {activeScreen === 'logger'       && <DataLoggerScreen />}
           </div>
         </div>
       </div>
