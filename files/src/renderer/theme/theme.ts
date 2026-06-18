@@ -1,69 +1,68 @@
-// ─── Project Agador Spartacus — McLaren Technology Centre Theme ──────────────
-// Color palette, typography, and spacing constants.
-// Components import from here rather than hard-coding values.
+// ─── Project Agador Spartacus — Dark Navy Professional Theme ─────────────────
+// Deep navy/slate backgrounds, electric blue accent, GitHub-dark-inspired.
+// Professional diagnostic software feel: precise, readable, no visual noise.
 
 export const COLORS = {
-  // McLaren signature colors
-  papaya:   '#FF8000',
-  gulfBlue: '#0090D0',
+  // Accent colors
+  primary:   '#2188FF',   // Electric blue — active states, primary CTA
+  secondary: '#3FB950',   // GitHub green — OK/connected status
 
-  // Light-mode text variants — full papaya/gulf on white fail WCAG AA
-  // (#FF8000 on #FFF ≈ 2.5:1). These keep the hue at readable contrast.
-  papayaLight:   '#B45A00',
-  gulfBlueLight: '#006B9E',
+  // Light-mode accent variants (WCAG AA on white)
+  primaryLight:   '#0366D6',
+  secondaryLight: '#2EA043',
 
-  // Dark mode backgrounds (carbon layering)
+  // Dark mode — deep navy layering
   dark: {
-    bg:      '#07080A',
-    bg2:     '#0D0F12',
-    bg3:     '#111418',
-    bg4:     '#181C22',
-    border:  '#1C2128',
-    subtle:  '#252B34',
-    text:    '#EEF1F5',
-    muted:   '#7A8496',
+    bg:      '#0D1117',
+    bg2:     '#161B22',
+    bg3:     '#1C2128',
+    bg4:     '#22272E',
+    border:  '#30363D',
+    subtle:  '#3D444D',
+    text:    '#F0F6FC',
+    muted:   '#8B949E',
   },
 
-  // Light mode (aluminum / glass aesthetic from MTC exterior)
+  // Light mode — cool slate
   light: {
-    bg:      '#F2F4F7',
+    bg:      '#F6F8FA',
     bg2:     '#FFFFFF',
-    bg3:     '#ECEEF2',
-    bg4:     '#E2E5EA',
-    border:  '#C8CDD8',
-    subtle:  '#9EA5B4',
-    text:    '#111827',
-    muted:   '#5C6679',
+    bg3:     '#EAEEF2',
+    bg4:     '#DDE1E6',
+    border:  '#C5CBD2',
+    subtle:  '#9198A1',
+    text:    '#1F2328',
+    muted:   '#636C76',
   },
 
   // Semantic status colors
-  ok:     '#00C96E',
-  warn:   '#FFB300',
-  crit:   '#FF2440',
-  info:   '#0090D0',
+  ok:     '#3FB950',
+  warn:   '#D29922',
+  crit:   '#F85149',
+  info:   '#58A6FF',
 
-  // Dark mode semantic (slightly brighter for contrast)
-  darkOk:   '#00C96E',
-  darkWarn: '#FFB300',
-  darkCrit: '#FF2440',
+  // Dark mode semantic
+  darkOk:   '#3FB950',
+  darkWarn: '#D29922',
+  darkCrit: '#F85149',
 
-  // Light mode semantic (darker for readability on white)
-  lightOk:   '#047A44',
-  lightWarn: '#92600A',
-  lightCrit: '#C8112A',
+  // Light mode semantic
+  lightOk:   '#2EA043',
+  lightWarn: '#9A6700',
+  lightCrit: '#CF222E',
 } as const;
 
 export const FONTS = {
-  display:  "'Barlow Condensed', sans-serif",
-  body:     "'Barlow', sans-serif",
-  mono:     "'JetBrains Mono', monospace",
+  display:  "'Inter', 'Roboto', system-ui, -apple-system, sans-serif",
+  body:     "'Inter', 'Roboto', system-ui, -apple-system, sans-serif",
+  mono:     "'JetBrains Mono', 'Roboto Mono', monospace",
 } as const;
 
 export const FONT_SIZES = {
-  xs:   11,
-  sm:   12,
+  xs:   10,
+  sm:   11,
   base: 13,
-  md:   15,
+  md:   14,
   lg:   18,
   xl:   22,
   xxl:  28,
@@ -72,16 +71,22 @@ export const FONT_SIZES = {
 
 export const SPACING = {
   xs: 4,
-  sm: 7,
+  sm: 6,
   md: 10,
   lg: 14,
   xl: 20,
 } as const;
 
-export const BORDER_RADIUS = 3;  // Sharp corners — MTC precision aesthetic
+export const BORDER_RADIUS = 0;
+
+export const BORDER_WIDTH = 2;
+
+export const EASING = {
+  spring: 'cubic-bezier(0.16, 1, 0.3, 1)',
+  bounce: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+} as const;
 
 // ─── CSS Custom Properties injected into :root ──────────────────────────────
-// The renderer/App.tsx injects these based on isDarkMode.
 
 export function buildCSSVars(dark: boolean): string {
   const c = dark ? COLORS.dark : COLORS.light;
@@ -98,8 +103,8 @@ export function buildCSSVars(dark: boolean): string {
     --bs:     ${c.subtle};
     --tw:     ${c.text};
     --tm:     ${c.muted};
-    --pp:     ${dark ? COLORS.papaya : COLORS.papayaLight};
-    --gb:     ${dark ? COLORS.gulfBlue : COLORS.gulfBlueLight};
+    --pp:     ${dark ? COLORS.primary : COLORS.primaryLight};
+    --gb:     ${dark ? COLORS.secondary : COLORS.secondaryLight};
     --sg:     ${ok};
     --sa:     ${warn};
     --sr:     ${crit};
@@ -108,14 +113,6 @@ export function buildCSSVars(dark: boolean): string {
 
 // ─── Gauge arc geometry helpers ───────────────────────────────────────────────
 
-/**
- * Compute SVG stroke-dasharray values for a circular arc gauge.
- * @param value   Current value
- * @param min     Minimum value
- * @param max     Maximum value
- * @param radius  Circle radius in SVG units
- * @param sweep   Arc sweep in degrees (default 270 — three-quarter circle)
- */
 export function gaugeArc(
   value: number,
   min: number,
@@ -128,7 +125,6 @@ export function gaugeArc(
   const arcLength = (sweep / 360) * circumference;
   const filled = fraction * arcLength;
   const gap = circumference - filled;
-  // Offset rotates start point to bottom-left (225° from top)
   const dashOffset = -circumference * ((360 - sweep) / 2 / 360);
   return {
     dashArray: `${filled.toFixed(1)} ${gap.toFixed(1)}`,
@@ -136,9 +132,6 @@ export function gaugeArc(
   };
 }
 
-/**
- * Return the semantic color for a value given optional warn/crit thresholds.
- */
 export function valueColor(
   value: number,
   warnLow?: number,

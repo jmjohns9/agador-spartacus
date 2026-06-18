@@ -20,11 +20,29 @@ function VehicleEditor(): React.ReactElement {
   const setVehicle = useAppStore(s => s.setVehicle);
   const [editing, setEditing] = useState(() => vehicleDisplayName(vehicle) === 'No vehicle set');
   const [draft, setDraft] = useState<VehicleProfile>(vehicle);
+  const [decoding, setDecoding] = useState(false);
+
+  const decodeVIN = async () => {
+    if (!draft.vin || draft.vin.length < 11) return;
+    setDecoding(true);
+    try {
+      const result = await window.electronAPI.decodeVIN(draft.vin);
+      if (result) {
+        setDraft(d => ({
+          ...d,
+          year: d.year || result.year,
+          make: d.make || result.make,
+          model: d.model || result.model,
+          engine: d.engine || result.engine,
+        }));
+      }
+    } finally { setDecoding(false); }
+  };
 
   const field = (key: keyof VehicleProfile, label: string, placeholder: string, flex = 1) => (
     <div style={{ flex, minWidth: 90 }}>
       <div style={{
-        fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+        fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
         letterSpacing: 1.2, textTransform: 'uppercase',
         color: 'var(--tm)', marginBottom: 3,
       }}>
@@ -37,8 +55,8 @@ function VehicleEditor(): React.ReactElement {
         onChange={e => setDraft(d => ({ ...d, [key]: e.target.value }))}
         style={{
           width: '100%', padding: '6px 8px', fontSize: 12,
-          background: 'var(--bg4)', border: '1px solid var(--br)', borderRadius: 3,
-          color: 'var(--tw)', fontFamily: "'JetBrains Mono', monospace",
+          background: 'var(--bg4)', border: '2px solid var(--br)', borderRadius: 0,
+          color: 'var(--tw)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
           outline: 'none',
         }}
       />
@@ -53,7 +71,7 @@ function VehicleEditor(): React.ReactElement {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <i className="ti ti-car" style={{ fontSize: 22, color: 'var(--pp)', flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--tw)', letterSpacing: 0.5 }}>
+              <div style={{ fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--tw)', letterSpacing: 0.5 }}>
                 {vehicleDisplayName(vehicle)}
               </div>
               <div style={{ fontSize: 11, color: 'var(--tm)', marginTop: 2 }}>
@@ -71,17 +89,25 @@ function VehicleEditor(): React.ReactElement {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              {field('year',  'Year',  'e.g. 2004', 0.6)}
-              {field('make',  'Make',  'e.g. Chevrolet')}
-              {field('model', 'Model', 'e.g. Silverado 1500', 1.4)}
-              {field('engine','Engine','e.g. 5.3L V8')}
+              {field('year',  'Year',  '2004', 0.6)}
+              {field('make',  'Make',  'Chevrolet')}
+              {field('model', 'Model', 'Silverado 1500', 1.4)}
+              {field('engine','Engine','5.3L V8')}
             </div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              {field('vin',      'VIN (optional)',      'e.g. 1GCEK19T04E…', 1.2)}
-              {field('nickname', 'Nickname (optional)', 'e.g. My daily')}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              {field('vin',      'VIN (optional)',      '1GCEK19T04E…', 1.2)}
+              <Button
+                size="sm"
+                icon={decoding ? 'ti-loader' : 'ti-search'}
+                onClick={decodeVIN}
+                disabled={!draft.vin || draft.vin.length < 11 || decoding}
+              >
+                {decoding ? 'Decoding…' : 'Auto-fill from VIN'}
+              </Button>
+              {field('nickname', 'Nickname (optional)', 'My daily')}
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              {field('notes', 'Notes for the assistant (known issues, mission)', 'e.g. chasing a parasitic battery drain', 1)}
+              {field('notes', 'Notes for the assistant (known issues, mission)', 'chasing a parasitic battery drain', 1)}
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <Button size="sm" onClick={() => setEditing(false)}>
@@ -102,12 +128,71 @@ function VehicleEditor(): React.ReactElement {
   );
 }
 
+// ─── ELM327 init reference (collapsible) ─────────────────────────────────────
+
+function ELM327Reference(): React.ReactElement {
+  const [open, setOpen] = useState(false);
+  const CMDS = [
+    { cmd: 'ATZ',   desc: 'Reset adapter — clears all state' },
+    { cmd: 'ATE0',  desc: 'Echo off' },
+    { cmd: 'ATL0',  desc: 'Linefeed off' },
+    { cmd: 'ATH0',  desc: 'Headers off' },
+    { cmd: 'ATS0',  desc: 'Spaces off' },
+    { cmd: 'ATSP0', desc: 'Auto protocol detection' },
+    { cmd: 'ATAT1', desc: 'Adaptive timing — level 1' },
+    { cmd: '010C',  desc: 'Protocol ping — locks the adapter onto the vehicle bus' },
+    { cmd: 'ATDP',  desc: 'Read negotiated protocol — expect SAE J1850 VPW' },
+    { cmd: 'STI',   desc: 'OBDLink firmware version (OBDLink-specific)' },
+    { cmd: 'STDI',  desc: 'OBDLink device info (OBDLink-specific)' },
+    { cmd: 'ATRV',  desc: 'Live battery voltage — first reading' },
+  ];
+  return (
+    <>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+          background: 'none', border: 'none', padding: '4px 0', cursor: 'pointer',
+          color: 'var(--tm)', fontSize: 10, fontFamily: "'Inter','Roboto',system-ui,sans-serif",
+          fontWeight: 700, letterSpacing: 1.4, textTransform: 'uppercase',
+        }}
+      >
+        <div style={{ flex: 1, height: 1, background: 'var(--br)' }} />
+        <i className={`ti ${open ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ fontSize: 10 }} />
+        <span>ELM327 init reference</span>
+        <i className={`ti ${open ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ fontSize: 10 }} />
+        <div style={{ flex: 1, height: 1, background: 'var(--br)' }} />
+      </button>
+      {open && (
+        <Card padding={0}>
+          {CMDS.map(({ cmd, desc }, i) => (
+            <div
+              key={cmd}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '6px 12px', borderBottom: i < CMDS.length - 1 ? '1px solid var(--bg3)' : 'none',
+              }}
+            >
+              <span style={{ fontFamily: "'JetBrains Mono','Roboto Mono',monospace", fontSize: 11, color: 'var(--pp)', width: 48, flexShrink: 0 }}>
+                {cmd}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--tm)' }}>{desc}</span>
+            </div>
+          ))}
+        </Card>
+      )}
+    </>
+  );
+}
+
 // ─── ConnectionScreen ─────────────────────────────────────────────────────────
 
 export function ConnectionScreen(): React.ReactElement {
   const connectionStatus = useAppStore(s => s.connectionStatus);
   const protocol         = useAppStore(s => s.protocol);
   const adapterInfo      = useAppStore(s => s.adapterInfo);
+  const btRSSI           = useAppStore(s => s.btRSSI);
+  const btDistance        = useAppStore(s => s.btDistance);
   const batteryVoltage   = useAppStore(s => {
     const v = s.liveData['ATRV']?.value;
     return typeof v === 'number' ? v : 0;
@@ -222,7 +307,7 @@ export function ConnectionScreen(): React.ReactElement {
           {/* Status indicator */}
           <div style={{
             width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
-            background: isConnected ? 'rgba(0,201,110,0.1)' : 'var(--bg4)',
+            background: isConnected ? 'rgba(0,230,118,0.08)' : 'var(--bg4)',
             border: `2px solid ${statusColor}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             animation: isBusy ? 'blink 1.2s infinite' : 'none',
@@ -235,7 +320,7 @@ export function ConnectionScreen(): React.ReactElement {
 
           <div style={{ flex: 1 }}>
             <div style={{
-              fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+              fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
               fontSize: 15, color: statusColor, letterSpacing: 0.5,
             }}>
               {statusLabel}
@@ -247,7 +332,7 @@ export function ConnectionScreen(): React.ReactElement {
               </div>
             )}
             {isConnected && batteryVoltage > 0 && (
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: 'var(--pp)', marginTop: 4 }}>
+              <div style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 13, color: 'var(--pp)', marginTop: 4 }}>
                 Battery: {batteryVoltage.toFixed(2)} V
               </div>
             )}
@@ -271,16 +356,19 @@ export function ConnectionScreen(): React.ReactElement {
                 { label: 'Adapter',        value: adapterInfo || 'OBDLink MX+' },
                 { label: 'Protocol',       value: protocol    || '—' },
                 { label: 'Battery at OBD', value: batteryVoltage > 0 ? `${batteryVoltage.toFixed(3)} V` : '—' },
-              ].map(({ label, value }) => (
+                { label: 'BT Signal (RSSI)', value: btRSSI !== null ? `${btRSSI} dBm` : '—', color: btRSSI !== null ? (btRSSI > -60 ? 'var(--sg)' : btRSSI > -80 ? 'var(--sa)' : 'var(--sr)') : undefined },
+                { label: 'BT Distance',     value: btDistance !== null ? `~${btDistance} m` : '—' },
+                { label: 'Signal Quality',   value: btRSSI !== null ? (btRSSI > -60 ? 'Excellent' : btRSSI > -70 ? 'Good' : btRSSI > -80 ? 'Fair' : 'Weak') : '—', color: btRSSI !== null ? (btRSSI > -60 ? 'var(--sg)' : btRSSI > -70 ? 'var(--pp)' : btRSSI > -80 ? 'var(--sa)' : 'var(--sr)') : undefined },
+              ].map(({ label, value, color }) => (
                 <div key={label}>
                   <div style={{
-                    fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+                    fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
                     letterSpacing: 1.2, textTransform: 'uppercase',
                     color: 'var(--tm)', marginBottom: 4,
                   }}>
                     {label}
                   </div>
-                  <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: 'var(--tw)' }}>
+                  <div style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 13, color: (color as string) ?? 'var(--tw)' }}>
                     {value}
                   </div>
                 </div>
@@ -310,9 +398,9 @@ export function ConnectionScreen(): React.ReactElement {
                 <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   <div style={{
                     width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
-                    background: 'var(--bg4)', border: '1px solid var(--br)',
+                    background: 'var(--bg4)', border: '2px solid var(--br)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10,
+                    fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 10,
                     color: 'var(--pp)', fontWeight: 700,
                   }}>
                     {i + 1}
@@ -344,10 +432,10 @@ export function ConnectionScreen(): React.ReactElement {
             return (
             <Card padding={0}>
               <div style={{
-                padding: '8px 12px', background: 'var(--bg4)', borderBottom: '1px solid var(--br)',
+                padding: '8px 12px', background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
               }}>
                 <span style={{
-                  fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+                  fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
                   letterSpacing: 1.2, textTransform: 'uppercase',
                   color: 'var(--tm)',
                 }}>
@@ -365,9 +453,7 @@ export function ConnectionScreen(): React.ReactElement {
                     padding: '10px 12px', cursor: 'pointer',
                     borderBottom: i < visiblePorts.length - 1 ? '1px solid var(--bg3)' : 'none',
                     background: 'transparent',
-                    border: '1px solid transparent',
-                    borderRadius: 0,
-                    boxShadow: selectedPort === port.path ? 'inset 0 0 0 1px var(--pp)' : 'none',
+                    border: selectedPort === port.path ? '2px solid var(--pp)' : '2px solid var(--br)',
                     transition: 'background 0.1s',
                   }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
@@ -392,7 +478,7 @@ export function ConnectionScreen(): React.ReactElement {
 
                   <div style={{ flex: 1, minWidth: 0 }} title={port.path /* full path on hover for debugging */}>
                     <div style={{
-                      fontFamily: "'Barlow Condensed', sans-serif", fontSize: 14,
+                      fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 14,
                       color: 'var(--tw)', overflow: 'hidden', textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap', fontWeight: 700, letterSpacing: 0.3,
                     }}>
@@ -439,11 +525,11 @@ export function ConnectionScreen(): React.ReactElement {
                   width: '100%', padding: '16px', cursor: ready ? 'pointer' : 'not-allowed',
                   background: ready ? 'var(--pp)' : 'var(--bg4)',
                   border: `1px solid ${ready ? 'var(--pp)' : 'var(--br)'}`,
-                  borderRadius: 4,
+                  borderRadius: 0,
                   color: ready ? '#0B0B0B' : 'var(--tm)',
-                  fontSize: 15, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                  fontSize: 15, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
                   letterSpacing: 0.8, textTransform: 'uppercase',
-                  boxShadow: ready ? '0 4px 14px rgba(255,128,0,0.25)' : 'none',
+                  
                   transition: 'transform 0.08s, box-shadow 0.12s, background 0.12s',
                 }}
                 onMouseEnter={e => { if (ready) (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'; }}
@@ -461,40 +547,8 @@ export function ConnectionScreen(): React.ReactElement {
         </>
       )}
 
-      {/* ── ELM327 init sequence reference ───────────────────────────── */}
-      <SectionHeader>ELM327 initialization sequence</SectionHeader>
-      <Card padding={0}>
-        {[
-          { cmd: 'ATZ',    desc: 'Reset adapter — clears all state' },
-          { cmd: 'ATE0',   desc: 'Echo off' },
-          { cmd: 'ATL0',   desc: 'Linefeed off' },
-          { cmd: 'ATH0',   desc: 'Headers off' },
-          { cmd: 'ATS0',   desc: 'Spaces off' },
-          { cmd: 'ATSP0',  desc: 'Auto protocol detection' },
-          { cmd: 'ATAT1',  desc: 'Adaptive timing — level 1' },
-          { cmd: '010C',   desc: 'Protocol ping — locks the adapter onto the vehicle’s bus protocol' },
-          { cmd: 'ATDP',   desc: 'Read negotiated protocol — expect SAE J1850 VPW' },
-          { cmd: 'STI',    desc: 'OBDLink firmware version (OBDLink-specific)' },
-          { cmd: 'STDI',   desc: 'OBDLink device info (OBDLink-specific)' },
-          { cmd: 'ATRV',   desc: 'Live battery voltage — first reading' },
-        ].map(({ cmd, desc }, i, arr) => (
-          <div
-            key={cmd}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '7px 12px', borderBottom: i < arr.length - 1 ? '1px solid var(--bg3)' : 'none',
-              transition: 'background 0.1s',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-          >
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--pp)', width: 52, flexShrink: 0 }}>
-              {cmd}
-            </span>
-            <span style={{ fontSize: 12, color: 'var(--tm)' }}>{desc}</span>
-          </div>
-        ))}
-      </Card>
+      {/* ── ELM327 init sequence reference (collapsible) ─────────────── */}
+      <ELM327Reference />
 
     </ScrollPane>
   );
