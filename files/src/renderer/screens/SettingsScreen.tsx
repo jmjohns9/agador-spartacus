@@ -42,9 +42,9 @@ export function SettingsScreen(): React.ReactElement {
   };
 
   const infoRow = (label: string, value: string) => (
-    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--bg4)', fontSize: 11 }}>
+    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--bg4)', fontSize: 11 }}>
       <span style={{ color: 'var(--tm)' }}>{label}</span>
-      <span style={{ color: 'var(--tw)', fontFamily: 'monospace' }}>{value}</span>
+      <span style={{ color: 'var(--tw)', fontFamily: "'JetBrains Mono','Roboto Mono',monospace" }}>{value}</span>
     </div>
   );
 
@@ -56,23 +56,23 @@ export function SettingsScreen(): React.ReactElement {
 
       {/* Confirmation overlay */}
       {pending && (
-        <div style={{ padding: 12, border: '1px solid var(--sa)', background: 'rgba(255,145,0,0.06)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ padding: 12, border: '2px solid var(--sa)', background: 'rgba(210,153,34,0.06)', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontSize: 12, color: 'var(--tw)' }}>
             Migrate existing data to <strong>{pending === 'sqlite' ? 'SQLite' : 'Local JSON'}</strong>?
             Your current data will be copied. The old file is kept as a backup.
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={confirmMigrate} style={{ padding: '5px 12px', background: 'var(--pp)', border: 'none', color: '#000', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+            <button onClick={confirmMigrate} style={{ padding: '5px 12px', background: 'var(--pp)', border: 'none', color: 'var(--bg)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
               Migrate
             </button>
-            <button onClick={() => setPending(null)} style={{ padding: '5px 12px', background: 'var(--bg4)', border: '1px solid var(--br)', color: 'var(--tm)', fontSize: 11, cursor: 'pointer' }}>
+            <button onClick={() => setPending(null)} style={{ padding: '5px 12px', background: 'var(--bg4)', border: '2px solid var(--br)', color: 'var(--tm)', fontSize: 11, cursor: 'pointer' }}>
               Cancel
             </button>
           </div>
         </div>
       )}
 
-      <div style={{ background: 'var(--bg3)', border: '1px solid var(--br)', padding: 10 }}>
+      <div style={{ background: 'var(--bg3)', border: '2px solid var(--br)', padding: 10 }}>
         {migrating && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', fontSize: 11, color: 'var(--sa)' }}>
             <i className="ti ti-loader-2" style={{ fontSize: 14 }} />
@@ -88,9 +88,9 @@ export function SettingsScreen(): React.ReactElement {
               disabled={migrating}
               onClick={() => handleToggle(b)}
               style={{
-                flex: 1, padding: '8px 0', fontSize: 11, fontFamily: 'monospace',
+                flex: 1, padding: '8px 0', fontSize: 11, fontFamily: "'JetBrains Mono','Roboto Mono',monospace",
                 fontWeight: 600, letterSpacing: 0.6, textTransform: 'uppercase',
-                background: config?.backend === b ? 'rgba(255,87,34,0.12)' : 'var(--bg4)',
+                background: config?.backend === b ? 'rgba(33,136,255,0.12)' : 'var(--bg4)',
                 border: `2px solid ${config?.backend === b ? 'var(--pp)' : 'var(--br)'}`,
                 color: config?.backend === b ? 'var(--pp)' : 'var(--tm)',
                 cursor: migrating ? 'not-allowed' : 'pointer',
@@ -123,7 +123,7 @@ export function SettingsScreen(): React.ReactElement {
             <div style={{ marginTop: 10 }}>
               <button
                 onClick={() => window.electronAPI.storage.openDataFolder()}
-                style={{ padding: '4px 10px', background: 'var(--bg4)', border: '1px solid var(--br)', color: 'var(--tm)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                style={{ padding: '6px 12px', background: 'var(--bg4)', border: '2px solid var(--br)', color: 'var(--tm)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
               >
                 <i className="ti ti-folder-open" style={{ fontSize: 12 }} />
                 Open data folder
@@ -136,14 +136,14 @@ export function SettingsScreen(): React.ReactElement {
       <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.0, textTransform: 'uppercase', color: 'var(--tm)', padding: '10px 0 6px' }}>
         About
       </div>
-      <div style={{ background: 'var(--bg3)', border: '1px solid var(--br)', padding: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ background: 'var(--bg3)', border: '2px solid var(--br)', padding: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {infoRow('App', 'Silverado DX v1.0.0')}
         {typeof process !== 'undefined' && process.versions?.electron && infoRow('Electron', process.versions.electron)}
         {typeof process !== 'undefined' && process.versions?.node && infoRow('Node', process.versions.node)}
         <div style={{ marginTop: 8 }}>
           <button
             disabled
-            style={{ padding: '4px 10px', background: 'var(--bg4)', border: '1px solid var(--br)', color: 'var(--tm)', fontSize: 11, cursor: 'not-allowed', opacity: 0.5 }}
+            style={{ padding: '6px 12px', background: 'var(--bg4)', border: '2px solid var(--br)', color: 'var(--tm)', fontSize: 11, cursor: 'not-allowed', opacity: 0.5 }}
           >
             Check for updates
           </button>

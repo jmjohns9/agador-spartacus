@@ -62,12 +62,12 @@ export function FreezeFrameScreen(): React.ReactElement {
       ) : (
         <>
           {/* Frame list */}
-          <div style={{ background: 'var(--bg3)', border: '1px solid var(--br)' }}>
+          <div style={{ background: 'var(--bg3)', border: '2px solid var(--br)' }}>
             {frames.map(f => (
               <div
                 key={f.id}
                 onClick={() => setSelected(f.id)}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', cursor: 'pointer', background: f.id === selected ? 'rgba(255,87,34,0.08)' : 'transparent', borderBottom: '1px solid var(--bg4)', borderLeft: `2px solid ${f.id === selected ? 'var(--pp)' : 'transparent'}` }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', cursor: 'pointer', background: f.id === selected ? 'rgba(33,136,255,0.08)' : 'transparent', borderBottom: '1px solid var(--bg4)', borderLeft: `2px solid ${f.id === selected ? 'var(--pp)' : 'transparent'}` }}
               >
                 <i className="ti ti-camera" style={{ fontSize: 12, color: f.id === selected ? 'var(--pp)' : 'var(--tm)', flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
@@ -83,7 +83,7 @@ export function FreezeFrameScreen(): React.ReactElement {
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.0, textTransform: 'uppercase', color: 'var(--tm)', padding: '6px 0 2px' }}>
                 PID values at fault — {frame.dtcCode}
               </div>
-              <div style={{ background: 'var(--bg3)', border: '1px solid var(--br)' }}>
+              <div style={{ background: 'var(--bg3)', border: '2px solid var(--br)' }}>
                 {/* Battery voltage hero row */}
                 {frame.liveData['ATRV'] && (
                   <div style={{ display: 'flex', padding: '8px 12px', borderBottom: '2px solid var(--br)', background: 'var(--bg4)' }}>
@@ -121,10 +121,12 @@ export function FreezeFrameScreen(): React.ReactElement {
                 })}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => exportCSV(frame)} style={{ padding: '4px 10px', background: 'var(--bg4)', border: '1px solid var(--br)', color: 'var(--tm)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button onClick={() => exportCSV(frame)} style={{ padding: '6px 12px', background: 'var(--bg4)', border: '2px solid var(--br)', color: 'var(--tm)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <i className="ti ti-file-spreadsheet" style={{ fontSize: 12 }} />Export CSV
                 </button>
-                <button onClick={() => deleteFrame(frame.id)} style={{ padding: '4px 10px', background: 'var(--bg4)', border: '1px solid var(--br)', color: 'var(--tm)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button onClick={() => deleteFrame(frame.id)} aria-label="Delete freeze frame" style={{ padding: '6px 12px', background: 'none', border: '2px solid var(--sr)', color: 'var(--sr)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: 0.7 }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '0.7'; }}>
                   <i className="ti ti-trash" style={{ fontSize: 12 }} />Delete
                 </button>
               </div>

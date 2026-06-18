@@ -131,24 +131,24 @@ export function DataLoggerScreen(): React.ReactElement {
 
   const recBtnStyle: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 8,
-    padding: '8px 18px', fontSize: 12, fontFamily: 'monospace', fontWeight: 700,
-    background: isRecording ? 'rgba(255,61,0,0.15)' : 'var(--bg4)',
+    padding: '8px 18px', fontSize: 12, fontFamily: "'JetBrains Mono','Roboto Mono',monospace", fontWeight: 700,
+    background: isRecording ? 'rgba(248,81,73,0.12)' : 'var(--bg4)',
     border: `2px solid ${isRecording ? 'var(--sr)' : 'var(--br)'}`,
     color: isRecording ? 'var(--sr)' : 'var(--tw)', cursor: 'pointer',
   };
 
   const intervalBtnStyle = (ms: number): React.CSSProperties => ({
-    padding: '3px 8px', fontSize: 10, fontFamily: 'monospace',
-    background: sampleInterval === ms ? 'rgba(255,87,34,0.12)' : 'var(--bg4)',
-    border: `1px solid ${sampleInterval === ms ? 'var(--pp)' : 'var(--br)'}`,
+    padding: '5px 10px', fontSize: 10, fontFamily: "'JetBrains Mono','Roboto Mono',monospace",
+    background: sampleInterval === ms ? 'rgba(33,136,255,0.12)' : 'var(--bg4)',
+    border: `2px solid ${sampleInterval === ms ? 'var(--pp)' : 'var(--br)'}`,
     color: sampleInterval === ms ? 'var(--pp)' : 'var(--tm)',
     cursor: isRecording ? 'not-allowed' : 'pointer',
   });
 
   const pidBtnStyle = (pid: string): React.CSSProperties => ({
-    padding: '3px 8px', fontSize: 10, fontFamily: 'monospace',
-    background: selectedPIDs.includes(pid) ? 'rgba(255,87,34,0.12)' : 'var(--bg4)',
-    border: `1px solid ${selectedPIDs.includes(pid) ? 'var(--pp)' : 'var(--br)'}`,
+    padding: '5px 10px', fontSize: 10, fontFamily: "'JetBrains Mono','Roboto Mono',monospace",
+    background: selectedPIDs.includes(pid) ? 'rgba(33,136,255,0.12)' : 'var(--bg4)',
+    border: `2px solid ${selectedPIDs.includes(pid) ? 'var(--pp)' : 'var(--br)'}`,
     color: selectedPIDs.includes(pid) ? 'var(--pp)' : 'var(--tm)',
     cursor: isRecording ? 'not-allowed' : 'pointer',
   });
@@ -156,14 +156,16 @@ export function DataLoggerScreen(): React.ReactElement {
   return (
     <div style={{ overflowY: 'auto', flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
       {warnDropped && (
-        <div style={{ padding: '6px 10px', fontSize: 11, color: 'var(--sa)', background: 'rgba(255,145,0,0.08)', border: '1px solid var(--sa)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '6px 10px', fontSize: 11, color: 'var(--sa)', background: 'rgba(210,153,34,0.08)', border: '2px solid var(--sa)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>Cap ({MAX_RECORDINGS}) reached — oldest recording deleted.</span>
-          <button onClick={() => setWarnDropped(false)} style={{ background: 'none', border: 'none', color: 'var(--tm)', cursor: 'pointer', fontSize: 13 }}>✕</button>
+          <button onClick={() => setWarnDropped(false)} style={{ background: 'none', border: 'none', color: 'var(--tm)', cursor: 'pointer' }}>
+            <i className="ti ti-x" style={{ fontSize: 12 }} />
+          </button>
         </div>
       )}
 
       {/* Controls */}
-      <div style={{ background: 'var(--bg3)', border: '1px solid var(--br)', padding: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ background: 'var(--bg3)', border: '2px solid var(--br)', padding: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {/* Interval */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 11, color: 'var(--tm)', minWidth: 100 }}>Sample interval</span>
@@ -209,7 +211,7 @@ export function DataLoggerScreen(): React.ReactElement {
 
       {/* PID selector */}
       <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.0, textTransform: 'uppercase', color: 'var(--tm)', padding: '6px 0 2px' }}>PIDs to record</div>
-      <div style={{ background: 'var(--bg3)', border: '1px solid var(--br)', padding: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      <div style={{ background: 'var(--bg3)', border: '2px solid var(--br)', padding: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {KEY_PIDS.map(pid => (
           <button key={pid} disabled={isRecording} onClick={() => togglePID(pid)} style={pidBtnStyle(pid)}>{pid}</button>
         ))}
@@ -222,24 +224,26 @@ export function DataLoggerScreen(): React.ReactElement {
             Saved recordings — {recordings.length} / {MAX_RECORDINGS}
           </div>
           {recordings.map(rec => (
-            <div key={rec.id} style={{ background: 'var(--bg3)', border: '1px solid var(--br)', padding: 10 }}>
+            <div key={rec.id} style={{ background: 'var(--bg3)', border: '2px solid var(--br)', padding: 10 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                 <i className="ti ti-activity" style={{ fontSize: 14, color: 'var(--gb)', flexShrink: 0, marginTop: 2 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, color: 'var(--tw)', fontWeight: 600, marginBottom: 3 }}>{rec.name}</div>
-                  <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: 'monospace', lineHeight: 1.6 }}>
+                  <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'JetBrains Mono','Roboto Mono',monospace", lineHeight: 1.6 }}>
                     {fmtDuration(rec.durationMs)} · {rec.sampleCount.toLocaleString()} samples · {rec.pids.length} PIDs
                     {rec.markers.length > 0 ? ` · ${rec.markers.length} markers` : ''} · {fmtBytes(JSON.stringify(rec).length)}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                  <button onClick={() => exportCSV(rec)} title="Export CSV" style={{ padding: '3px 8px', background: 'var(--bg4)', border: '1px solid var(--br)', color: 'var(--tm)', fontSize: 10, cursor: 'pointer' }}>
+                  <button onClick={() => exportCSV(rec)} title="Export CSV" style={{ padding: '5px 10px', background: 'var(--bg4)', border: '2px solid var(--br)', color: 'var(--tm)', fontSize: 10, cursor: 'pointer' }}>
                     <i className="ti ti-file-spreadsheet" style={{ marginRight: 4 }} />CSV
                   </button>
-                  <button onClick={() => exportJSON(rec)} title="Export JSON" style={{ padding: '3px 8px', background: 'var(--bg4)', border: '1px solid var(--br)', color: 'var(--tm)', fontSize: 10, cursor: 'pointer' }}>
+                  <button onClick={() => exportJSON(rec)} title="Export JSON" style={{ padding: '5px 10px', background: 'var(--bg4)', border: '2px solid var(--br)', color: 'var(--tm)', fontSize: 10, cursor: 'pointer' }}>
                     <i className="ti ti-file-code" style={{ marginRight: 4 }} />JSON
                   </button>
-                  <button onClick={() => deleteRecording(rec.id)} title="Delete" style={{ padding: '3px 6px', background: 'none', border: 'none', color: 'var(--tm)', cursor: 'pointer' }}>
+                  <button onClick={() => deleteRecording(rec.id)} title="Delete recording" aria-label="Delete recording" style={{ padding: '5px 8px', background: 'none', border: '2px solid transparent', color: 'var(--sr)', cursor: 'pointer', opacity: 0.7 }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--sr)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '0.7'; (e.currentTarget as HTMLElement).style.borderColor = 'transparent'; }}>
                     <i className="ti ti-trash" style={{ fontSize: 12 }} />
                   </button>
                 </div>
