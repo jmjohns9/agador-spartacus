@@ -58,7 +58,7 @@ function VoltageTimeline(): React.ReactElement {
 
   if (recent.length < 2) {
     return (
-      <div style={{ height: H + 20, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg4)', borderRadius: 2 }}>
+      <div style={{ height: H + 20, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg4)', borderRadius: 0 }}>
         <span style={{ fontSize: 11, color: 'var(--tm)' }}>Collecting voltage history…</span>
       </div>
     );
@@ -77,7 +77,7 @@ function VoltageTimeline(): React.ReactElement {
         {REFS.map(({ v, label, color }) => (
           <g key={v}>
             <line x1={0} y1={yOf(v)} x2={W} y2={yOf(v)} stroke={color} strokeWidth="0.7" strokeDasharray="4,3" />
-            <text x={W + 4} y={yOf(v) + 4} fontSize="8" fill={color} fontFamily="JetBrains Mono, monospace">{label}</text>
+            <text x={W + 4} y={yOf(v) + 4} fontSize="8" fill={color} fontFamily="JetBrains Mono, Roboto Mono, monospace">{label}</text>
           </g>
         ))}
         <polyline points={pts} fill="none" stroke={lineColor} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
@@ -85,10 +85,10 @@ function VoltageTimeline(): React.ReactElement {
           <circle cx={W} cy={yOf(lastV)} r="4" fill={lineColor} stroke="var(--bg2)" strokeWidth="1.5" />
         )}
         {[11.6, 11.8, 12.0, 12.2, 12.4, 12.6, 12.8, 13.0].map(v => (
-          <text key={v} x={-4} y={yOf(v) + 3} fontSize="8" fill="var(--tm)" fontFamily="JetBrains Mono, monospace" textAnchor="end">{v}</text>
+          <text key={v} x={-4} y={yOf(v) + 3} fontSize="8" fill="var(--tm)" fontFamily="JetBrains Mono, Roboto Mono, monospace" textAnchor="end">{v}</text>
         ))}
       </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--tm)', fontFamily: "'JetBrains Mono', monospace" }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--tm)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace" }}>
         <span>{recent.length} samples · {Math.round(recent.length * 0.5 / 60)} min window</span>
         <span style={{ color: drift < -0.05 ? 'var(--sr)' : drift < -0.02 ? 'var(--sa)' : 'var(--sg)' }}>
           Drift: {drift >= 0 ? '+' : ''}{drift.toFixed(3)} V
@@ -115,12 +115,12 @@ function FusePanel({ title, fuses }: { title: string; fuses: FuseCircuit[] }): R
   return (
     <Card padding={0}>
       <div style={{
-        padding: '8px 12px', background: 'var(--bg4)', borderBottom: '1px solid var(--br)',
+        padding: '8px 12px', background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
         display: 'grid', gridTemplateColumns: '36px 1fr 50px 90px 70px', gap: 8, alignItems: 'center',
       }}>
         {['Amp', 'Circuit', 'Draw', 'Status', 'Action'].map(h => (
           <span key={h} style={{
-            fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
+            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
             letterSpacing: 1.2, textTransform: 'uppercase' as const, color: 'var(--tm)',
           }}>{h}</span>
         ))}
@@ -140,7 +140,7 @@ function FusePanel({ title, fuses }: { title: string; fuses: FuseCircuit[] }): R
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = f.status === 'confirmed' ? 'rgba(255,36,64,0.04)' : f.status === 'suspect' ? 'rgba(255,179,0,0.04)' : 'transparent'; }}
           >
             <span style={{
-              fontFamily: "'JetBrains Mono', monospace", fontSize: 12,
+              fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12,
               color: FUSE_STATUS_COLOR[f.status], fontWeight: 600,
             }}>
               {f.amperage}A
@@ -152,7 +152,7 @@ function FusePanel({ title, fuses }: { title: string; fuses: FuseCircuit[] }): R
               </div>
             </div>
             <span style={{
-              fontFamily: "'JetBrains Mono', monospace", fontSize: 11,
+              fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11,
               color: f.estimatedDrawAmps && f.estimatedDrawAmps > 0.05 ? 'var(--sa)' : 'var(--tm)',
             }}>
               {f.estimatedDrawAmps ? `${(f.estimatedDrawAmps * 1000).toFixed(0)}mA` : '—'}
@@ -165,9 +165,9 @@ function FusePanel({ title, fuses }: { title: string; fuses: FuseCircuit[] }): R
           {expanded === f.id && (
             <div style={{
               padding: '10px 12px 10px 48px', background: 'var(--bg3)',
-              borderBottom: '1px solid var(--br)', fontSize: 11, color: 'var(--tm)', lineHeight: 1.7,
+              borderBottom: '2px solid var(--br)', fontSize: 11, color: 'var(--tm)', lineHeight: 1.7,
             }}>
-              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9, letterSpacing: 1.2, textTransform: 'uppercase' as const, color: 'var(--tm)', marginBottom: 4 }}>
+              <div style={{ fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9, letterSpacing: 1.2, textTransform: 'uppercase' as const, color: 'var(--tm)', marginBottom: 4 }}>
                 Circuit detail
               </div>
               <div><strong style={{ color: 'var(--tw)' }}>Feeds:</strong> {f.feeds.join(', ')}</div>
@@ -176,7 +176,7 @@ function FusePanel({ title, fuses }: { title: string; fuses: FuseCircuit[] }): R
                 <div style={{ marginTop: 4 }}>
                   <strong style={{ color: 'var(--tw)' }}>Related DTCs:</strong>{' '}
                   {f.relatedDTCs.map(c => (
-                    <span key={c} style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--sr)', marginRight: 6 }}>{c}</span>
+                    <span key={c} style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", color: 'var(--sr)', marginRight: 6 }}>{c}</span>
                   ))}
                 </div>
               )}
@@ -184,7 +184,7 @@ function FusePanel({ title, fuses }: { title: string; fuses: FuseCircuit[] }): R
                 <div style={{ marginTop: 4 }}>
                   <strong style={{ color: 'var(--tw)' }}>Related modules:</strong>{' '}
                   {f.relatedModules.map(m => (
-                    <span key={m} style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--gb)', marginRight: 6 }}>{m}</span>
+                    <span key={m} style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", color: 'var(--gb)', marginRight: 6 }}>{m}</span>
                   ))}
                 </div>
               )}
@@ -211,7 +211,7 @@ function ChecklistSection(): React.ReactElement {
     <>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8,
-        fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--tm)',
+        fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--tm)',
       }}>
         <span>{completed}/{checklist.length} steps completed</span>
         {passed > 0 && <Badge label={`${passed} passed`} variant="ok" />}
@@ -223,12 +223,12 @@ function ChecklistSection(): React.ReactElement {
             padding: '10px 12px',
             borderBottom: i < checklist.length - 1 ? '1px solid var(--bg3)' : 'none',
             background: item.completed
-              ? item.passed ? 'rgba(0,201,110,0.03)' : 'rgba(255,36,64,0.03)'
+              ? item.passed ? 'rgba(0,230,118,0.03)' : 'rgba(255,36,64,0.03)'
               : 'transparent',
           }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
               <span style={{
-                fontFamily: "'JetBrains Mono', monospace", fontSize: 11,
+                fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11,
                 color: item.completed ? (item.passed ? 'var(--sg)' : 'var(--sr)') : 'var(--pp)',
                 width: 24, flexShrink: 0, paddingTop: 1,
               }}>
@@ -248,7 +248,7 @@ function ChecklistSection(): React.ReactElement {
                   </div>
                 )}
                 {item.completed && item.timestamp && (
-                  <div style={{ fontSize: 9, color: 'var(--tm)', marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }}>
+                  <div style={{ fontSize: 9, color: 'var(--tm)', marginTop: 2, fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace" }}>
                     {new Date(item.timestamp).toLocaleTimeString()}
                   </div>
                 )}
@@ -262,9 +262,9 @@ function ChecklistSection(): React.ReactElement {
                     onClick={e => e.stopPropagation()}
                     style={{
                       width: 120, padding: '3px 6px', fontSize: 10,
-                      background: 'var(--bg4)', border: '1px solid var(--br)',
-                      borderRadius: 3, color: 'var(--tw)',
-                      fontFamily: "'JetBrains Mono', monospace",
+                      background: 'var(--bg4)', border: '2px solid var(--br)',
+                      borderRadius: 0, color: 'var(--tw)',
+                      fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
                     }}
                   />
                   <Button size="sm" variant="primary" onClick={() => { toggle(item.id, true, noteInput[item.id] ?? ''); }}>
@@ -335,7 +335,7 @@ function KnownCulprits(): React.ReactElement {
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--gb)' }}>{c.address}</span>
+            <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--gb)' }}>{c.address}</span>
             <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--tw)' }}>{c.component}</span>
             <Badge label={c.drawRange} variant={c.severity} />
           </div>
@@ -357,6 +357,93 @@ function KnownCulprits(): React.ReactElement {
   );
 }
 
+// ─── Active Power Consumers ─────────────────────────────────────────────────
+
+function PowerConsumers(): React.ReactElement {
+  const modules = useAppStore(s => s.modules);
+  const liveData = useAppStore(s => s.liveData);
+  const connectionStatus = useAppStore(s => s.connectionStatus);
+  const isConnected = connectionStatus === 'connected';
+
+  const consumers: Array<{ name: string; draw: string; status: 'active' | 'sleep' | 'rogue'; source: string }> = [];
+
+  // Only show module-sourced consumers if modules have been detected
+  for (const m of modules) {
+    const draw = m.status === 'rogue' ? '50–1200 mA' : m.status === 'suspect' ? '10–50 mA' : '< 5 mA';
+    consumers.push({ name: m.name, draw, status: m.status === 'rogue' ? 'rogue' : m.status === 'suspect' ? 'active' : 'sleep', source: `Module ${m.address}` });
+  }
+
+  if (isConnected) {
+    // OBD adapter is always drawing when connected
+    consumers.push({ name: 'OBD-II adapter', draw: '30–60 mA', status: 'active', source: 'Adapter' });
+
+    // Engine-running systems — derive from RPM PID
+    const rpm = typeof liveData['010C']?.value === 'number' ? liveData['010C'].value as number : 0;
+    if (rpm > 0) {
+      consumers.push({ name: 'Fuel pump relay', draw: '5–8 A', status: 'active', source: 'Engine running' });
+      consumers.push({ name: 'Ignition coils', draw: '3–5 A', status: 'active', source: 'Engine running' });
+      consumers.push({ name: 'Fuel injectors', draw: '1–4 A', status: 'active', source: 'Engine running' });
+    }
+
+    // Live-detected subsystems
+    const hasCoolant = typeof liveData['0105']?.value === 'number';
+    const hasMAF = typeof liveData['0110']?.value === 'number';
+    if (hasCoolant) consumers.push({ name: 'ECM', draw: rpm > 0 ? '0.5–2 A' : '3–8 mA', status: rpm > 0 ? 'active' : 'sleep', source: 'PID 0105 responding' });
+    if (hasMAF) consumers.push({ name: 'MAF sensor', draw: rpm > 0 ? '50–100 mA' : '0 mA', status: rpm > 0 ? 'active' : 'sleep', source: 'PID 0110 responding' });
+  }
+
+  if (!isConnected && modules.length === 0) {
+    return (
+      <Card>
+        <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--tm)', fontSize: 12 }}>
+          <i className="ti ti-plug-connected-x" style={{ fontSize: 20, display: 'block', marginBottom: 6 }} />
+          Connect to adapter to detect active power consumers
+        </div>
+      </Card>
+    );
+  }
+
+  consumers.sort((a, b) => {
+    const order = { rogue: 0, active: 1, sleep: 2 };
+    return order[a.status] - order[b.status];
+  });
+
+  const statusColor = { rogue: 'var(--sr)', active: 'var(--sa)', sleep: 'var(--sg)' };
+  const statusIcon  = { rogue: 'ti-alert-triangle', active: 'ti-bolt', sleep: 'ti-zzz' };
+
+  return (
+    <Card padding={0}>
+      <div style={{
+        padding: '8px 12px', background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
+        display: 'grid', gridTemplateColumns: '1fr 90px 70px 90px', gap: 8,
+      }}>
+        {['Consumer', 'Est. Draw', 'State', 'Source'].map(h => (
+          <span key={h} style={{
+            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
+            letterSpacing: 1.2, textTransform: 'uppercase' as const, color: 'var(--tm)',
+          }}>{h}</span>
+        ))}
+      </div>
+      {consumers.map((c, i) => (
+        <div key={`${c.name}-${i}`} style={{
+          display: 'grid', gridTemplateColumns: '1fr 90px 70px 90px', gap: 8,
+          padding: '6px 12px', alignItems: 'center',
+          borderBottom: i < consumers.length - 1 ? '1px solid var(--bg3)' : 'none',
+          background: c.status === 'rogue' ? 'rgba(255,59,80,0.04)' : 'transparent',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--tw)' }}>
+            <i className={`ti ${statusIcon[c.status]}`} style={{ fontSize: 12, color: statusColor[c.status] }} />
+            {c.name}
+          </div>
+          <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: statusColor[c.status] }}>{c.draw}</span>
+          <Badge label={c.status} variant={c.status === 'rogue' ? 'crit' : c.status === 'active' ? 'warn' : 'ok'} />
+          <span style={{ fontSize: 10, color: 'var(--tm)' }}>{c.source}</span>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
 // ─── ParasiteScreen ──────────────────────────────────────────────────────────
 
 export function ParasiteScreen(): React.ReactElement {
@@ -369,6 +456,8 @@ export function ParasiteScreen(): React.ReactElement {
   const ipfbFuses    = useAppStore(s => s.ipfbFuses);
   const uhfrcFuses   = useAppStore(s => s.uhfrcFuses);
   const history      = useAppStore(s => s.history['ATRV'] ?? []);
+  const platform     = useAppStore(s => s.platform);
+  const isGMT800     = platform.id === 'gmt800';
 
   const rogueCount   = modules.filter(m => m.status === 'rogue').length;
   const suspectCount = modules.filter(m => m.status === 'suspect').length;
@@ -457,6 +546,10 @@ export function ParasiteScreen(): React.ReactElement {
         />
       </Grid>
 
+      {/* ── Power consumers ─────────────────────────────────────────── */}
+      <SectionHeader>Active power consumers</SectionHeader>
+      <PowerConsumers />
+
       {/* ── Voltage timeline ──────────────────────────────────────────── */}
       <SectionHeader>Battery voltage timeline</SectionHeader>
       <Card padding={12}>
@@ -475,9 +568,13 @@ export function ParasiteScreen(): React.ReactElement {
       <SectionHeader>Under-hood fuse relay center (UHFRC)</SectionHeader>
       <FusePanel title="UHFRC" fuses={uhfrcFuses} />
 
-      {/* ── Known culprits ────────────────────────────────────────────── */}
-      <SectionHeader>Known culprits — GMT800 platform</SectionHeader>
-      <KnownCulprits />
+      {/* ── Known culprits — platform-specific ───────────────────────── */}
+      {isGMT800 && (
+        <>
+          <SectionHeader>Known culprits — {platform.name}</SectionHeader>
+          <KnownCulprits />
+        </>
+      )}
 
     </ScrollPane>
   );

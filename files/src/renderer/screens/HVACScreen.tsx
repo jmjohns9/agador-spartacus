@@ -33,6 +33,8 @@ function fmt(pid: string, v: number | string): string {
 
 export function HVACScreen(): React.ReactElement {
   const dtcs     = useAppStore(s => s.dtcs);
+  const platform = useAppStore(s => s.platform);
+  const isGMT800 = platform.id === 'gmt800';
   const rpm      = usePIDNum('010C');
 
   const ambientF = usePIDNum('0146', 0);
@@ -129,22 +131,22 @@ export function HVACScreen(): React.ReactElement {
       </Grid>
 
       {/* ── HVAC system status ─────────────────────────────────────────── */}
-      <SectionHeader>HVAC system (GMT800 — via BCM Class II)</SectionHeader>
+      <SectionHeader>HVAC system{isGMT800 ? ' (GMT800 — via BCM Class II)' : ''}</SectionHeader>
       <Grid cols={3}>
         <Card>
-          <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10 }}>
+          <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10 }}>
             Heater core
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 12, color: 'var(--tm)' }}>Coolant supply</span>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: coolantF > 160 ? 'var(--sg)' : 'var(--sa)' }}>
+              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 13, color: coolantF > 160 ? 'var(--sg)' : 'var(--sa)' }}>
                 {coolantF > 0 ? `${coolantF} °F` : '—'}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 12, color: 'var(--tm)' }}>Min for heat</span>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--tm)' }}>140 °F</span>
+              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--tm)' }}>140 °F</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 12, color: 'var(--tm)' }}>Status</span>
@@ -157,7 +159,7 @@ export function HVACScreen(): React.ReactElement {
         </Card>
 
         <Card>
-          <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10 }}>
+          <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10 }}>
             A/C compressor
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -176,7 +178,7 @@ export function HVACScreen(): React.ReactElement {
         </Card>
 
         <Card>
-          <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10 }}>
+          <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10 }}>
             Blower motor
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -188,45 +190,49 @@ export function HVACScreen(): React.ReactElement {
         </Card>
       </Grid>
 
-      {/* ── Blend door actuator note ────────────────────────────────────── */}
-      <SectionHeader>Blend door actuator — GMT800 known issue</SectionHeader>
-      <Card>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, padding: '4px 2px' }}>
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--tw)', fontWeight: 500, marginBottom: 6 }}>
-              Known parasitic draw contributor
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--tm)', lineHeight: 1.6, marginBottom: 8 }}>
-              The HVAC blend door actuator on the GMT800 platform is a known parasitic draw source.
-              A faulty actuator motor continuously hunts for its calibrated position, drawing
-              ~0.1 A even with the engine off if the HVAC module is kept awake by the BCM.
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--sa)', lineHeight: 1.5 }}>
-              If voltage is dropping with no IPC/BCM fault codes, inspect the HVAC blend door actuator
-              (located under the dash on the passenger side) for continuous clicking/movement after ignition-off.
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>
-              Diagnostic steps
-            </div>
-            {[
-              'Wait 10 min after engine-off',
-              'Listen for clicking near HVAC box (under dash, passenger side)',
-              'If clicking persists: pull HVAC fuse in IPFB',
-              'Observe voltage stabilization on battery timeline',
-              'Replace blend door actuator if confirmed',
-            ].map((step, i) => (
-              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 5 }}>
-                <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--bg4)', border: '1px solid var(--br)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--tm)', flexShrink: 0 }}>
-                  {i + 1}
+      {/* ── Blend door actuator — GMT800 only ──────────────────────────── */}
+      {isGMT800 && (
+        <>
+          <SectionHeader>Blend door actuator — known issue</SectionHeader>
+          <Card>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, padding: '4px 2px' }}>
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--tw)', fontWeight: 500, marginBottom: 6 }}>
+                  Known parasitic draw contributor
                 </div>
-                <span style={{ fontSize: 11, color: 'var(--tm)', lineHeight: 1.5 }}>{step}</span>
+                <div style={{ fontSize: 12, color: 'var(--tm)', lineHeight: 1.6, marginBottom: 8 }}>
+                  The HVAC blend door actuator on the GMT800 platform is a known parasitic draw source.
+                  A faulty actuator motor continuously hunts for its calibrated position, drawing
+                  ~0.1 A even with the engine off if the HVAC module is kept awake by the BCM.
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--sa)', lineHeight: 1.5 }}>
+                  If voltage is dropping with no IPC/BCM fault codes, inspect the HVAC blend door actuator
+                  (located under the dash on the passenger side) for continuous clicking/movement after ignition-off.
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-      </Card>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>
+                  Diagnostic steps
+                </div>
+                {[
+                  'Wait 10 min after engine-off',
+                  'Listen for clicking near HVAC box (under dash, passenger side)',
+                  'If clicking persists: pull HVAC fuse in IPFB',
+                  'Observe voltage stabilization on battery timeline',
+                  'Replace blend door actuator if confirmed',
+                ].map((step, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 5 }}>
+                    <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--bg4)', border: '2px solid var(--br)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--tm)', flexShrink: 0 }}>
+                      {i + 1}
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--tm)', lineHeight: 1.5 }}>{step}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+        </>
+      )}
 
       {/* ── HVAC fault codes ────────────────────────────────────────────── */}
       <SectionHeader>HVAC-related fault codes</SectionHeader>
@@ -237,7 +243,7 @@ export function HVACScreen(): React.ReactElement {
               display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px',
               borderBottom: i < hvacDTCs.length - 1 ? '1px solid var(--bg3)' : 'none',
             }}>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--sr)', width: 50 }}>{dtc.code}</span>
+              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--sr)', width: 50 }}>{dtc.code}</span>
               <span style={{ flex: 1, fontSize: 12, color: 'var(--tw)' }}>{dtc.description}</span>
               <Badge label={dtc.status} variant={dtc.status === 'active' ? 'crit' : 'warn'} />
             </div>
@@ -253,7 +259,7 @@ export function HVACScreen(): React.ReactElement {
       )}
 
       {/* ── Common HVAC codes reference ─────────────────────────────────── */}
-      <SectionHeader>Common GMT800 HVAC codes</SectionHeader>
+      <SectionHeader>Common HVAC codes{isGMT800 ? ' — GMT800 reference' : ''}</SectionHeader>
       <Card padding={0}>
         {[
           { code: 'B0260', desc: 'A/C refrigerant pressure sensor circuit fault', circuit: 'A/C' },
@@ -266,7 +272,7 @@ export function HVACScreen(): React.ReactElement {
             display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
             borderBottom: i < arr.length - 1 ? '1px solid var(--bg3)' : 'none',
           }}>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--tm)', width: 44 }}>{code}</span>
+            <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--tm)', width: 44 }}>{code}</span>
             <span style={{ flex: 1, fontSize: 12, color: 'var(--tw)' }}>{desc}</span>
             <Badge label={circuit} variant="info" />
           </div>

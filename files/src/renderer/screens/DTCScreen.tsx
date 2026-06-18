@@ -247,6 +247,8 @@ function DTCRow({ dtc, expanded, onToggle, hasFreezeFrame, onViewFreezeFrame }: 
 export function DTCScreen(): React.ReactElement {
   const dtcs              = useAppStore(s => s.dtcs);
   const connectionStatus  = useAppStore(s => s.connectionStatus);
+  const platform          = useAppStore(s => s.platform);
+  const isGMT800          = platform.id === 'gmt800';
   const setActiveScreen      = useAppStore(s => s.setActiveScreen);
   const setFreezeFrameFilter = useAppStore(s => s.setFreezeFrameFilter);
 
@@ -438,43 +440,47 @@ export function DTCScreen(): React.ReactElement {
           </Card>
         )}
 
-        {/* ── GMT800 known codes reference ─────────────────────────────── */}
-        <SectionHeader>GMT800 known fault code reference</SectionHeader>
-        <Card padding={0}>
-          {[
-            { code: 'B1982', mod: 'IPC',  desc: 'Device Power 2 Circuit Low — IPC power loss / parasitic draw', type: 'Body', severity: 'warn' as const },
-            { code: 'U0100', mod: 'BCM',  desc: 'Lost communication with ECM/PCM — Class II bus fault', type: 'Network', severity: 'crit' as const },
-            { code: 'U1000', mod: 'BCM',  desc: 'Class II communication fault — general bus disruption', type: 'Network', severity: 'warn' as const },
-            { code: 'P0300', mod: 'PCM',  desc: 'Random/multiple cylinder misfire — distributor or plugs', type: 'Powertrain', severity: 'crit' as const },
-            { code: 'P0446', mod: 'PCM',  desc: 'EVAP vent control circuit — canister purge fault', type: 'Powertrain', severity: 'warn' as const },
-            { code: 'P0171', mod: 'PCM',  desc: 'System too lean, Bank 1 — vacuum leak or dirty MAF', type: 'Powertrain', severity: 'warn' as const },
-            { code: 'P0174', mod: 'PCM',  desc: 'System too lean, Bank 2 — vacuum leak or dirty MAF', type: 'Powertrain', severity: 'warn' as const },
-            { code: 'C0265', mod: 'EBCM', desc: 'EBCM relay circuit — ABS / electronic brake fault', type: 'Chassis', severity: 'warn' as const },
-            { code: 'B0429', mod: 'BCM',  desc: 'Seat heater fault — heated seat circuit open', type: 'Body', severity: 'muted' as const },
-          ].map(({ code, mod, desc, type, severity }, i, arr) => (
-            <div
-              key={code}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-                borderBottom: i < arr.length - 1 ? '1px solid var(--bg3)' : 'none',
-                background: dtcs.find(d => d.code === code) ? 'rgba(255,87,34,0.04)' : 'transparent',
-                transition: 'background 0.1s',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = dtcs.find(d => d.code === code) ? 'rgba(255,87,34,0.06)' : 'var(--bg4)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = dtcs.find(d => d.code === code) ? 'rgba(255,87,34,0.04)' : 'transparent'; }}
-            >
-              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--tm)', width: 44, flexShrink: 0 }}>{code}</span>
-              <span style={{
-                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-                letterSpacing: 1.2, textTransform: 'uppercase',
-                color: 'var(--tm)', width: 32, flexShrink: 0,
-              }}>{mod}</span>
-              <span style={{ flex: 1, fontSize: 12, color: 'var(--tw)' }}>{desc}</span>
-              {dtcs.find(d => d.code === code) && <Badge label="Stored" variant="warn" />}
-              <Badge label={type} variant={severity} />
-            </div>
-          ))}
-        </Card>
+        {/* ── Platform-specific code reference ─────────────────────────── */}
+        {isGMT800 && (
+          <>
+            <SectionHeader>GMT800 known fault code reference</SectionHeader>
+            <Card padding={0}>
+              {[
+                { code: 'B1982', mod: 'IPC',  desc: 'Device Power 2 Circuit Low — IPC power loss / parasitic draw', type: 'Body', severity: 'warn' as const },
+                { code: 'U0100', mod: 'BCM',  desc: 'Lost communication with ECM/PCM — Class II bus fault', type: 'Network', severity: 'crit' as const },
+                { code: 'U1000', mod: 'BCM',  desc: 'Class II communication fault — general bus disruption', type: 'Network', severity: 'warn' as const },
+                { code: 'P0300', mod: 'PCM',  desc: 'Random/multiple cylinder misfire — distributor or plugs', type: 'Powertrain', severity: 'crit' as const },
+                { code: 'P0446', mod: 'PCM',  desc: 'EVAP vent control circuit — canister purge fault', type: 'Powertrain', severity: 'warn' as const },
+                { code: 'P0171', mod: 'PCM',  desc: 'System too lean, Bank 1 — vacuum leak or dirty MAF', type: 'Powertrain', severity: 'warn' as const },
+                { code: 'P0174', mod: 'PCM',  desc: 'System too lean, Bank 2 — vacuum leak or dirty MAF', type: 'Powertrain', severity: 'warn' as const },
+                { code: 'C0265', mod: 'EBCM', desc: 'EBCM relay circuit — ABS / electronic brake fault', type: 'Chassis', severity: 'warn' as const },
+                { code: 'B0429', mod: 'BCM',  desc: 'Seat heater fault — heated seat circuit open', type: 'Body', severity: 'muted' as const },
+              ].map(({ code, mod, desc, type, severity }, i, arr) => (
+                <div
+                  key={code}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                    borderBottom: i < arr.length - 1 ? '1px solid var(--bg3)' : 'none',
+                    background: dtcs.find(d => d.code === code) ? 'rgba(255,87,34,0.04)' : 'transparent',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = dtcs.find(d => d.code === code) ? 'rgba(255,87,34,0.06)' : 'var(--bg4)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = dtcs.find(d => d.code === code) ? 'rgba(255,87,34,0.04)' : 'transparent'; }}
+                >
+                  <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--tm)', width: 44, flexShrink: 0 }}>{code}</span>
+                  <span style={{
+                    fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
+                    letterSpacing: 1.2, textTransform: 'uppercase',
+                    color: 'var(--tm)', width: 32, flexShrink: 0,
+                  }}>{mod}</span>
+                  <span style={{ flex: 1, fontSize: 12, color: 'var(--tw)' }}>{desc}</span>
+                  {dtcs.find(d => d.code === code) && <Badge label="Stored" variant="warn" />}
+                  <Badge label={type} variant={severity} />
+                </div>
+              ))}
+            </Card>
+          </>
+        )}
 
       </ScrollPane>
     </div>

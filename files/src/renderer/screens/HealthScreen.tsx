@@ -65,6 +65,8 @@ export function HealthScreen(): React.ReactElement {
   const adapterInfo  = useAppStore(s => s.adapterInfo);
   const protocol     = useAppStore(s => s.protocol);
   const vehicle      = useAppStore(s => s.vehicle);
+  const platform     = useAppStore(s => s.platform);
+  const isGMT800     = platform.id === 'gmt800';
   const checklist    = useAppStore(s => s.checklist);
   const log          = useAppStore(s => s.log);
   const atrvHistory  = useAppStore(s => s.history['ATRV'] ?? []);
@@ -389,7 +391,7 @@ export function HealthScreen(): React.ReactElement {
         <DenseMetricTile
           label="Negotiated protocol"
           value={protocol || '—'}
-          subtext="Expected: SAE J1850 VPW (GM Class II)"
+          subtext={isGMT800 ? 'Expected: SAE J1850 VPW (GM Class II)' : undefined}
           valueColor={protocol ? 'var(--tw)' : 'var(--tm)'}
         />
         <DenseMetricTile
