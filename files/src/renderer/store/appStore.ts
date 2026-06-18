@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import {
   ConnectionStatus, PIDReading, DTCCode, ModuleState,
   LogEntry, SessionMarker, FuseCircuit, ParasiticChecklistItem,
+  CANFrame, UDSRequest, UDSResponse, CANSignal, LINFrame,
+  DoIPEntity, EcuBusScript, EcuBusSubTab,
 } from '../../shared/types';
 import { resolvePlatform, PlatformProfile } from '../../core/platforms';
 
@@ -38,6 +40,33 @@ export interface AppState {
   log: LogEntry[];
   markers: SessionMarker[];
 
+  // EcuBus-Pro state
+  ecubus: {
+    activeSubTab: EcuBusSubTab;
+    canFrames: CANFrame[];
+    canPaused: boolean;
+    canFilter: string;
+    udsRequests: UDSRequest[];
+    udsResponses: UDSResponse[];
+    udsTxId: string;
+    udsRxId: string;
+    signals: CANSignal[];
+    linFrames: LINFrame[];
+    doipEntities: DoIPEntity[];
+    scripts: EcuBusScript[];
+    busLoad: number;
+    errorFrameCount: number;
+    messageRate: number;
+  };
+  setEcuBusSubTab: (tab: EcuBusSubTab) => void;
+  addCANFrame: (frame: CANFrame) => void;
+  toggleCANPause: () => void;
+  setCANFilter: (filter: string) => void;
+  addUDSExchange: (req: UDSRequest, res: UDSResponse) => void;
+  clearCANFrames: () => void;
+  addEcuBusScript: (script: EcuBusScript) => void;
+  updateEcuBusScript: (id: string, updates: Partial<EcuBusScript>) => void;
+
   // UI state
   activeScreen: ScreenId;
   isDarkMode: boolean;
@@ -56,6 +85,15 @@ export interface AppState {
   // Platform reference data resolved from the vehicle (fuse maps, module maps,
   // parasitic checklist). Falls back to a generic OBD-II profile.
   platform: PlatformProfile;
+
+  // Bluetooth signal
+  btRSSI: number | null;
+  btDistance: number | null;
+  setBtRSSI: (rssi: number | null) => void;
+
+  // Freeze frame filter (set by DTC screen to pre-filter freeze frame viewer)
+  freezeFrameFilter: string | null;
+  setFreezeFrameFilter: (code: string | null) => void;
 
   // Actions
   setConnectionStatus: (status: ConnectionStatus, protocol?: string, adapterInfo?: string) => void;
@@ -86,7 +124,11 @@ export type ScreenId =
   | 'modules'
   | 'parasite'
   | 'compare'
-  | 'logs';
+  | 'logs'
+  | 'ecubus'
+  | 'logger'
+  | 'freezeframes'
+  | 'settings';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'error';
@@ -150,9 +192,36 @@ export const useAppStore = create<AppState>((set, get) => ({
   checklist: initialPlatform.parasiticChecklist.map(t => ({ ...t, completed: false, notes: '' })),
   log: [],
   markers: [],
+  ecubus: {
+    activeSubTab: 'can',
+    canFrames: [],
+    canPaused: false,
+    canFilter: '',
+    udsRequests: [],
+    udsResponses: [],
+    udsTxId: '0x7E0',
+    udsRxId: '0x7E8',
+    signals: [],
+    linFrames: [],
+    doipEntities: [],
+    scripts: [{
+      id: 'default',
+      name: 'example.ts',
+      code: `// EcuBus-Pro TypeScript scripting\n// CAPL-like syntax for CAN/UDS automation\n\nimport { CAN, UDS, DiagRequest } from 'ecubus';\n\nasync function main() {\n  // Read DID F190 (VIN)\n  const vin = await UDS.readDataByIdentifier(0xF190);\n  console.log('VIN:', vin.toString());\n\n  // Send a CAN frame\n  CAN.send({ id: 0x7E0, data: [0x02, 0x01, 0x00] });\n\n  // Listen for CAN frames\n  CAN.on('message', (frame) => {\n    if (frame.id === 0x7E8) {\n      console.log('ECU response:', frame.dataHex);\n    }\n  });\n}\n\nmain();`,
+      language: 'typescript',
+      status: 'idle',
+      output: [],
+    }],
+    busLoad: 0,
+    errorFrameCount: 0,
+    messageRate: 0,
+  },
   activeScreen: 'connect',
   isDarkMode: true,
   chatMessages: [],
+  btRSSI: null,
+  btDistance: null,
+  freezeFrameFilter: null,
 
   addChatMessage: (m) => set((state) => ({ chatMessages: [...state.chatMessages, m] })),
   replaceLastAssistantMessage: (m) => set((state) => {
@@ -263,7 +332,42 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().addLogEntry({ timestamp: Date.now(), level: 'info', message: `Marker: ${label}` });
   },
 
+  setEcuBusSubTab: (tab) => set((s) => ({ ecubus: { ...s.ecubus, activeSubTab: tab } })),
+  addCANFrame: (frame) => set((s) => ({
+    ecubus: {
+      ...s.ecubus,
+      canFrames: s.ecubus.canPaused ? s.ecubus.canFrames : [...s.ecubus.canFrames.slice(-999), frame],
+    },
+  })),
+  toggleCANPause: () => set((s) => ({ ecubus: { ...s.ecubus, canPaused: !s.ecubus.canPaused } })),
+  setCANFilter: (filter) => set((s) => ({ ecubus: { ...s.ecubus, canFilter: filter } })),
+  addUDSExchange: (req, res) => set((s) => ({
+    ecubus: {
+      ...s.ecubus,
+      udsRequests: [...s.ecubus.udsRequests.slice(-199), req],
+      udsResponses: [...s.ecubus.udsResponses.slice(-199), res],
+    },
+  })),
+  clearCANFrames: () => set((s) => ({ ecubus: { ...s.ecubus, canFrames: [] } })),
+  addEcuBusScript: (script) => set((s) => ({ ecubus: { ...s.ecubus, scripts: [...s.ecubus.scripts, script] } })),
+  updateEcuBusScript: (id, updates) => set((s) => ({
+    ecubus: {
+      ...s.ecubus,
+      scripts: s.ecubus.scripts.map(sc => sc.id === id ? { ...sc, ...updates } : sc),
+    },
+  })),
+
   setActiveScreen: (screen) => set({ activeScreen: screen }),
+
+  setBtRSSI: (rssi) => {
+    if (rssi === null) { set({ btRSSI: null, btDistance: null }); return; }
+    const txPower = -59;
+    const n = 2.5;
+    const distance = Math.pow(10, (txPower - rssi) / (10 * n));
+    set({ btRSSI: rssi, btDistance: Math.round(distance * 10) / 10 });
+  },
+
+  setFreezeFrameFilter: (code) => set({ freezeFrameFilter: code }),
 
   toggleDarkMode: () => set((state) => ({ isDarkMode: !state.isDarkMode })),
 
