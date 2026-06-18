@@ -53,8 +53,8 @@ export const COLORS = {
 } as const;
 
 export const FONTS = {
-  display:  "'Inter', 'Roboto', system-ui, -apple-system, sans-serif",
-  body:     "'Inter', 'Roboto', system-ui, -apple-system, sans-serif",
+  display:  "'Plus Jakarta Sans', system-ui, sans-serif",
+  body:     "'Plus Jakarta Sans', system-ui, sans-serif",
   mono:     "'JetBrains Mono', 'Roboto Mono', monospace",
 } as const;
 

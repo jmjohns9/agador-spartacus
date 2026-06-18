@@ -265,19 +265,24 @@ export function App(): React.ReactElement {
       fontSize: 13, overflow: 'hidden',
     }}>
 
-      {/* ── Industrial accent stripe — solid 2px ─────────────────────── */}
-      <div style={{ height: 2, background: 'var(--pp)', flexShrink: 0 }} />
+      {/* ── Precision accent stripe ───────────────────────────────────── */}
+      <div style={{
+        height: 1, flexShrink: 0,
+        background: 'linear-gradient(90deg, transparent 0%, var(--pp) 20%, rgba(33,136,255,0.4) 80%, transparent 100%)',
+      }} />
 
-      {/* ── Header ──────────────────────────────────────────────────── */}
+      {/* ── Header — glass depth ─────────────────────────────────────── */}
       <header style={{
-        background: 'var(--bg2)', borderBottom: '2px solid var(--br)',
+        background: 'linear-gradient(180deg, var(--bg2) 0%, rgba(22,27,34,0.97) 100%)',
+        borderBottom: '1px solid rgba(255,255,255,0.07)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 1px 0 rgba(0,0,0,0.3)',
         height: 52, display: 'flex', alignItems: 'center',
         padding: '0 14px 0 88px', gap: 0, flexShrink: 0,
         // @ts-ignore — Electron-specific CSS property
         WebkitAppRegion: 'drag',
       }}>
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 14, borderRight: '2px solid var(--br)', height: '100%', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 14, borderRight: '1px solid rgba(255,255,255,0.07)', height: '100%', flexShrink: 0 }}>
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
             <path d="M2 20 A 13 13 0 0 1 22 20" stroke="var(--pp)" strokeWidth="2.5" strokeLinecap="butt"/>
             <path d="M6 20 A 8 8 0 0 1 18 20" stroke="var(--gb)" strokeWidth="2" strokeLinecap="butt"/>
@@ -297,7 +302,7 @@ export function App(): React.ReactElement {
         {/* Status chips */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', flex: 1, overflow: 'hidden' }}>
           {/* Connection status */}
-          <div className="chip" style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--bg3)', border: '2px solid var(--br)', padding: '0 10px', height: 28, flexShrink: 0 }}>
+          <div className="chip" style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)', padding: '0 10px', height: 26, flexShrink: 0 }}>
             <div style={{ width: 6, height: 6, background: connColor }} />
             <span style={{ fontFamily: FONTS.mono, fontSize: 11, color: connColor, whiteSpace: 'nowrap' }}>
               {connLabel}
@@ -306,7 +311,7 @@ export function App(): React.ReactElement {
 
           {/* Protocol */}
           {protocol && (
-            <div className="chip" style={{ background: 'var(--bg3)', border: '2px solid var(--br)', padding: '0 10px', height: 28, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+            <div className="chip" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)', padding: '0 10px', height: 26, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
               <span style={{ fontFamily: FONTS.mono, fontSize: 11, color: 'var(--tm)', whiteSpace: 'nowrap' }}>
                 {protocol}
               </span>
@@ -317,7 +322,7 @@ export function App(): React.ReactElement {
           <div
             className="chip"
             title="Live battery terminal voltage measured directly by the OBD adapter at the diagnostic port"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg3)', border: '2px solid var(--br)', padding: '0 10px', height: 28, flexShrink: 0 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)', padding: '0 10px', height: 26, flexShrink: 0 }}
           >
             <span style={{ fontFamily: FONTS.body, fontSize: 10, color: 'var(--tm)', letterSpacing: 1.2, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
               Batt
@@ -343,7 +348,7 @@ export function App(): React.ReactElement {
         </div>
 
         {/* Right controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 12, borderLeft: '2px solid var(--br)', height: '100%', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 12, borderLeft: '1px solid rgba(255,255,255,0.07)', height: '100%', flexShrink: 0 }}>
           <span style={{ fontFamily: FONTS.mono, fontSize: 12, color: 'var(--tm)', whiteSpace: 'nowrap' }}>
             {sessionStartMs ? sessionTime : '—'}
           </span>
@@ -351,7 +356,7 @@ export function App(): React.ReactElement {
             onClick={toggleDarkMode}
             title="Toggle light / dark mode"
             // @ts-ignore — keep this control clickable inside the draggable header
-            style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'var(--bg3)', border: '2px solid var(--br)', padding: '0 6px', height: 24, cursor: 'pointer', color: 'var(--tm)', WebkitAppRegion: 'no-drag' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)', padding: '0 6px', height: 22, cursor: 'pointer', color: 'var(--tm)', WebkitAppRegion: 'no-drag' }}
           >
             <i className="ti ti-sun" style={{ fontSize: 12 }} />
             <div style={{ width: 22, height: 12, background: 'var(--bg4)', border: '1px solid var(--br)', position: 'relative' }}>
@@ -367,7 +372,10 @@ export function App(): React.ReactElement {
 
         {/* ── Sidebar ─────────────────────────────────────────────── */}
         <nav style={{
-          width: 86, background: 'var(--bg2)', borderRight: '2px solid var(--br)',
+          width: 86,
+          background: 'linear-gradient(180deg, var(--bg2) 0%, rgba(13,17,23,0.98) 100%)',
+          borderRight: '1px solid rgba(255,255,255,0.06)',
+          boxShadow: 'inset -1px 0 0 rgba(0,0,0,0.2)',
           display: 'flex', flexDirection: 'column', alignItems: 'center',
           padding: '6px 0', gap: 1, flexShrink: 0, overflowY: 'auto', overflowX: 'hidden',
         }}>
@@ -402,8 +410,8 @@ export function App(): React.ReactElement {
                     width: 74, height: 52, position: 'relative', padding: 0,
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                     cursor: 'pointer', gap: 3,
-                    border: isActive ? '2px solid var(--pp)' : '2px solid transparent',
-                    background: isActive ? 'var(--bg4)' : 'transparent',
+                    border: 'none',
+                    background: 'transparent',
                   }}
                 >
                   {showAlert && (
@@ -427,13 +435,23 @@ export function App(): React.ReactElement {
         </nav>
 
         {/* ── Main content ─────────────────────────────────────────── */}
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{
+          flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0,
+          backgroundImage: 'radial-gradient(ellipse 70% 40% at 50% 0%, rgba(33,136,255,0.04) 0%, transparent 60%)',
+        }}>
           {/* Tab rail */}
-          <div style={{ background: 'var(--bg3)', borderBottom: '2px solid var(--br)', padding: '0 2px', flexShrink: 0, display: 'flex' }}>
+          <div style={{
+            background: 'rgba(22,27,34,0.7)',
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
+            boxShadow: 'inset 0 -1px 0 rgba(0,0,0,0.15)',
+            padding: '0 2px', flexShrink: 0, display: 'flex', alignItems: 'center',
+          }}>
             <div style={{
-              padding: '6px 13px', fontSize: 10,
-              fontFamily: FONTS.mono, fontWeight: 700, letterSpacing: 1.2,
-              color: 'var(--pp)', borderBottom: '2px solid var(--pp)', textTransform: 'uppercase',
+              padding: '7px 14px', fontSize: 9,
+              fontFamily: FONTS.body, fontWeight: 700, letterSpacing: 2,
+              color: 'var(--pp)',
+              borderBottom: '1px solid var(--pp)',
+              textTransform: 'uppercase',
             }}>
               {SCREEN_TITLES[activeScreen]}
             </div>
@@ -465,7 +483,9 @@ export function App(): React.ReactElement {
 
       {/* ── Status bar ───────────────────────────────────────────────── */}
       <div style={{
-        background: 'var(--bg2)', borderTop: '2px solid var(--br)',
+        background: 'linear-gradient(180deg, rgba(22,27,34,0.95) 0%, var(--bg2) 100%)',
+        borderTop: '1px solid rgba(255,255,255,0.05)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
         height: 24, display: 'flex', alignItems: 'center',
         padding: '0 12px', gap: 14, flexShrink: 0,
       }}>
@@ -486,89 +506,108 @@ export function App(): React.ReactElement {
 
       {/* Global CSS */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html { scroll-behavior: smooth; }
         body { overflow: hidden; }
-        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar { width: 3px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--br); }
-        ::-webkit-scrollbar-thumb:hover { background: var(--bs); }
-        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
-        @keyframes spin  { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+
+        @keyframes blink    { 0%,100%{opacity:1} 50%{opacity:.3} }
+        @keyframes spin     { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
         @keyframes waveAnim { 0%,100%{transform:scaleY(.2)} 50%{transform:scaleY(1)} }
 
+        /* ── Screen enter — fade-up with blur for cinematic depth ── */
         @keyframes screenIn {
-          from { opacity: 0; transform: translateY(4px); }
-          to   { opacity: 1; transform: translateY(0); }
+          from { opacity: 0; transform: translateY(8px); filter: blur(3px); }
+          to   { opacity: 1; transform: translateY(0);   filter: blur(0); }
         }
-        .screen-enter { animation: screenIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) both; }
+        .screen-enter { animation: screenIn 0.38s cubic-bezier(0.32,0.72,0,1) both; }
 
-        /* Nav — border-brighten on hover, no shadows */
+        /* ── Nav — spring physics, left-edge glow on active ── */
         .nav-btn {
-          transition: background 0.12s, border-color 0.12s, transform 0.1s !important;
+          transition: background 0.4s cubic-bezier(0.32,0.72,0,1),
+                      box-shadow 0.4s cubic-bezier(0.32,0.72,0,1),
+                      transform  0.2s cubic-bezier(0.32,0.72,0,1) !important;
         }
         .nav-btn:hover:not([aria-current="page"]) {
-          background: var(--bg3) !important;
-          border-color: var(--bs) !important;
+          background: rgba(255,255,255,0.04) !important;
         }
-        .nav-btn:active { transform: scale(0.96); }
+        .nav-btn:active { transform: scale(0.95); }
         .nav-btn[aria-current="page"] {
-          background: var(--bg4) !important;
+          background: linear-gradient(90deg, rgba(33,136,255,0.10) 0%, rgba(33,136,255,0.02) 100%) !important;
+          box-shadow: inset 2px 0 0 var(--pp) !important;
         }
 
-        /* Button — invert/brighten on hover, NO shadows */
+        /* ── Button — spring physics, scale-on-press ── */
         .btn {
-          transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1) !important;
+          transition: filter      0.35s cubic-bezier(0.32,0.72,0,1),
+                      transform   0.2s  cubic-bezier(0.32,0.72,0,1),
+                      box-shadow  0.35s cubic-bezier(0.32,0.72,0,1) !important;
           position: relative;
         }
         .btn:hover:not(:disabled) {
-          filter: brightness(1.2);
-          border-color: var(--pp) !important;
+          filter: brightness(1.25);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.12) !important;
         }
         .btn:active:not(:disabled) {
-          transform: scale(0.97);
-          filter: brightness(0.9);
+          transform: scale(0.96);
+          filter: brightness(0.88);
+        }
+        /* Button-in-Button icon: diagonal nudge on hover */
+        .btn:hover:not(:disabled) span:first-child {
+          transform: translate(1px, -1px) scale(1.08);
         }
 
-        /* Card — border-brighten hover, no lift/shadow */
+        /* ── Card — smooth border brightening ── */
         .card-lift {
-          transition: border-color 0.15s !important;
+          transition: border-color 0.4s cubic-bezier(0.32,0.72,0,1),
+                      box-shadow   0.4s cubic-bezier(0.32,0.72,0,1) !important;
         }
         .card-lift:hover {
-          border-color: var(--bs) !important;
+          border-color: rgba(255,255,255,0.1) !important;
         }
 
-        /* Data row hover */
+        /* ── Data row hover ── */
         .data-row {
-          transition: background 0.1s !important;
+          transition: background 0.25s cubic-bezier(0.32,0.72,0,1) !important;
         }
-        .data-row:hover { background: var(--bg3) !important; }
+        .data-row:hover { background: rgba(255,255,255,0.03) !important; }
 
-        /* Status chip hover — border brighten */
-        .chip { transition: border-color 0.15s; }
-        .chip:hover { border-color: var(--bs) !important; }
+        /* ── Header chips ── */
+        .chip { transition: border-color 0.3s cubic-bezier(0.32,0.72,0,1); }
+        .chip:hover { border-color: rgba(255,255,255,0.16) !important; }
 
-        /* Toggle thumb */
+        /* ── Toggle thumb — bouncy spring ── */
         .toggle-thumb {
-          transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+          transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
         }
 
-        /* Input focus — border brighten, no glow */
+        /* ── Input / select focus ── */
         input:focus, select:focus {
           outline: none;
           border-color: var(--pp) !important;
+          box-shadow: 0 0 0 3px rgba(33,136,255,0.12) !important;
         }
 
+        /* ── Reduced motion ── */
         @media (prefers-reduced-motion: reduce) {
           *, *::before, *::after { animation: none !important; transition: none !important; }
         }
+
         button { font-family: inherit; font-size: inherit; color: inherit; }
         :focus { outline: none; }
-        :focus-visible { outline: 2px solid var(--pp); outline-offset: 1px; }
-        input, select { color: var(--tw); background: var(--bg3); border: 2px solid var(--br); font-family: inherit; transition: border-color 0.15s; }
+        :focus-visible { outline: 2px solid var(--pp); outline-offset: 2px; }
+        input, select {
+          color: var(--tw); background: var(--bg3);
+          border: 1px solid rgba(255,255,255,0.08);
+          font-family: inherit;
+          transition: border-color 0.3s cubic-bezier(0.32,0.72,0,1), box-shadow 0.3s cubic-bezier(0.32,0.72,0,1);
+        }
 
-        /* Compact sidebar at short window heights */
+        /* ── Compact sidebar at short window heights ── */
         @media (max-height: 700px) {
           .nav-btn { height: 40px !important; width: 68px !important; gap: 2px !important; }
           .nav-btn span { font-size: 8px !important; }
@@ -580,7 +619,7 @@ export function App(): React.ReactElement {
           .nav-btn i { font-size: 14px !important; }
         }
 
-        /* Responsive grid at narrow widths */
+        /* ── Responsive grid ── */
         @media (max-width: 800px) {
           .hero-grid { grid-template-columns: 1fr !important; }
         }

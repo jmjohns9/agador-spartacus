@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { gaugeArc, valueColor } from '../../theme/theme';
+import { gaugeArc, valueColor, FONTS } from '../../theme/theme';
 import { useAppStore } from '../../store/appStore';
 
 // ─── Layout helpers ───────────────────────────────────────────────────────────
@@ -9,7 +9,7 @@ interface GridProps {
   children: React.ReactNode;
   gap?: number;
 }
-export function Grid({ cols = 4, children, gap = 7 }: GridProps): React.ReactElement {
+export function Grid({ cols = 4, children, gap = 6 }: GridProps): React.ReactElement {
   return (
     <div style={{
       display: 'grid',
@@ -40,18 +40,19 @@ export function ScrollPane({ children }: { children: React.ReactNode }): React.R
 export function SectionHeader({ children }: { children: React.ReactNode }): React.ReactElement {
   return (
     <div style={{
-      fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
-      fontSize: 11, letterSpacing: 1.6, color: 'var(--tm)', textTransform: 'uppercase',
-      display: 'flex', alignItems: 'center', gap: 6, margin: '2px 0',
+      fontFamily: FONTS.body, fontWeight: 700,
+      fontSize: 9, letterSpacing: 2.2, color: 'var(--tm)', textTransform: 'uppercase',
+      display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0',
     }}>
-      <span style={{ color: 'var(--pp)' }}>▪</span>
+      <div style={{ width: 12, height: 1, background: 'var(--pp)', flexShrink: 0 }} />
       {children}
-      <div style={{ flex: 1, height: 1, background: 'var(--br)' }} />
+      <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, rgba(48,54,61,0.8) 0%, transparent 100%)' }} />
     </div>
   );
 }
 
-// ─── Card ─────────────────────────────────────────────────────────────────────
+// ─── Card — Double-Bezel / Doppelrand architecture ───────────────────────────
+// Outer shell (machined frame) wraps inner core (polished surface) for haptic depth.
 
 interface CardProps {
   children: React.ReactNode;
@@ -62,14 +63,22 @@ interface CardProps {
 export function Card({ children, padding = 10, accentColor, style }: CardProps): React.ReactElement {
   return (
     <div style={{
-      background: 'var(--bg2)',
-      border: `1px solid ${accentColor ?? 'var(--br)'}`,
-      borderRadius: 3,
-      padding,
-      overflow: 'hidden',
+      background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+      border: '1px solid rgba(255,255,255,0.07)',
+      padding: 1,
       ...style,
     }}>
-      {children}
+      <div className="card-lift" style={{
+        background: 'var(--bg2)',
+        border: `1px solid ${accentColor ? `${accentColor}40` : 'rgba(255,255,255,0.04)'}`,
+        boxShadow: accentColor
+          ? `inset 0 1px 0 rgba(255,255,255,0.07), inset 0 -1px 0 rgba(0,0,0,0.2), inset 2px 0 0 ${accentColor}`
+          : 'inset 0 1px 0 rgba(255,255,255,0.07), inset 0 -1px 0 rgba(0,0,0,0.2)',
+        padding,
+        overflow: 'hidden',
+      }}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -86,10 +95,8 @@ interface MetricTileProps {
   valueColor?: string;
   accentColor?: string;
   tooltip?: React.ReactNode;
-  /** Timestamp of the underlying reading. When older than staleAfterMs, the value fades. */
   staleAt?: number;
   staleAfterMs?: number;
-  /** 'hero' = promoted display (bigger value, spans 2 cols by default). */
   prominence?: 'normal' | 'hero';
 }
 export function MetricTile({
@@ -104,31 +111,33 @@ export function MetricTile({
   const stale = useStaleness(staleAt, staleAfterMs);
   const isHero = prominence === 'hero';
   return (
-    <div style={{
+    <div className="card-lift" style={{
       background: 'var(--bg2)',
-      border: `1px solid ${accentColor ?? (isHero ? 'rgba(255,128,0,0.35)' : 'var(--br)')}`,
-      borderLeft: isHero ? '3px solid var(--pp)' : undefined,
-      borderRadius: 3, padding: isHero ? '14px 18px' : '11px 13px',
+      border: `1px solid ${accentColor ? `${accentColor}30` : 'rgba(255,255,255,0.05)'}`,
+      borderLeft: isHero ? `2px solid var(--pp)` : undefined,
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.15)',
+      padding: isHero ? '12px 16px' : '10px 12px',
       display: 'flex', flexDirection: 'column',
       height: '100%',
       gridColumn: isHero ? 'span 2' : undefined,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isHero ? 6 : 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isHero ? 5 : 3 }}>
         <span style={{
-          fontSize: isHero ? 12 : 11,
-          color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif",
-          letterSpacing: isHero ? 1.2 : 0.6, textTransform: 'uppercase',
+          fontSize: isHero ? 11 : 10,
+          color: 'var(--tm)', fontFamily: FONTS.body,
+          letterSpacing: isHero ? 1.4 : 1, textTransform: 'uppercase',
           display: 'inline-flex', alignItems: 'center', gap: 6,
+          fontWeight: 700,
         }}>
           {label}
           <FreshnessDot staleAt={staleAt} stale={stale} />
         </span>
         {tooltip && <Tooltip content={tooltip} />}
       </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: isHero ? 6 : 3 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: isHero ? 5 : 3 }}>
         <span style={{
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: isHero ? 38 : 18, fontWeight: 500,
+          fontFamily: FONTS.mono,
+          fontSize: isHero ? 36 : 18, fontWeight: 600,
           color: vc, lineHeight: 1,
           fontVariantNumeric: 'tabular-nums',
           opacity: stale ? 0.4 : 1,
@@ -136,12 +145,12 @@ export function MetricTile({
         }}>
           {value}
         </span>
-        {unit && <span style={{ fontSize: isHero ? 14 : 12, color: 'var(--tm)' }}>{unit}</span>}
+        {unit && <span style={{ fontSize: isHero ? 13 : 11, color: 'var(--tm)', fontFamily: FONTS.mono }}>{unit}</span>}
       </div>
-      {subtext && <div style={{ fontSize: isHero ? 12 : 11, color: 'var(--tm)', marginTop: 3 }}>{subtext}</div>}
+      {subtext && <div style={{ fontSize: isHero ? 11 : 10, color: 'var(--tm)', marginTop: 3, fontFamily: FONTS.mono }}>{subtext}</div>}
       {barPercent !== undefined && (
-        <div style={{ height: isHero ? 4 : 3, background: 'var(--bg4)', borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${Math.min(100, Math.max(0, barPercent))}%`, background: barColor, borderRadius: 2 }} />
+        <div style={{ height: isHero ? 4 : 3, background: 'var(--bg4)', marginTop: 6, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${Math.min(100, Math.max(0, barPercent))}%`, background: barColor }} />
         </div>
       )}
     </div>
@@ -150,7 +159,6 @@ export function MetricTile({
 
 // ─── Freshness — shared staleness primitive for live readings ────────────────
 
-/** Returns true when `staleAt` is older than `staleAfterMs`. Ticks every 500 ms while a reading is being watched. */
 function useStaleness(staleAt: number | undefined, staleAfterMs: number): boolean {
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => {
@@ -161,7 +169,6 @@ function useStaleness(staleAt: number | undefined, staleAfterMs: number): boolea
   return staleAt !== undefined && now - staleAt > staleAfterMs;
 }
 
-/** Tiny live/stale indicator dot. Renders nothing when no timestamp is being tracked. */
 function FreshnessDot({ staleAt, stale }: { staleAt?: number; stale: boolean }): React.ReactElement | null {
   if (staleAt === undefined) return null;
   return (
@@ -169,9 +176,8 @@ function FreshnessDot({ staleAt, stale }: { staleAt?: number; stale: boolean }):
       title={stale ? 'Reading is stale — no update in the last few seconds' : 'Live'}
       aria-label={stale ? 'stale reading' : 'live reading'}
       style={{
-        width: 6, height: 6, borderRadius: '50%',
+        width: 6, height: 6,
         background: stale ? 'var(--tm)' : 'var(--sg)',
-        boxShadow: stale ? 'none' : '0 0 0 2px rgba(0,201,110,0.12)',
         flexShrink: 0,
       }}
     />
@@ -186,9 +192,7 @@ interface ArcGaugeProps {
   max: number;
   label: string;
   unit: string;
-  /** Hard pixel size. Overrides auto-fill. */
   size?: number;
-  /** Cap when auto-filling the cell (default 180). */
   maxSize?: number;
   color?: string;
   warnLow?: number;
@@ -196,11 +200,9 @@ interface ArcGaugeProps {
   critLow?: number;
   critHigh?: number;
   isDark?: boolean;
-  /** Timestamp of the underlying reading. When older than staleAfterMs, the value fades. */
   staleAt?: number;
   staleAfterMs?: number;
 }
-// Internal SVG geometry is fixed; the outer wrapper scales it with width:100%.
 const ARC_VIEWBOX = 120;
 
 export function ArcGauge({
@@ -213,7 +215,6 @@ export function ArcGauge({
   const vc = color ?? valueColor(value, warnLow, warnHigh, critLow, critHigh, isDark);
   const stale = useStaleness(staleAt, staleAfterMs);
 
-  // If size is explicit, lock the SVG width; otherwise fill the cell, capped at maxSize.
   const svgStyle: React.CSSProperties = size != null
     ? { width: size, height: size }
     : { width: '100%', maxWidth: maxSize, height: 'auto', aspectRatio: '1 / 1' };
@@ -221,9 +222,12 @@ export function ArcGauge({
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between',
-      background: 'var(--bg2)', border: '1px solid var(--br)', borderRadius: 3, padding: 12, height: '100%',
+      background: 'var(--bg2)',
+      border: '1px solid rgba(255,255,255,0.05)',
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.07), inset 0 -1px 0 rgba(0,0,0,0.15)',
+      padding: 10, height: '100%',
     }}>
-      <div style={{ fontSize: 11, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6, textAlign: 'center', display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
+      <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: FONTS.body, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 4, textAlign: 'center', display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
         {label}
         <FreshnessDot staleAt={staleAt} stale={stale} />
       </div>
@@ -237,21 +241,24 @@ export function ArcGauge({
           fill="none" stroke={vc} strokeWidth="6"
           strokeDasharray={dashArray}
           strokeDashoffset={dashOffset}
-          strokeLinecap="round"
+          strokeLinecap="butt"
           transform={`rotate(-225 ${ARC_VIEWBOX / 2} ${ARC_VIEWBOX / 2})`}
         />
+        {/* Min/max markers */}
+        <text x="18" y={ARC_VIEWBOX - 6} textAnchor="middle" fontFamily={FONTS.mono} fontSize={8} fill="var(--tm)">{min}</text>
+        <text x={ARC_VIEWBOX - 18} y={ARC_VIEWBOX - 6} textAnchor="middle" fontFamily={FONTS.mono} fontSize={8} fill="var(--tm)">{max}</text>
         <text
           x={ARC_VIEWBOX / 2} y={ARC_VIEWBOX / 2 + 5}
           textAnchor="middle"
-          fontFamily="JetBrains Mono, monospace"
+          fontFamily={FONTS.mono}
           fontSize={16}
-          fontWeight={500}
+          fontWeight={600}
           fill={vc}
         >
           {typeof value === 'number' ? value.toLocaleString() : value}
         </text>
       </svg>
-      <div style={{ fontSize: 12, color: 'var(--tm)', marginTop: 6 }}>{unit}</div>
+      <div style={{ fontSize: 11, color: 'var(--tm)', marginTop: 4, fontFamily: FONTS.mono }}>{unit}</div>
     </div>
   );
 }
@@ -263,21 +270,41 @@ interface TooltipProps {
 }
 export function Tooltip({ content }: TooltipProps): React.ReactElement {
   const [visible, setVisible] = useState(false);
+  const iconRef = React.useRef<HTMLElement>(null);
+  const [pos, setPos] = useState<{ top?: number; bottom?: string; left: number }>({ left: 0, bottom: 'calc(100% + 8px)' });
+
+  const handleEnter = () => {
+    setVisible(true);
+    if (iconRef.current) {
+      const rect = iconRef.current.getBoundingClientRect();
+      const tipW = 260, tipH = 180;
+      let left = 0;
+      if (rect.left + tipW > window.innerWidth - 8) left = -(rect.left + tipW - window.innerWidth + 16);
+      if (rect.left + left < 8) left = -rect.left + 8;
+      if (rect.top - tipH - 8 < 0) {
+        setPos({ top: rect.height + 8, left });
+      } else {
+        setPos({ bottom: 'calc(100% + 8px)', left });
+      }
+    }
+  };
 
   return (
     <div style={{ position: 'relative', display: 'inline-flex' }}>
       <i
+        ref={iconRef}
         className="ti ti-info-circle"
         style={{ fontSize: 12, color: 'var(--tm)', cursor: 'help' }}
-        onMouseEnter={() => setVisible(true)}
+        onMouseEnter={handleEnter}
         onMouseLeave={() => setVisible(false)}
       />
       {visible && (
         <div style={{
-          position: 'absolute', bottom: 'calc(100% + 8px)', left: 0,
-          background: 'var(--bg4)', border: '1px solid var(--br)',
-          borderRadius: 4, padding: '10px 12px', width: 260, zIndex: 200,
-          fontSize: 11, lineHeight: 1.6, color: 'var(--tw)',
+          position: 'absolute', ...pos,
+          background: 'var(--bg4)', border: '2px solid var(--br)',
+          padding: '8px 10px', width: 260, zIndex: 200,
+          fontSize: 11, lineHeight: 1.5, color: 'var(--tw)',
+          fontFamily: FONTS.body,
           pointerEvents: 'none',
         }}>
           {content}
@@ -298,15 +325,15 @@ interface TipProps {
 export function TipContent({ name, description, formula, range }: TipProps): React.ReactElement {
   return (
     <>
-      <div style={{ fontWeight: 500, fontSize: 12, marginBottom: 5 }}>{name}</div>
+      <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 4, fontFamily: FONTS.body }}>{name}</div>
       <div style={{ color: 'var(--tm)', fontSize: 11 }}>{description}</div>
       {formula && (
-        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--pp)', marginTop: 6, background: 'var(--bg3)', padding: '4px 6px', borderRadius: 2 }}>
+        <div style={{ fontFamily: FONTS.mono, fontSize: 10, color: 'var(--pp)', marginTop: 5, background: 'var(--bg3)', padding: '3px 6px', border: '1px solid var(--br)' }}>
           {formula}
         </div>
       )}
       {range && (
-        <div style={{ fontSize: 10, color: 'var(--gb)', marginTop: 4 }}>
+        <div style={{ fontSize: 10, color: 'var(--gb)', marginTop: 3, fontFamily: FONTS.mono }}>
           {range}
         </div>
       )}
@@ -319,11 +346,11 @@ export function TipContent({ name, description, formula, range }: TipProps): Rea
 type BadgeVariant = 'ok' | 'warn' | 'crit' | 'info' | 'muted';
 
 const BADGE_STYLES: Record<BadgeVariant, React.CSSProperties> = {
-  ok:   { background: 'rgba(0,201,110,0.1)',  color: 'var(--sg)', border: '1px solid rgba(0,201,110,0.3)' },
-  warn: { background: 'rgba(255,179,0,0.1)',  color: 'var(--sa)', border: '1px solid rgba(255,179,0,0.3)' },
-  crit: { background: 'rgba(255,36,64,0.1)',  color: 'var(--sr)', border: '1px solid rgba(255,36,64,0.3)' },
-  info: { background: 'rgba(0,144,208,0.1)',  color: 'var(--gb)', border: '1px solid rgba(0,144,208,0.3)' },
-  muted:{ background: 'rgba(122,132,150,0.1)',color: 'var(--tm)', border: '1px solid rgba(122,132,150,0.3)' },
+  ok:   { background: 'rgba(63,185,80,0.09)',   color: 'var(--sg)', border: '1px solid rgba(63,185,80,0.22)' },
+  warn: { background: 'rgba(210,153,34,0.09)',  color: 'var(--sa)', border: '1px solid rgba(210,153,34,0.22)' },
+  crit: { background: 'rgba(248,81,73,0.09)',   color: 'var(--sr)', border: '1px solid rgba(248,81,73,0.22)' },
+  info: { background: 'rgba(33,136,255,0.09)',  color: 'var(--pp)', border: '1px solid rgba(33,136,255,0.22)' },
+  muted:{ background: 'rgba(139,148,158,0.06)', color: 'var(--tm)', border: '1px solid rgba(139,148,158,0.15)' },
 };
 
 interface BadgeProps { label: string; variant: BadgeVariant; }
@@ -331,8 +358,8 @@ export function Badge({ label, variant }: BadgeProps): React.ReactElement {
   return (
     <span style={{
       ...BADGE_STYLES[variant],
-      fontSize: 10, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
-      letterSpacing: 0.3, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 2,
+      fontSize: 9, fontFamily: FONTS.body, fontWeight: 700,
+      letterSpacing: 0.8, textTransform: 'uppercase', padding: '2px 7px',
       whiteSpace: 'nowrap',
     }}>
       {label}
@@ -342,12 +369,34 @@ export function Badge({ label, variant }: BadgeProps): React.ReactElement {
 
 // ─── AlertBanner ──────────────────────────────────────────────────────────────
 
-export function AlertBanner({ message, variant = 'crit' }: { message: string; variant?: BadgeVariant }): React.ReactElement {
+export function AlertBanner({ message, variant = 'crit', action, onAction }: { message: string; variant?: BadgeVariant; action?: string; onAction?: () => void }): React.ReactElement {
   const s = BADGE_STYLES[variant];
+  const accentColor = variant === 'crit' ? 'var(--sr)' : variant === 'warn' ? 'var(--sa)' : variant === 'ok' ? 'var(--sg)' : 'var(--pp)';
   return (
-    <div style={{ ...s, borderRadius: 3, padding: '7px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 7 }}>
-      <i className="ti ti-alert-triangle" style={{ fontSize: 14 }} />
-      {message}
+    <div style={{
+      ...s,
+      padding: '7px 12px', fontSize: 11,
+      display: 'flex', alignItems: 'center', gap: 8,
+      fontFamily: FONTS.body,
+      boxShadow: `inset 2px 0 0 ${accentColor}`,
+    }}>
+      <i className="ti ti-alert-triangle" style={{ fontSize: 13, flexShrink: 0 }} />
+      <span style={{ flex: 1, lineHeight: 1.5 }}>{message}</span>
+      {action && onAction && (
+        <button
+          className="btn"
+          onClick={onAction}
+          style={{
+            padding: '3px 10px', fontSize: 10, fontWeight: 700,
+            background: 'rgba(33,136,255,0.1)', border: '1px solid rgba(33,136,255,0.3)',
+            color: 'var(--pp)', cursor: 'pointer',
+            whiteSpace: 'nowrap', flexShrink: 0,
+            fontFamily: FONTS.mono, letterSpacing: 0.5, textTransform: 'uppercase',
+          }}
+        >
+          {action}
+        </button>
+      )}
     </div>
   );
 }
@@ -363,27 +412,25 @@ interface DataRowProps {
   onClick?: () => void;
 }
 export function DataRow({ pid, name, value, subtext, badge, onClick }: DataRowProps): React.ReactElement {
-  // Clickable rows render as real <button>s so they're keyboard/screen-reader accessible
   const Tag = (onClick ? 'button' : 'div') as 'button';
   return (
     <Tag
+      className={onClick ? 'data-row' : undefined}
       onClick={onClick}
       style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
         width: '100%', textAlign: 'left', background: 'transparent', border: 'none',
-        padding: '6px 12px', borderBottom: '1px solid var(--bg3)', cursor: onClick ? 'pointer' : 'default',
+        padding: '5px 12px', borderBottom: '1px solid var(--bg3)', cursor: onClick ? 'pointer' : 'default',
       }}
-      onMouseEnter={e => { if (onClick) (e.currentTarget as HTMLElement).style.background = 'var(--bg3)'; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
     >
       <div>
-        {pid && <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--tm)', marginBottom: 2 }}>{pid}</div>}
-        <div style={{ fontSize: 12, color: 'var(--tw)', fontWeight: 500 }}>{name}</div>
-        {subtext && <div style={{ fontSize: 11, color: 'var(--tm)', marginTop: 2, lineHeight: 1.4 }}>{subtext}</div>}
+        {pid && <div style={{ fontFamily: FONTS.mono, fontSize: 10, color: 'var(--tm)', marginBottom: 1 }}>{pid}</div>}
+        <div style={{ fontSize: 12, color: 'var(--tw)', fontWeight: 500, fontFamily: FONTS.body }}>{name}</div>
+        {subtext && <div style={{ fontSize: 10, color: 'var(--tm)', marginTop: 1, lineHeight: 1.4, fontFamily: FONTS.body }}>{subtext}</div>}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 8 }}>
         {badge}
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: 'var(--tw)', whiteSpace: 'nowrap' }}>
+        <span style={{ fontFamily: FONTS.mono, fontSize: 13, color: 'var(--tw)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
           {value}
         </span>
       </div>
@@ -391,56 +438,88 @@ export function DataRow({ pid, name, value, subtext, badge, onClick }: DataRowPr
   );
 }
 
-// ─── Button — the one true button ──────────────────────────────────────────────
-// Use this instead of ad-hoc inline-styled <button>s so sizing, radius, and
-// variants stay consistent app-wide.
+// ─── Button — Button-in-Button icon architecture ──────────────────────────────
 
 type ButtonVariant = 'primary' | 'ghost' | 'danger';
 
 const BUTTON_STYLES: Record<ButtonVariant, React.CSSProperties> = {
-  primary: { background: 'rgba(255,128,0,0.1)',  border: '1px solid var(--pp)', color: 'var(--pp)' },
-  ghost:   { background: 'var(--bg4)',           border: '1px solid var(--br)', color: 'var(--tw)' },
-  danger:  { background: 'rgba(255,36,64,0.07)', border: '1px solid rgba(255,36,64,0.35)', color: 'var(--sr)' },
+  primary: {
+    background: 'rgba(33,136,255,0.1)',
+    border: '1px solid rgba(33,136,255,0.35)',
+    color: 'var(--pp)',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+  },
+  ghost: {
+    background: 'rgba(255,255,255,0.03)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    color: 'var(--tw)',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+  },
+  danger: {
+    background: 'rgba(248,81,73,0.06)',
+    border: '1px solid rgba(248,81,73,0.28)',
+    color: 'var(--sr)',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+  },
+};
+
+const ICON_BG: Record<ButtonVariant, string> = {
+  primary: 'rgba(33,136,255,0.2)',
+  ghost:   'rgba(255,255,255,0.07)',
+  danger:  'rgba(248,81,73,0.15)',
 };
 
 type ButtonSize = 'sm' | 'md';
 
 const BUTTON_SIZES: Record<ButtonSize, React.CSSProperties> = {
-  sm: { padding: '5px 10px', fontSize: 11 },
-  md: { padding: '8px 14px', fontSize: 12 },
+  sm: { padding: '4px 10px', fontSize: 10 },
+  md: { padding: '6px 13px', fontSize: 11 },
 };
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
-  icon?: string;          // tabler icon class, e.g. 'ti-refresh'
+  icon?: string;
   children: React.ReactNode;
 }
 
-export function Button({ variant = 'ghost', size = 'md', icon, children, style, disabled, ...rest }: ButtonProps): React.ReactElement {
+export function Button({ variant = 'ghost', size = 'md', icon, children, style, disabled, className, ...rest }: ButtonProps): React.ReactElement {
+  const iconSize = size === 'sm' ? 10 : 12;
+  const iconWrap = size === 'sm' ? 16 : 20;
   return (
     <button
+      className={`btn ${className ?? ''}`}
       disabled={disabled}
       style={{
         ...BUTTON_STYLES[variant],
         ...BUTTON_SIZES[size],
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-        borderRadius: 3,
-        fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
-        letterSpacing: 0.5, textTransform: 'uppercase',
+        fontFamily: FONTS.body, fontWeight: 700,
+        letterSpacing: 0.6, textTransform: 'uppercase',
         cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.5 : 1,
+        opacity: disabled ? 0.45 : 1,
         ...style,
       }}
       {...rest}
     >
-      {icon && <i className={`ti ${icon}`} style={{ fontSize: size === 'sm' ? 13 : 14 }} />}
+      {icon && (
+        <span style={{
+          width: iconWrap, height: iconWrap,
+          background: ICON_BG[variant],
+          borderRadius: '50%',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+          transition: 'transform 0.35s cubic-bezier(0.32,0.72,0,1)',
+        }}>
+          <i className={`ti ${icon}`} style={{ fontSize: iconSize }} />
+        </span>
+      )}
       {children}
     </button>
   );
 }
 
-// ─── WaveBar — animated bus activity indicator ─────────────────────────────────
+// ─── WaveBar ──────────────────────────────────────────────────────────────────
 
 export function WaveBar({ color = 'var(--pp)', active = true }: { color?: string; active?: boolean }): React.ReactElement {
   if (!active) return <div style={{ height: 14 }} />;
@@ -448,7 +527,7 @@ export function WaveBar({ color = 'var(--pp)', active = true }: { color?: string
     <div style={{ display: 'flex', alignItems: 'center', gap: 1, height: 14 }}>
       {[0, 0.15, 0.3, 0.45].map((delay, i) => (
         <div key={i} style={{
-          width: 2, borderRadius: 1, background: color,
+          width: 2, background: color,
           animation: `waveAnim 1.5s infinite ease-in-out`,
           animationDelay: `${delay}s`,
           height: 8,
@@ -458,7 +537,7 @@ export function WaveBar({ color = 'var(--pp)', active = true }: { color?: string
   );
 }
 
-// ─── Sparkline — mini history chart for hero cards ───────────────────────────
+// ─── Sparkline ──────────────────────────────────────────────────────────────
 
 interface SparklineProps {
   pid: string;
@@ -488,25 +567,17 @@ export function Sparkline({ pid, color, height = 36 }: SparklineProps): React.Re
   }, [history, height]);
 
   if (!points) return null;
-  const gradId = `spark-${pid}`;
 
   return (
-    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height, opacity: 0.35 }}>
+    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height, opacity: 0.3 }}>
       <svg viewBox={`0 0 200 ${height}`} preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
-        <defs>
-          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-            <stop offset="100%" stopColor={color} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <polyline fill={`url(#${gradId})`} stroke="none" points={`0,${height} ${points} 200,${height}`} />
         <polyline fill="none" stroke={color} strokeWidth="1.5" points={points} />
       </svg>
     </div>
   );
 }
 
-// ─── HeroCard — large metric with sparkline overlay ──────────────────────────
+// ─── HeroCard ───────────────────────────────────────────────────────────────
 
 interface HeroCardProps {
   label: string;
@@ -531,17 +602,17 @@ export function HeroCard({
   return (
     <div style={{
       background: 'var(--bg2)',
-      border: '1px solid var(--br)',
-      borderLeft: accentBorder ? `3px solid ${accentBorder}` : undefined,
-      borderRadius: 4,
+      border: '1px solid rgba(255,255,255,0.05)',
+      borderLeft: accentBorder ? `2px solid ${accentBorder}` : undefined,
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.07), inset 0 -1px 0 rgba(0,0,0,0.18)',
       padding: '10px 12px',
       position: 'relative',
       overflow: 'hidden',
     }}>
       <div style={{
-        fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10,
-        letterSpacing: 1.4, textTransform: 'uppercase' as const,
-        color: 'var(--tm)', marginBottom: 4,
+        fontFamily: FONTS.body, fontSize: 10,
+        letterSpacing: 1.6, textTransform: 'uppercase' as const,
+        color: 'var(--tm)', marginBottom: 3, fontWeight: 700,
         display: 'flex', alignItems: 'center', gap: 6,
       }}>
         <FreshnessDot staleAt={staleAt} stale={stale} />
@@ -549,8 +620,8 @@ export function HeroCard({
       </div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
         <span style={{
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: 32, fontWeight: 700, lineHeight: 1.1,
+          fontFamily: FONTS.mono,
+          fontSize: 30, fontWeight: 700, lineHeight: 1.1,
           letterSpacing: -0.5, color: vc,
           fontVariantNumeric: 'tabular-nums',
           opacity: stale ? 0.4 : 1,
@@ -558,15 +629,15 @@ export function HeroCard({
         }}>
           {value}
         </span>
-        {unit && <span style={{ fontSize: 13, color: 'var(--tm)' }}>{unit}</span>}
+        {unit && <span style={{ fontSize: 12, color: 'var(--tm)', fontFamily: FONTS.mono }}>{unit}</span>}
       </div>
-      {subtext && <div style={{ fontSize: 11, color: 'var(--tm)', marginTop: 2 }}>{subtext}</div>}
+      {subtext && <div style={{ fontSize: 10, color: 'var(--tm)', marginTop: 2, fontFamily: FONTS.mono }}>{subtext}</div>}
       <Sparkline pid={pid} color={sparkColor} />
     </div>
   );
 }
 
-// ─── DenseMetricTile — compact Dash0-style metric card ───────────────────────
+// ─── DenseMetricTile ────────────────────────────────────────────────────────
 
 interface DenseMetricTileProps {
   label: string;
@@ -592,23 +663,31 @@ export function DenseMetricTile({
     <div
       style={{
         background: 'var(--bg2)',
-        border: '1px solid var(--br)',
+        border: '1px solid rgba(255,255,255,0.05)',
         borderLeft: accentBorder ? `2px solid ${accentBorder}` : undefined,
-        borderRadius: 4,
-        padding: '8px 10px',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.15)',
+        padding: '7px 10px',
         position: 'relative',
-        transition: 'border-color 0.15s',
+        transition: 'border-color 0.35s cubic-bezier(0.32,0.72,0,1), box-shadow 0.35s cubic-bezier(0.32,0.72,0,1)',
       }}
-      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,128,0,0.3)'; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--br)'; }}
+      onMouseEnter={e => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.borderColor = 'rgba(255,255,255,0.12)';
+        el.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.1), inset 0 -1px 0 rgba(0,0,0,0.15)';
+      }}
+      onMouseLeave={e => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.borderColor = 'rgba(255,255,255,0.05)';
+        el.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.15)';
+      }}
     >
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 3,
+        marginBottom: 2,
       }}>
         <span style={{
-          fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
-          letterSpacing: 1.2, textTransform: 'uppercase' as const,
+          fontFamily: FONTS.body, fontSize: 9, fontWeight: 700,
+          letterSpacing: 1.4, textTransform: 'uppercase' as const,
           color: 'var(--tm)',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
@@ -616,25 +695,24 @@ export function DenseMetricTile({
         </span>
         {tooltip && <Tooltip content={tooltip} />}
       </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
         <span style={{
-          fontFamily: "'JetBrains Mono', monospace",
+          fontFamily: FONTS.mono,
           fontSize: 20, fontWeight: 600, lineHeight: 1.2,
           color: vc,
           fontVariantNumeric: 'tabular-nums',
         }}>
           {value}
         </span>
-        {unit && <span style={{ fontSize: 11, color: 'var(--tm)' }}>{unit}</span>}
+        {unit && <span style={{ fontSize: 10, color: 'var(--tm)', fontFamily: FONTS.mono }}>{unit}</span>}
       </div>
-      {subtext && <div style={{ fontSize: 10, color: subtextColor ?? 'var(--tm)', marginTop: 1 }}>{subtext}</div>}
+      {subtext && <div style={{ fontSize: 10, color: subtextColor ?? 'var(--tm)', marginTop: 1, fontFamily: FONTS.mono }}>{subtext}</div>}
       {barPercent !== undefined && (
-        <div style={{ height: 3, background: 'var(--bg4)', borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
+        <div style={{ height: 3, background: 'var(--bg4)', marginTop: 5, overflow: 'hidden' }}>
           <div style={{
             height: '100%',
             width: `${Math.min(100, Math.max(0, barPercent))}%`,
             background: barColor,
-            borderRadius: 2,
             transition: 'width 0.6s',
           }} />
         </div>
@@ -643,7 +721,7 @@ export function DenseMetricTile({
   );
 }
 
-// ─── CompactArcGauge — small Dash0-style gauge ───────────────────────────────
+// ─── CompactArcGauge ────────────────────────────────────────────────────────
 
 interface CompactArcGaugeProps {
   label: string;
@@ -658,30 +736,36 @@ export function CompactArcGauge({ label, value, max, unit, color }: CompactArcGa
   const arcEnd = fractionToArcPoint(fraction);
   return (
     <div style={{
-      background: 'var(--bg2)', border: '1px solid var(--br)', borderRadius: 4,
+      background: 'var(--bg2)',
+      border: '1px solid rgba(255,255,255,0.05)',
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.07), inset 0 -1px 0 rgba(0,0,0,0.15)',
       padding: 10, display: 'flex', flexDirection: 'column', alignItems: 'center',
     }}>
       <div style={{
-        fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9,
-        letterSpacing: 1.2, textTransform: 'uppercase' as const,
+        fontFamily: FONTS.body, fontSize: 9, fontWeight: 700,
+        letterSpacing: 1.4, textTransform: 'uppercase' as const,
         color: 'var(--tm)', marginBottom: 4,
       }}>
         {label}
       </div>
       <svg width="80" height="52" viewBox="0 0 80 52">
-        <path d="M 10 48 A 35 35 0 1 1 70 48" fill="none" stroke="var(--bg4)" strokeWidth="5" strokeLinecap="round" />
+        <path d="M 10 48 A 35 35 0 1 1 70 48" fill="none" stroke="var(--bg4)" strokeWidth="5" strokeLinecap="butt" />
         {fraction > 0.001 && (
           <path d={`M 10 48 A 35 35 0 ${fraction > 0.5 ? 1 : 0} 1 ${arcEnd}`}
-            fill="none" stroke={color} strokeWidth="5" strokeLinecap="round" />
+            fill="none" stroke={color} strokeWidth="5" strokeLinecap="butt" />
         )}
+        {/* Min/max labels */}
+        <text x="10" y="52" textAnchor="middle" fontFamily={FONTS.mono} fontSize="6" fill="var(--tm)">0</text>
+        <text x="70" y="52" textAnchor="middle" fontFamily={FONTS.mono} fontSize="6" fill="var(--tm)">{max}</text>
       </svg>
       <div style={{
-        fontFamily: "'JetBrains Mono', monospace",
+        fontFamily: FONTS.mono,
         fontSize: 16, fontWeight: 600, color, marginTop: 2,
+        fontVariantNumeric: 'tabular-nums',
       }}>
         {typeof value === 'number' ? value.toLocaleString() : value}
       </div>
-      <div style={{ fontSize: 10, color: 'var(--tm)' }}>{unit}</div>
+      <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: FONTS.mono }}>{unit}</div>
     </div>
   );
 }
@@ -697,7 +781,7 @@ function fractionToArcPoint(fraction: number): string {
   return `${x.toFixed(1)} ${y.toFixed(1)}`;
 }
 
-// ─── StatusBar — Dash0-style connection status header ────────────────────────
+// ─── StatusBar ──────────────────────────────────────────────────────────────
 
 export function StatusBar(): React.ReactElement {
   const connectionStatus = useAppStore(s => s.connectionStatus);
@@ -719,34 +803,34 @@ export function StatusBar(): React.ReactElement {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '0 4px 10px',
-      borderBottom: '1px solid var(--br)',
-      marginBottom: 12,
+      padding: '0 4px 8px',
+      borderBottom: '2px solid var(--br)',
+      marginBottom: 10,
     }}>
       <div style={{
-        fontFamily: "'Barlow Condensed', sans-serif",
-        fontSize: 13, letterSpacing: 1.2,
+        fontFamily: FONTS.mono,
+        fontSize: 11, letterSpacing: 1.6,
         textTransform: 'uppercase' as const,
-        color: 'var(--tm)',
+        color: 'var(--tm)', fontWeight: 700,
       }}>
-        Agador Spartacus — Live telemetry
+        Agador Spartacus — Live Telemetry
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: isConnected ? 'var(--sg)' : 'var(--tm)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontFamily: FONTS.mono, color: isConnected ? 'var(--sg)' : 'var(--tm)' }}>
           <span style={{
-            width: 7, height: 7, borderRadius: '50%',
+            width: 6, height: 6,
             background: isConnected ? 'var(--sg)' : 'var(--tm)',
             animation: isConnected ? 'statusPulse 2s infinite' : undefined,
           }} />
-          {isConnected ? 'Connected' : connectionStatus}
+          {isConnected ? 'CONNECTED' : connectionStatus.toUpperCase()}
         </div>
         {isConnected && (
           <>
-            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--tm)' }}>
-              {rate} readings/s
+            <div style={{ fontFamily: FONTS.mono, fontSize: 11, color: 'var(--tm)' }}>
+              {rate}/s
             </div>
             {protocol && protocol !== 'Unknown' && (
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--tm)' }}>
+              <div style={{ fontFamily: FONTS.mono, fontSize: 11, color: 'var(--tm)' }}>
                 {protocol}
               </div>
             )}
