@@ -1,0 +1,147 @@
+{
+  "review_type": "security",
+  "scope": {
+    "root": "files/src",
+    "globs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs"],
+    "git_sha": "2bcfc3c7377f71a74670f5e8905a7bf03e77f794"
+  },
+  "findings": [
+    {
+      "id": "SEC-001",
+      "category": "secrets_storage",
+      "severity": "high",
+      "file": "files/src/main/claudeAssistant.ts",
+      "line": 45,
+      "summary": "The Claude API key is persisted as plaintext JSON in userData, and the 0o600 mode is not enforced when the file already exists.",
+      "evidence": "saveConfig() does `fs.writeFileSync(CONFIG_FILE(), JSON.stringify(merged), { mode: 0o600 })` where merged.apiKey is the raw `sk-ant-...` secret. Node's `mode` option is only applied when the file is created — on an overwrite of an existing claude-config.json the mode is left untouched, so a file created by an earlier build (or by any process with a looser umask) keeps its original permissions. Electron's `safeStorage` API is available in this process but is never used. loadConfig() at line 32 reads it straight back with fs.readFileSync.",
+      "recommendation": "Encrypt the key with `safeStorage.encryptString()` before writing and decrypt on read; keep only the ciphertext in claude-config.json. If safeStorage is unavailable, `fs.chmodSync(CONFIG_FILE(), 0o600)` immediately after every write so the mode is enforced on overwrite, not just on create.",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["secrets_storage", "files/src/main/claudeAssistant.ts", "saveConfig"]
+    },
+    {
+      "id": "SEC-002",
+      "category": "injection_via_untrusted_peripheral",
+      "severity": "high",
+      "file": "files/src/main/main.ts",
+      "line": 524,
+      "summary": "Adapter-controlled strings reach innerHTML in the PDF report window with no escaping, giving a hostile OBD adapter script execution in that renderer.",
+      "evidence": "The `report:generate` handler takes `payload: unknown` straight off IPC and injects it with `win.webContents.executeJavaScript('window.__REPORT_DATA__ = ' + JSON.stringify(payload) + '; ... render(...)')`. The template at files/assets/report.html:62-64 then builds markup by concatenation — `'<div class=\"val\" ...>' + data.adapterInfo + '</div>'`, same for data.protocol and data.appVersion — and assigns it with `app.innerHTML = ...` (report.html:180). adapterInfo and protocol originate from the adapter itself: elm327Commander.initialize() stores `stiResp.lines[0]` as firmwareVersion (line 128) and `dpResp.lines[0]` as protocol (line 124), and main.ts:212 forwards them to the renderer, which passes them back in the report payload. An adapter (or a spoofed Bluetooth SPP peer) answering `STI` with `<img src=x onerror=fetch(...)>` executes script in the report window. The payload is never shape-checked against the ReportPayload type declared in preload.ts:85.",
+      "recommendation": "Escape all interpolated values in report.html with a text-node/entity-escaping helper instead of raw innerHTML concatenation, and validate the payload against the ReportPayload shape in the main-process handler before injecting it. Prefer passing the data via a preload + `ipcRenderer` channel on the report window over executeJavaScript.",
+      "confidence": 0.85,
+      "fingerprint_inputs": ["injection_via_untrusted_peripheral", "files/src/main/main.ts", "report:generate"]
+    },
+    {
+      "id": "SEC-003",
+      "category": "denial_of_service",
+      "severity": "medium",
+      "file": "files/src/core/elm327Commander.ts",
+      "line": 55,
+      "summary": "ELM327Commander.onData appends every received chunk to an unbounded string buffer that is only cleared when a '>' prompt byte arrives.",
+      "evidence": "`onData(chunk)` does `this.recvBuf += chunk` and only resets `this.recvBuf = ''` inside the `if (this.recvBuf.includes(ELM_PROMPT))` branch. While a command is pending, the dispatch() timeout path (line 197) fires resolveResponse('', true), which clears recvBuf — so that window is bounded. But when no command is pending there is no timer at all, and resolveResponse early-returns on `if (!this.pendingResolve) return;`. An adapter that streams bytes containing no '>' between commands (or after stopPolling()) grows recvBuf without any cap until the main process exhausts memory. The port 'data' handler in main.ts:182 feeds it unconditionally.",
+      "recommendation": "Add a MAX_RECV_BUF constant (e.g. 64 KB) and in onData, when `this.recvBuf.length > MAX_RECV_BUF`, drop the buffer, emit a 'warn' log entry, and reset — regardless of whether a command is pending.",
+      "confidence": 0.8,
+      "fingerprint_inputs": ["denial_of_service", "files/src/core/elm327Commander.ts", "onData.recvBuf"]
+    },
+    {
+      "id": "SEC-004",
+      "category": "prompt_injection",
+      "severity": "medium",
+      "file": "files/src/main/claudeAssistant.ts",
+      "line": 81,
+      "summary": "formatContext concatenates peripheral- and network-derived text into a <session-snapshot> fence without escaping the closing delimiter.",
+      "evidence": "askClaude builds `content: '<session-snapshot>\\n' + formatContext(ctx) + '\\n</session-snapshot>\\n\\n' + question` (line 151). formatContext interpolates ctx.recentLogs, ctx.dtcs[].description/likelyCauses/repairSummary and ctx.vehicle verbatim. recentLogs is populated by AssistantScreen.buildContext from the session log, which carries raw adapter bytes when debugSerial is on (main.ts:186 logs `RX ← ${display}`) plus adapter firmware/protocol banners and serial error text. A log line or DTC description containing a literal `</session-snapshot>` followed by instructions is indistinguishable from the app's own framing, letting a hostile adapter steer the assistant. Same untrusted-peripheral source as SEC-002, but the sink and the fix are different.",
+      "recommendation": "Strip or entity-escape occurrences of `</session-snapshot>` and `<session-snapshot>` in every interpolated field inside formatContext, and cap each interpolated line to a fixed length before joining.",
+      "confidence": 0.75,
+      "fingerprint_inputs": ["prompt_injection", "files/src/main/claudeAssistant.ts", "formatContext"]
+    },
+    {
+      "id": "SEC-005",
+      "category": "dev_mode_attack_surface",
+      "severity": "medium",
+      "file": "files/src/main/main.ts",
+      "line": 40,
+      "summary": "A runtime NODE_ENV env var makes any build load its UI from plain-HTTP localhost:3000 and open DevTools.",
+      "evidence": "`if (process.env.NODE_ENV === 'development') { mainWindow.loadURL('http://localhost:3000'); mainWindow.webContents.openDevTools({ mode: 'detach' }); }`. This is read at runtime, not baked in at build time, so a packaged app launched with NODE_ENV=development in its environment renders whatever is listening on port 3000 — and that page gets the full `electronAPI` surface exposed by preload.ts, including claudeGetConfig, storage.*, reportGenerate and obd:connect.",
+      "recommendation": "Gate the dev branch on `!app.isPackaged` instead of `process.env.NODE_ENV`, so packaged builds always take the loadFile path.",
+      "confidence": 0.8,
+      "fingerprint_inputs": ["dev_mode_attack_surface", "files/src/main/main.ts", "NODE_ENV"]
+    },
+    {
+      "id": "SEC-006",
+      "category": "input_validation",
+      "severity": "medium",
+      "file": "files/src/main/main.ts",
+      "line": 337,
+      "summary": "The obd:connect IPC handler passes a renderer-supplied device path to SerialPort with no allowlist check.",
+      "evidence": "`ipcMain.handle('obd:connect', async (_event, { port }) => { ... await connectToPort(port) })` and connectToPort does `new SerialPort({ path: portPath, baudRate: 115200, autoOpen: false })` (line 167) after only a cosmetic `/dev/tty.` → `/dev/cu.` rewrite. The path is never checked against the enumerated devices returned by the `obd:list-ports` handler, so any string the renderer supplies is opened and written to (fakeSend writes AT command bytes to it at line 175).",
+      "recommendation": "In the obd:connect handler, call SerialPort.list() and reject any `port` that is not 'SIMULATOR' and not a member of the enumerated device paths; return an error to the renderer instead of opening it.",
+      "confidence": 0.75,
+      "fingerprint_inputs": ["input_validation", "files/src/main/main.ts", "obd:connect"]
+    },
+    {
+      "id": "SEC-007",
+      "category": "missing_csp",
+      "severity": "medium",
+      "file": "files/src/main/main.ts",
+      "line": 517,
+      "summary": "The PDF report BrowserWindow has no Content-Security-Policy, so nothing blocks the inline script injected via SEC-002.",
+      "evidence": "The window created at `const win = new BrowserWindow({ show: false, ... })` loads files/assets/report.html, which contains no `<meta http-equiv=\"Content-Security-Policy\">`, and no `session.defaultSession.webRequest.onHeadersReceived` CSP header is installed anywhere in main.ts. By contrast files/src/renderer/index.html does carry a CSP meta tag — though a weak one (`default-src 'self' 'unsafe-inline' ...; script-src 'self' 'unsafe-eval'`), which would not stop an inline event-handler payload either.",
+      "recommendation": "Add a `<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'self'\">` to assets/report.html, and tighten the renderer CSP by dropping 'unsafe-eval' from script-src.",
+      "confidence": 0.8,
+      "fingerprint_inputs": ["missing_csp", "files/src/main/main.ts", "report-window"]
+    },
+    {
+      "id": "SEC-008",
+      "category": "electron_hardening",
+      "severity": "medium",
+      "file": "files/src/main/main.ts",
+      "line": 519,
+      "summary": "webPreferences gaps: the report window disables contextIsolation, the main window disables sandbox, and neither installs navigation or window-open handlers.",
+      "evidence": "The report window uses `webPreferences: { contextIsolation: false, nodeIntegration: false }` (line 519), which removes the isolated-world barrier in the same renderer that SEC-002 injects into. The main window sets `sandbox: false` (line 34) despite its preload needing no unsandboxed APIs beyond ipcRenderer. No `mainWindow.webContents.on('will-navigate', ...)` or `setWindowOpenHandler(...)` is registered on either window, so a navigation triggered from renderer content is unrestricted.",
+      "recommendation": "Set `contextIsolation: true` on the report window and `sandbox: true` on the main window, and register `will-navigate` (reject any URL outside the expected origin) plus `setWindowOpenHandler(() => ({ action: 'deny' }))` on both.",
+      "confidence": 0.8,
+      "fingerprint_inputs": ["electron_hardening", "files/src/main/main.ts", "webPreferences"]
+    },
+    {
+      "id": "SEC-009",
+      "category": "rate_limiting",
+      "severity": "low",
+      "file": "files/src/main/main.ts",
+      "line": 419,
+      "summary": "The claude:ask IPC handler has no call throttle or cumulative token budget on a paid API.",
+      "evidence": "`ipcMain.handle('claude:ask', ...)` aborts any previous controller and forwards straight to askClaude. `max_tokens: 1500` (claudeAssistant.ts:159) caps one response and `history.slice(-12)` caps conversation length, but nothing limits calls per minute or total spend — the renderer can invoke claudeAsk in a loop, each call billing against the user's key. The only guard is that a new call cancels the in-flight one, which bounds concurrency, not cost.",
+      "recommendation": "Add a minimum interval between accepted claude:ask invocations (e.g. reject calls arriving <1s after the previous one) and track cumulative input+output tokens per session against a configurable cap, returning an AskError once exceeded.",
+      "confidence": 0.65,
+      "fingerprint_inputs": ["rate_limiting", "files/src/main/main.ts", "claude:ask"]
+    },
+    {
+      "id": "SEC-010",
+      "category": "secrets_exposure",
+      "severity": "low",
+      "file": "files/src/main/main.ts",
+      "line": 541,
+      "summary": "The CarsXE API key is interpolated unencoded into the request URL query string.",
+      "evidence": "`const url = 'https://api.carsxe.com/obdcodesdecoder?key=' + apiKey + '&code=' + encodeURIComponent(code) + '&source=claude_plugin'` where `apiKey = process.env.CARSXE_API_KEY`. The `code` parameter is encoded but the key is not. Secrets in query strings are routinely captured by proxy and server access logs, and an unencoded key containing `&` or `#` would silently truncate or inject query parameters.",
+      "recommendation": "Send the key in a request header (`fetch(url, { headers: { 'X-API-Key': apiKey } })`) if CarsXE supports it; otherwise at minimum wrap it in encodeURIComponent().",
+      "confidence": 0.7,
+      "fingerprint_inputs": ["secrets_exposure", "files/src/main/main.ts", "carsxe:decode"]
+    },
+    {
+      "id": "SEC-011",
+      "category": "denial_of_service",
+      "severity": "low",
+      "file": "files/src/renderer/screens/DataLoggerScreen.tsx",
+      "line": 65,
+      "summary": "An active recording accumulates samples in an uncapped array that is later serialized whole through IPC into storage.",
+      "evidence": "`recRef.current.samples.push({ timestamp: Date.now(), values })` runs on a setInterval at the configured sampleInterval with no length check. MAX_RECORDINGS (=10) caps how many recordings are retained but not how large one recording gets. stopRecording() then hands the entire samples array to `window.electronAPI.storage.saveRecording(rec)`, which JSON.stringifies it into storage.json (storageService.ts:34) or a single SQLite TEXT column — a recording left running for hours grows renderer heap and then the on-disk store without bound.",
+      "recommendation": "Cap samples at a fixed count (e.g. 50000) in the interval callback — stop recording and surface a 'sample limit reached' notice — rather than growing the array until the user stops it.",
+      "confidence": 0.65,
+      "fingerprint_inputs": ["denial_of_service", "files/src/renderer/screens/DataLoggerScreen.tsx", "startRecording.samples"]
+    }
+  ],
+  "skipped": [],
+  "stats": {
+    "files_scanned": 38,
+    "elapsed_ms": 511000
+  }
+}
