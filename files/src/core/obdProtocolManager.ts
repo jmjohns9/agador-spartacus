@@ -131,8 +131,8 @@ export class OBDProtocolManager extends EventEmitter {
         this.log(`Poll cycle error: ${msg}`);
       }
 
-      // Brief yield to prevent starving the event loop
-      await this.sleep(20);
+      // Minimal yield — serial roundtrip is the real bottleneck (~50-200ms/PID)
+      await this.sleep(1);
     }
 
     this.pollLoopRunning = false;
@@ -176,7 +176,7 @@ export class OBDProtocolManager extends EventEmitter {
     if (!definition) return;
 
     try {
-      const resp = await this.elm.send(pid, 1500);
+      const resp = await this.elm.send(pid, 800);
 
       if (!resp.success) return;
       if (resp.raw.includes('NO DATA') || resp.raw.includes('UNABLE TO CONNECT')) return;
