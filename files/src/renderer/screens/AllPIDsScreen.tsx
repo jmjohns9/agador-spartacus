@@ -62,14 +62,14 @@ function PIDRow({ pid, liveValue, onExpand, expanded }: {
         onMouseLeave={e => { if (!expanded) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
       >
         {/* PID code */}
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: catColor }}>
+        <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: catColor }}>
           {pid.pid}
         </span>
 
         {/* Category badge */}
         <span style={{
           fontSize: 9, color: catColor,
-          fontFamily: "'Barlow Condensed', sans-serif",
+          fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
           letterSpacing: 1.0, textTransform: 'uppercase',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
@@ -82,13 +82,13 @@ function PIDRow({ pid, liveValue, onExpand, expanded }: {
         </span>
 
         {/* Unit */}
-        <span style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'JetBrains Mono', monospace" }}>
+        <span style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace" }}>
           {pid.unit}
         </span>
 
         {/* Live value */}
         <span style={{
-          fontFamily: "'JetBrains Mono', monospace", fontSize: 13,
+          fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 13,
           color: hasLive ? 'var(--tw)' : 'var(--bs)',
           textAlign: 'right',
         }}>
@@ -101,18 +101,18 @@ function PIDRow({ pid, liveValue, onExpand, expanded }: {
       {/* Expanded detail */}
       {expanded && (
         <div style={{
-          background: 'var(--bg2)', borderTop: '1px solid var(--br)',
+          background: 'var(--bg2)', borderTop: '2px solid var(--br)',
           padding: '12px 16px', display: 'grid', gridTemplateColumns: '1fr 220px', gap: 20,
-          border: '1px solid var(--br)', borderRadius: 4, margin: '0 8px 8px',
+          border: '2px solid var(--br)', borderRadius: 0, margin: '0 8px 8px',
         }}>
           <div>
             <div style={{ fontSize: 12, color: 'var(--tw)', fontWeight: 500, marginBottom: 6 }}>{pid.name}</div>
             <div style={{ fontSize: 11, color: 'var(--tm)', lineHeight: 1.6, marginBottom: 10 }}>{pid.description}</div>
             {pid.formula && (
               <div style={{
-                fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--pp)',
-                background: 'var(--bg3)', padding: '5px 8px', borderRadius: 3,
-                border: '1px solid var(--br)', display: 'inline-block',
+                fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--pp)',
+                background: 'var(--bg3)', padding: '5px 8px', borderRadius: 0,
+                border: '2px solid var(--br)', display: 'inline-block',
               }}>
                 {pid.formula}
               </div>
@@ -122,10 +122,10 @@ function PIDRow({ pid, liveValue, onExpand, expanded }: {
             <div>
               <div style={{
                 fontSize: 9, color: 'var(--tm)',
-                fontFamily: "'Barlow Condensed', sans-serif",
+                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
                 letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 3,
               }}>Range</div>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--tw)' }}>
+              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--tw)' }}>
                 {pid.min} – {pid.max} {pid.unit}
               </span>
             </div>
@@ -133,10 +133,10 @@ function PIDRow({ pid, liveValue, onExpand, expanded }: {
               <div>
                 <div style={{
                   fontSize: 9, color: 'var(--tm)',
-                  fontFamily: "'Barlow Condensed', sans-serif",
+                  fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
                   letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 3,
                 }}>Warning threshold</div>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--sa)' }}>
+                <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--sa)' }}>
                   {pid.warnHigh !== undefined && `High: ${pid.warnHigh}`}
                   {pid.warnLow  !== undefined && ` · Low: ${pid.warnLow}`}
                 </span>
@@ -145,10 +145,10 @@ function PIDRow({ pid, liveValue, onExpand, expanded }: {
             <div>
               <div style={{
                 fontSize: 9, color: 'var(--tm)',
-                fontFamily: "'Barlow Condensed', sans-serif",
+                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
                 letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 3,
               }}>Live value</div>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 20, fontWeight: 600, color: hasLive ? catColor : 'var(--bs)' }}>
+              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 20, fontWeight: 600, color: hasLive ? catColor : 'var(--bs)' }}>
                 {valStr}
               </span>
             </div>
@@ -202,7 +202,7 @@ export function AllPIDsScreen(): React.ReactElement {
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-        padding: '7px 10px', background: 'var(--bg2)', borderBottom: '1px solid var(--br)',
+        padding: '7px 10px', background: 'var(--bg2)', borderBottom: '2px solid var(--br)',
         flexShrink: 0,
       }}>
         <input
@@ -212,8 +212,8 @@ export function AllPIDsScreen(): React.ReactElement {
           onChange={e => setSearch(e.target.value)}
           style={{
             padding: '4px 8px', fontSize: 11, width: 220, height: 28,
-            background: 'var(--bg3)', border: '1px solid var(--br)', borderRadius: 3,
-            color: 'var(--tw)', fontFamily: "'JetBrains Mono', monospace",
+            background: 'var(--bg3)', border: '2px solid var(--br)', borderRadius: 0,
+            color: 'var(--tw)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
           }}
         />
 
@@ -222,8 +222,8 @@ export function AllPIDsScreen(): React.ReactElement {
           onChange={e => setFilterCategory(e.target.value as PIDCategory | 'ALL')}
           style={{
             padding: '4px 6px', fontSize: 11, height: 28,
-            background: 'var(--bg3)', border: '1px solid var(--br)', borderRadius: 3,
-            color: 'var(--tw)', fontFamily: "'Barlow Condensed', sans-serif",
+            background: 'var(--bg3)', border: '2px solid var(--br)', borderRadius: 0,
+            color: 'var(--tw)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
             letterSpacing: 0.4, textTransform: 'uppercase',
           }}
         >
@@ -245,7 +245,7 @@ export function AllPIDsScreen(): React.ReactElement {
 
         <div style={{ flex: 1 }} />
 
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--tm)' }}>
+        <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--tm)' }}>
           {liveCount} live · {filtered.length} shown · {PID_CATALOG.length} total
         </span>
 
@@ -264,13 +264,13 @@ export function AllPIDsScreen(): React.ReactElement {
       <div style={{
         display: 'grid', gridTemplateColumns: '52px 90px 1fr 90px 120px 30px',
         gap: 6, padding: '5px 12px',
-        background: 'var(--bg3)', borderBottom: '1px solid var(--br)',
+        background: 'var(--bg3)', borderBottom: '2px solid var(--br)',
         flexShrink: 0,
       }}>
         {['PID', 'Category', 'Parameter', 'Unit', 'Live value', ''].map(h => (
           <span key={h} style={{
             fontSize: 9, color: 'var(--tm)',
-            fontFamily: "'Barlow Condensed', sans-serif",
+            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
             letterSpacing: 1.2, textTransform: 'uppercase',
           }}>
             {h}
@@ -290,18 +290,18 @@ export function AllPIDsScreen(): React.ReactElement {
               {/* Category subheader */}
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 6,
-                padding: '6px 12px', background: 'var(--bg2)', borderBottom: '1px solid var(--br)',
+                padding: '6px 12px', background: 'var(--bg2)', borderBottom: '2px solid var(--br)',
                 position: 'sticky', top: 0, zIndex: 2,
               }}>
-                <div style={{ width: 3, height: 12, background: CATEGORY_COLORS[cat], borderRadius: 1, flexShrink: 0 }} />
+                <div style={{ width: 3, height: 12, background: CATEGORY_COLORS[cat], borderRadius: 0, flexShrink: 0 }} />
                 <span style={{
-                  fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                  fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
                   fontSize: 10, letterSpacing: 1.5, color: CATEGORY_COLORS[cat],
                   textTransform: 'uppercase',
                 }}>
                   {CATEGORY_LABELS[cat]}
                 </span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--tm)', marginLeft: 4 }}>
+                <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--tm)', marginLeft: 4 }}>
                   {grouped[cat]?.length} PIDs · {grouped[cat]?.filter(p => liveData[p.pid]).length} live
                 </span>
               </div>

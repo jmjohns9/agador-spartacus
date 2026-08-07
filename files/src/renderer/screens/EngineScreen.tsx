@@ -39,21 +39,21 @@ function FuelTrimBar({ pid, label }: { pid: string; label: string }): React.Reac
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.4, textTransform: 'uppercase' }}>
+        <span style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", letterSpacing: 0.4, textTransform: 'uppercase' }}>
           {label}
         </span>
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: barColor }}>
+        <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 13, color: barColor }}>
           {fmt(pid, usePID(pid))}
         </span>
       </div>
       {/* Centre-zero bar */}
-      <div style={{ height: 6, background: 'var(--bg4)', borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ height: 6, background: 'var(--bg4)', borderRadius: 0, position: 'relative', overflow: 'hidden' }}>
         {/* Centre marker */}
         <div style={{ position: 'absolute', left: '50%', top: 0, width: 1, height: '100%', background: 'var(--br)' }} />
         {/* Fill from centre */}
         <div style={{
           position: 'absolute',
-          top: 1, height: 4, borderRadius: 2,
+          top: 1, height: 4, borderRadius: 0,
           background: barColor,
           left:  val >= 0 ? '50%' : `${50 + val * 2}%`,
           width: `${Math.min(50, abs * 2)}%`,
@@ -200,14 +200,14 @@ export function EngineScreen(): React.ReactElement {
       {/* ── Fuel trims ─────────────────────────────────────────────────── */}
       <SectionHeader>Fuel trim analysis — Bank 1 (right) &amp; Bank 2 (left)</SectionHeader>
       {fuelTrimAlarm && (
-        <div style={{ background: 'rgba(255,179,0,0.07)', border: '1px solid rgba(255,179,0,0.3)', borderRadius: 3, padding: '8px 12px', fontSize: 12, color: 'var(--sa)', display: 'flex', alignItems: 'center', gap: 7 }}>
+        <div style={{ background: 'rgba(255,179,0,0.07)', border: '1px solid rgba(255,179,0,0.3)', borderRadius: 0, padding: '8px 12px', fontSize: 12, color: 'var(--sa)', display: 'flex', alignItems: 'center', gap: 7 }}>
           <i className="ti ti-alert-triangle" style={{ fontSize: 14 }} />
           Long-term fuel trim above ±7% — persistent correction indicates a real lean/rich condition. Check for vacuum leaks, dirty MAF, or failing O2 sensors.
         </div>
       )}
       <Grid cols={2}>
         <Card>
-          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 10, letterSpacing: 1, color: 'var(--pp)', textTransform: 'uppercase', marginBottom: 10 }}>
+          <div style={{ fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700, fontSize: 10, letterSpacing: 1, color: 'var(--pp)', textTransform: 'uppercase', marginBottom: 10 }}>
             Bank 1 — Cylinders 1, 3, 5, 7 (right bank)
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -215,13 +215,13 @@ export function EngineScreen(): React.ReactElement {
             <FuelTrimBar pid="0107" label="Long-term trim (learned correction — stored in ECM)" />
           </div>
           <div style={{ marginTop: 10, fontSize: 11, color: 'var(--tm)', lineHeight: 1.5 }}>
-            Combined correction: <span style={{ color: Math.abs(stftB1 + ltftB1) > 15 ? 'var(--sr)' : 'var(--tw)', fontFamily: "'JetBrains Mono', monospace" }}>
+            Combined correction: <span style={{ color: Math.abs(stftB1 + ltftB1) > 15 ? 'var(--sr)' : 'var(--tw)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace" }}>
               {(stftB1 + ltftB1).toFixed(1)}%
             </span>
           </div>
         </Card>
         <Card>
-          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 10, letterSpacing: 1, color: 'var(--gb)', textTransform: 'uppercase', marginBottom: 10 }}>
+          <div style={{ fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700, fontSize: 10, letterSpacing: 1, color: 'var(--gb)', textTransform: 'uppercase', marginBottom: 10 }}>
             Bank 2 — Cylinders 2, 4, 6, 8 (left bank)
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -229,7 +229,7 @@ export function EngineScreen(): React.ReactElement {
             <FuelTrimBar pid="0109" label="Long-term trim (learned correction — stored in ECM)" />
           </div>
           <div style={{ marginTop: 10, fontSize: 11, color: 'var(--tm)', lineHeight: 1.5 }}>
-            Combined correction: <span style={{ color: Math.abs(stftB2 + ltftB2) > 15 ? 'var(--sr)' : 'var(--tw)', fontFamily: "'JetBrains Mono', monospace" }}>
+            Combined correction: <span style={{ color: Math.abs(stftB2 + ltftB2) > 15 ? 'var(--sr)' : 'var(--tw)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace" }}>
               {(stftB2 + ltftB2).toFixed(1)}%
             </span>
           </div>

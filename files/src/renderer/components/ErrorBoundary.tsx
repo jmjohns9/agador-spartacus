@@ -29,12 +29,12 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
       <div style={{
         height: '100vh', background: '#0D0F12', color: '#EEF1F5',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: "'Barlow', sans-serif", padding: 40,
+        fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", padding: 40,
       }}>
         <div style={{ maxWidth: 640, width: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-            <i className="ti ti-alert-octagon" style={{ fontSize: 32, color: '#FF8000' }} />
-            <h1 style={{ margin: 0, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 22, letterSpacing: 1.5, textTransform: 'uppercase' }}>
+            <i className="ti ti-alert-octagon" style={{ fontSize: 32, color: 'var(--pp)' }} />
+            <h1 style={{ margin: 0, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700, fontSize: 22, letterSpacing: 1.5, textTransform: 'uppercase' }}>
               Project Agador Spartacus crashed
             </h1>
           </div>
@@ -43,8 +43,8 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
             reloading should restore it. If this keeps happening, copy the error below and share it with the dev.
           </p>
           <pre style={{
-            background: '#07080A', border: '1px solid #1C2128', borderRadius: 3,
-            padding: 12, fontFamily: "'JetBrains Mono', monospace", fontSize: 11,
+            background: '#07080A', border: '1px solid #1C2128', borderRadius: 0,
+            padding: 12, fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11,
             color: '#FF2440', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
             maxHeight: 240, overflowY: 'auto', marginTop: 16,
           }}>
@@ -55,9 +55,9 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
             <button
               onClick={this.reload}
               style={{
-                background: 'rgba(255,128,0,0.1)', border: '1px solid #FF8000', color: '#FF8000',
-                borderRadius: 3, padding: '10px 20px', cursor: 'pointer',
-                fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                background: 'rgba(255,87,34,0.08)', border: '1px solid var(--pp)', color: 'var(--pp)',
+                borderRadius: 0, padding: '10px 20px', cursor: 'pointer',
+                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
                 letterSpacing: 0.5, textTransform: 'uppercase', fontSize: 12,
               }}
             >
@@ -68,8 +68,8 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
               onClick={this.reset}
               style={{
                 background: '#181C22', border: '1px solid #1C2128', color: '#EEF1F5',
-                borderRadius: 3, padding: '10px 20px', cursor: 'pointer',
-                fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700,
+                borderRadius: 0, padding: '10px 20px', cursor: 'pointer',
+                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
                 letterSpacing: 0.5, textTransform: 'uppercase', fontSize: 12,
               }}
             >

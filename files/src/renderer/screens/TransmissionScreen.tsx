@@ -38,11 +38,11 @@ function GearIndicator({ gear }: { gear: string | number }): React.ReactElement 
     <div style={{ display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
       {gears.map(g => (
         <div key={g} style={{
-          width: 30, height: 30, borderRadius: 3,
+          width: 30, height: 30, borderRadius: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: label === g ? 'var(--pp)' : 'var(--bg4)',
           border: `1px solid ${label === g ? 'var(--pp)' : 'var(--br)'}`,
-          fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14,
+          fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700, fontSize: 14,
           color: label === g ? '#000' : 'var(--tm)',
           transition: 'all 0.1s',
         }}>
@@ -128,11 +128,11 @@ export function TransmissionScreen(): React.ReactElement {
       <SectionHeader>Gear selection (GM Class II enhanced)</SectionHeader>
       <Grid cols={2}>
         <Card>
-          <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10 }}>
+          <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10 }}>
             Current gear — TCM via Class II bus
           </div>
           <GearIndicator gear={gear} />
-          <div style={{ textAlign: 'center', marginTop: 10, fontFamily: "'JetBrains Mono', monospace", fontSize: 18, color: 'var(--pp)' }}>
+          <div style={{ textAlign: 'center', marginTop: 10, fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 18, color: 'var(--pp)' }}>
             {String(gear) !== '—' ? String(gear) : '—'}
           </div>
           <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--tm)', marginTop: 4 }}>
@@ -141,7 +141,7 @@ export function TransmissionScreen(): React.ReactElement {
         </Card>
 
         <Card>
-          <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10 }}>
+          <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10 }}>
             Torque converter clutch
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -169,11 +169,11 @@ export function TransmissionScreen(): React.ReactElement {
             display: 'grid', gridTemplateColumns: '60px 70px 80px 1fr',
             gap: 10, padding: '9px 12px',
             borderBottom: i < arr.length - 1 ? '1px solid var(--bg3)' : 'none',
-            background: String(gear) === g.split('/')[0] ? 'rgba(255,128,0,0.05)' : 'transparent',
+            background: String(gear) === g.split('/')[0] ? 'rgba(255,87,34,0.05)' : 'transparent',
           }}>
-            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 13, color: 'var(--pp)' }}>{g}</span>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--tw)' }}>{ratio}</span>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--tm)' }}>{rpm_at_60}</span>
+            <span style={{ fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700, fontSize: 13, color: 'var(--pp)' }}>{g}</span>
+            <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--tw)' }}>{ratio}</span>
+            <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--tm)' }}>{rpm_at_60}</span>
             <span style={{ fontSize: 11, color: 'var(--tm)' }}>{notes}</span>
           </div>
         ))}
@@ -194,7 +194,7 @@ export function TransmissionScreen(): React.ReactElement {
             display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
             borderBottom: i < arr.length - 1 ? '1px solid var(--bg3)' : 'none',
           }}>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--tm)', width: 44 }}>{code}</span>
+            <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--tm)', width: 44 }}>{code}</span>
             <span style={{ flex: 1, fontSize: 12, color: 'var(--tw)' }}>{desc}</span>
             <Badge label={severity === 'crit' ? 'Critical' : 'Warning'} variant={severity} />
           </div>

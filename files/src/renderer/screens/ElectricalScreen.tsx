@@ -45,7 +45,7 @@ function VoltageTimeline(): React.ReactElement {
 
   if (recent.length < 2) {
     return (
-      <div style={{ height: H + 20, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg4)', borderRadius: 2 }}>
+      <div style={{ height: H + 20, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg4)', borderRadius: 0 }}>
         <span style={{ fontSize: 11, color: 'var(--tm)' }}>Collecting voltage history…</span>
       </div>
     );
@@ -66,7 +66,7 @@ function VoltageTimeline(): React.ReactElement {
         {REFS.map(({ v, label, color }) => (
           <g key={v}>
             <line x1={0} y1={yOf(v)} x2={W} y2={yOf(v)} stroke={color} strokeWidth="0.7" strokeDasharray="4,3" />
-            <text x={W + 4} y={yOf(v) + 4} fontSize="8" fill={color} fontFamily="JetBrains Mono, monospace">{label}</text>
+            <text x={W + 4} y={yOf(v) + 4} fontSize="8" fill={color} fontFamily="JetBrains Mono, Roboto Mono, monospace">{label}</text>
           </g>
         ))}
         {/* Voltage trace */}
@@ -84,10 +84,10 @@ function VoltageTimeline(): React.ReactElement {
         )}
         {/* Y axis labels */}
         {[11.6, 11.8, 12.0, 12.2, 12.4, 12.6, 12.8, 13.0].map(v => (
-          <text key={v} x={-4} y={yOf(v) + 3} fontSize="8" fill="var(--tm)" fontFamily="JetBrains Mono, monospace" textAnchor="end">{v}</text>
+          <text key={v} x={-4} y={yOf(v) + 3} fontSize="8" fill="var(--tm)" fontFamily="JetBrains Mono, Roboto Mono, monospace" textAnchor="end">{v}</text>
         ))}
       </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--tm)', fontFamily: "'JetBrains Mono', monospace" }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--tm)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace" }}>
         <span>{recent.length} samples · {Math.round(recent.length * 0.5 / 60)} min window</span>
         <span style={{ color: drift < -0.05 ? 'var(--sr)' : drift < -0.02 ? 'var(--sa)' : 'var(--sg)' }}>
           Drift: {drift >= 0 ? '+' : ''}{drift.toFixed(3)} V
@@ -142,7 +142,7 @@ export function ElectricalScreen(): React.ReactElement {
         <AlertBanner message={`Battery low — ${batteryV.toFixed(2)} V. Charge or investigate parasitic draw.`} variant="warn" />
       )}
       {voltageTrend === 'critical' && (
-        <AlertBanner message="Rapid voltage drop — possible active draw. Navigate to the Parasitic Draw screen to investigate." variant="crit" />
+        <AlertBanner message="Rapid voltage drop — possible active draw." variant="crit" action="Go to Draw" onAction={() => useAppStore.getState().setActiveScreen('parasite')} />
       )}
       {voltageTrend === 'dropping' && (
         <AlertBanner message="Voltage trending down — monitor closely." variant="warn" />
@@ -230,7 +230,7 @@ export function ElectricalScreen(): React.ReactElement {
       <Grid cols={3}>
         <Card>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase' }}>
+            <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", letterSpacing: 0.5, textTransform: 'uppercase' }}>
               Battery reference chart
             </div>
             {[
@@ -245,11 +245,11 @@ export function ElectricalScreen(): React.ReactElement {
               return (
                 <div key={v} style={{
                   display: 'flex', gap: 8, alignItems: 'center',
-                  background: isCurrent ? 'rgba(255,128,0,0.07)' : 'transparent',
-                  padding: '3px 6px', borderRadius: 2,
-                  border: isCurrent ? '1px solid rgba(255,128,0,0.3)' : '1px solid transparent',
+                  background: isCurrent ? 'rgba(255,87,34,0.05)' : 'transparent',
+                  padding: '3px 6px', borderRadius: 0,
+                  border: isCurrent ? '1px solid var(--bs)' : '1px solid transparent',
                 }}>
-                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color, width: 42 }}>{v}</span>
+                  <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color, width: 42 }}>{v}</span>
                   <span style={{ fontSize: 11, color: isCurrent ? 'var(--tw)' : 'var(--tm)' }}>{label}</span>
                   {isCurrent && <span style={{ fontSize: 10, color: 'var(--pp)', marginLeft: 'auto' }}>◀ now</span>}
                 </div>
@@ -259,7 +259,7 @@ export function ElectricalScreen(): React.ReactElement {
         </Card>
 
         <Card>
-          <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>
+          <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>
             Alternator charging voltages
           </div>
           {[
@@ -271,7 +271,7 @@ export function ElectricalScreen(): React.ReactElement {
             <div key={range} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 7 }}>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: ok ? 'var(--sg)' : 'var(--sa)', marginTop: 4, flexShrink: 0 }} />
               <div>
-                <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--tw)' }}>{range}</div>
+                <div style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--tw)' }}>{range}</div>
                 <div style={{ fontSize: 11, color: 'var(--tm)', marginTop: 1 }}>{label}</div>
               </div>
             </div>
@@ -279,7 +279,7 @@ export function ElectricalScreen(): React.ReactElement {
         </Card>
 
         <Card>
-          <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>
+          <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>
             Parasitic draw thresholds
           </div>
           {[
@@ -292,7 +292,7 @@ export function ElectricalScreen(): React.ReactElement {
             <div key={range} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 7 }}>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: ok ? 'var(--sg)' : 'var(--sa)', marginTop: 4, flexShrink: 0 }} />
               <div>
-                <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--tw)' }}>{range}</div>
+                <div style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--tw)' }}>{range}</div>
                 <div style={{ fontSize: 11, color: 'var(--tm)', marginTop: 1 }}>{label}</div>
               </div>
             </div>
