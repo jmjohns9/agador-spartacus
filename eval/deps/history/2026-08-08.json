@@ -1,0 +1,102 @@
+{
+  "review_type": "deps",
+  "scope": {
+    "root": "files",
+    "files": [
+      "files/package.json",
+      "files/package-lock.json"
+    ],
+    "git_sha": "4db54daff88afbac912df04b040a73326a6dfd71"
+  },
+  "findings": [
+    {
+      "id": "DEP-001",
+      "category": "precarious_pre_1_0",
+      "severity": "medium",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "The actively-used Anthropic SDK is declared with a caret on a 0.x version, which confines updates to the 0.104.x patch line and blocks any security fix released on a later 0.x minor.",
+      "evidence": "dependencies: \"@anthropic-ai/sdk\": \"^0.104.1\". For 0.x versions npm resolves the caret as >=0.104.1 <0.105.0, so 0.105.0+ is never adopted. The package is a live runtime dependency, imported at files/src/main/claudeAssistant.ts:4 (`import Anthropic from '@anthropic-ai/sdk'`).",
+      "recommendation": "Replace the caret with an explicit range that can cross 0.x minors, e.g. \"@anthropic-ai/sdk\": \">=0.104.1 <1.0.0\", and rely on the committed package-lock.json to hold the exact resolved version between deliberate upgrades.",
+      "confidence": 0.95,
+      "fingerprint_inputs": ["precarious_pre_1_0", "files/package.json", "@anthropic-ai/sdk:^0.104.1"]
+    },
+    {
+      "id": "DEP-002",
+      "category": "missing_audit",
+      "severity": "medium",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "The project has no CI pipeline, no vulnerability scan and no automated dependency-update bot, so nothing in the repository can surface or land a security update.",
+      "evidence": "Absent: .github/workflows/, .gitlab-ci.yml, .circleci/config.yml, renovate.json, .dependabot/config.yml, .github/dependabot.yml. No `audit` script in package.json scripts (only dev, watch:main, watch:renderer, build, dist, typecheck, gen:dtcs). The consequence is visible in the manifest, where several direct deps sit a major behind their current line with no mechanism to notice: react ^18.0.0, react-dom ^18.0.0, zustand ^4.0.0, recharts ^2.0.0, serialport ^12.0.0, electron-store ^8.0.0, concurrently ^8.0.0, wait-on ^7.0.0, webpack-cli ^5.0.0. Reported here as the single highest-leverage policy defect rather than as one finding per stale package.",
+      "recommendation": "Add .github/workflows/ci.yml that runs `npm ci` followed by `npm audit --audit-level=high` on push and pull request, and commit a .github/dependabot.yml enabling the npm ecosystem on a weekly schedule so major-version drift is raised as PRs.",
+      "confidence": 0.95,
+      "fingerprint_inputs": ["missing_audit", "files/package.json", "no-ci-audit"]
+    },
+    {
+      "id": "DEP-003",
+      "category": "outdated_major",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "Electron is pinned to the 42 line, which sits at or just behind the boundary of Electron's published support window of the latest three stable majors.",
+      "evidence": "devDependencies: \"electron\": \"^42.4.1\". Electron's documented policy supports only the three most recent stable majors, and Chromium security fixes are backported no further. Given Electron's roughly eight-week major cadence, the 42 line is at or past that boundary as of 2026-08-08; the exact margin depends on the current release, which this static review cannot query.",
+      "recommendation": "Check the current Electron stable release and move the range to a major inside the supported window of three, since this dependency carries the bundled Chromium that renders untrusted vehicle-log content.",
+      "confidence": 0.6,
+      "fingerprint_inputs": ["outdated_major", "files/package.json", "electron:^42.4.1"]
+    },
+    {
+      "id": "DEP-004",
+      "category": "unused_dep",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "electron-store is declared as a production dependency but is never imported anywhere in the source tree, so it ships in the packaged app while serving no purpose.",
+      "evidence": "dependencies: \"electron-store\": \"^8.0.0\". A recursive search of files/ for the literal string `electron-store` across .ts, .tsx, .js, .html and .json sources (excluding package-lock.json and package.json) returns zero matches. Persistence is handled instead by better-sqlite3 at files/src/main/storageService.ts:45.",
+      "recommendation": "Remove \"electron-store\" from dependencies and regenerate package-lock.json, eliminating it and its transitive tree from the shipped bundle and the audit surface.",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["unused_dep", "files/package.json", "electron-store:^8.0.0"]
+    },
+    {
+      "id": "DEP-005",
+      "category": "unpinned_runtime",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "package.json declares no engines field, so no Node or npm floor is enforced and contributors or build machines may resolve a different, potentially unsupported runtime.",
+      "evidence": "No `engines` key anywhere in files/package.json; the top-level keys are name, version, description, main, scripts, build, devDependencies and dependencies. @types/node is declared at ^22.0.0, implying a Node 22 target that is nowhere enforced.",
+      "recommendation": "Add \"engines\": {\"node\": \">=22.0.0\", \"npm\": \">=10.0.0\"} to files/package.json so installs on an out-of-support Node fail loudly rather than silently producing a different dependency resolution.",
+      "confidence": 0.95,
+      "fingerprint_inputs": ["unpinned_runtime", "files/package.json", "no-engines"]
+    },
+    {
+      "id": "DEP-006",
+      "category": "missing_overrides",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "There is no overrides block, so a vulnerable transitive dependency cannot be pinned without waiting for every intermediate maintainer to publish a fix.",
+      "evidence": "No `overrides` or `resolutions` key in files/package.json. The tree is large enough for this to matter: package-lock.json contains 786 resolved packages against 9 direct dependencies and 16 direct devDependencies.",
+      "recommendation": "Add an empty \"overrides\": {} block to files/package.json so an emergency transitive pin is a one-line edit under version control rather than an improvised lockfile hand-edit.",
+      "confidence": 0.85,
+      "fingerprint_inputs": ["missing_overrides", "files/package.json", "no-overrides"]
+    },
+    {
+      "id": "DEP-007",
+      "category": "unused_dep",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "recharts is declared as a production dependency but is never imported anywhere in the source tree, so it ships in the packaged app while serving no purpose.",
+      "evidence": "dependencies: \"recharts\": \"^2.0.0\". A recursive search of files/ for the literal string `recharts` across .ts, .tsx, .js, .html and .json sources (excluding package-lock.json and package.json) returns zero matches, including across the chart-bearing screens LiveScreen.tsx, HealthScreen.tsx and CompareScreen.tsx.",
+      "recommendation": "Remove \"recharts\" from dependencies and regenerate package-lock.json; if charting is planned work, re-add it at the current major (3.x) when the code that uses it lands.",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["unused_dep", "files/package.json", "recharts:^2.0.0"]
+    }
+  ],
+  "skipped": [
+    {"path": "files/.npmrc", "reason": "not found"},
+    {"path": ".npmrc", "reason": "not found"}
+  ],
+  "stats": {"files_scanned": 2, "elapsed_ms": 180000}
+}
