@@ -34,6 +34,20 @@ function render(data) {
 
   function page(content) { return '<div class="page">' + content + '</div>'; }
 
+  // Every value below originates off-device — the adapter (STI/ATDP banners,
+  // DTC codes, module names), the CarsXE API, or user-entered vehicle notes —
+  // and lands in innerHTML. Escape it all; quotes too, since some values are
+  // interpolated into attributes.
+  function esc(s) {
+    if (s === undefined || s === null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function fmtDate(ts) {
     return new Date(ts).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
@@ -52,18 +66,18 @@ function render(data) {
 
   var cover = page([
     '<h1>Diagnostic Report</h1>',
-    '<div class="vehicle-name">' + vehicleName + (v.engine ? ' &middot; ' + v.engine : '') + '</div>',
-    v.vin ? '<div class="vin">' + v.vin + '</div>' : '',
+    '<div class="vehicle-name">' + esc(vehicleName) + (v.engine ? ' &middot; ' + esc(v.engine) : '') + '</div>',
+    v.vin ? '<div class="vin">' + esc(v.vin) + '</div>' : '',
     '<div class="meta-grid">',
       '<div class="meta-item"><label>Report Date</label><div class="val" style="font-size:13px">' + fmtDate(data.reportDate) + '</div></div>',
       '<div class="meta-item"><label>Battery</label><div class="val">' + fmtV(data.batteryVoltage) + '</div></div>',
       '<div class="meta-item"><label>Check Engine</label><div class="val ' + (data.milOn ? 'crit' : 'ok') + '">' + (data.milOn ? 'ON' : 'OFF') + '</div></div>',
       '<div class="meta-item"><label>Active DTCs</label><div class="val ' + (activeDTCs > 0 ? 'crit' : 'ok') + '">' + activeDTCs + '</div></div>',
-      data.adapterInfo ? '<div class="meta-item"><label>Adapter</label><div class="val" style="font-size:13px">' + data.adapterInfo + '</div></div>' : '',
-      data.protocol    ? '<div class="meta-item"><label>Protocol</label><div class="val" style="font-size:13px">' + data.protocol  + '</div></div>' : '',
-      data.appVersion  ? '<div class="meta-item"><label>App Version</label><div class="val" style="font-size:13px">' + data.appVersion + '</div></div>' : '',
+      data.adapterInfo ? '<div class="meta-item"><label>Adapter</label><div class="val" style="font-size:13px">' + esc(data.adapterInfo) + '</div></div>' : '',
+      data.protocol    ? '<div class="meta-item"><label>Protocol</label><div class="val" style="font-size:13px">' + esc(data.protocol)  + '</div></div>' : '',
+      data.appVersion  ? '<div class="meta-item"><label>App Version</label><div class="val" style="font-size:13px">' + esc(data.appVersion) + '</div></div>' : '',
     '</div>',
-    v.notes ? '<p style="margin-top:16px;font-size:11px;color:#666">' + v.notes + '</p>' : '',
+    v.notes ? '<p style="margin-top:16px;font-size:11px;color:#666">' + esc(v.notes) + '</p>' : '',
   ].join(''));
 
   // -- Page 2: Fault codes ---------------------------------------------------
@@ -72,14 +86,14 @@ function render(data) {
     ? '<tr><td colspan="5" style="color:#999;text-align:center;padding:16px">No DTCs stored</td></tr>'
     : (data.dtcs || []).map(function(d) {
         var cls = d.status === 'active' ? 'crit' : d.status === 'pending' ? 'warn' : '';
-        return '<tr><td class="mono ' + cls + '">' + d.code + '</td><td>' + (d.module || '&#8212;') + '</td><td class="' + cls + '">' + (d.status || '&#8212;') + '</td><td>' + (d.description || '') + '</td></tr>';
+        return '<tr><td class="mono ' + cls + '">' + esc(d.code) + '</td><td>' + (d.module ? esc(d.module) : '&#8212;') + '</td><td class="' + cls + '">' + (d.status ? esc(d.status) : '&#8212;') + '</td><td>' + esc(d.description || '') + '</td></tr>';
       }).join('');
 
   var modRows = (data.modules || []).length === 0
     ? '<tr><td colspan="3" style="color:#999;text-align:center">No module data</td></tr>'
     : (data.modules || []).map(function(m) {
         var cls = m.status === 'rogue' ? 'crit' : (m.status === 'awake' || m.status === 'active') ? 'warn' : 'ok';
-        return '<tr><td>' + (m.name || m.address || '&#8212;') + '</td><td class="mono">' + (m.address || '&#8212;') + '</td><td class="' + cls + '">' + (m.status || '&#8212;') + '</td></tr>';
+        return '<tr><td>' + ((m.name || m.address) ? esc(m.name || m.address) : '&#8212;') + '</td><td class="mono">' + (m.address ? esc(m.address) : '&#8212;') + '</td><td class="' + cls + '">' + (m.status ? esc(m.status) : '&#8212;') + '</td></tr>';
       }).join('');
 
   var dtcsPage = page([
@@ -97,9 +111,9 @@ function render(data) {
     ? '<p style="color:#999;margin-top:12px">No freeze frames captured in this session.</p>'
     : (data.freezeFrames || []).map(function(ff) {
         var pidRows = Object.keys(ff.liveData || {}).map(function(pid) {
-          return '<tr><td class="mono">' + pid + '</td><td>' + ff.liveData[pid].value + '</td></tr>';
+          return '<tr><td class="mono">' + esc(pid) + '</td><td>' + esc(ff.liveData[pid].value) + '</td></tr>';
         }).join('');
-        return '<h2>' + ff.dtcCode + ' &mdash; ' + fmtDate(ff.capturedAt) + '</h2>' +
+        return '<h2>' + esc(ff.dtcCode) + ' &mdash; ' + fmtDate(ff.capturedAt) + '</h2>' +
                '<table><thead><tr><th>PID</th><th>Value at Fault</th></tr></thead><tbody>' + pidRows + '</tbody></table>';
       }).join('');
 
@@ -146,9 +160,9 @@ function render(data) {
         var resultCls = !hasPassed ? '' : item.passed ? 'ok' : 'crit';
         var result    = !hasPassed ? '&#8212;' : item.passed ? 'Pass' : 'Fail';
         return '<tr><td style="width:30px;color:#999">' + (i + 1) + '</td>' +
-               '<td>' + (item.description || item.label || '') + '</td>' +
+               '<td>' + esc(item.description || item.label || '') + '</td>' +
                '<td class="' + resultCls + '">' + result + '</td>' +
-               '<td style="color:#666;font-size:10px">' + (item.notes || '') + '</td></tr>';
+               '<td style="color:#666;font-size:10px">' + esc(item.notes || '') + '</td></tr>';
       }).join('');
 
   var checkPage = page([
@@ -166,8 +180,8 @@ function render(data) {
         var cls = e.level === 'error' ? 'crit' : 'warn';
         return '<tr><td class="mono" style="white-space:nowrap;font-size:10px">' +
                new Date(e.timestamp).toLocaleTimeString() + '</td>' +
-               '<td class="' + cls + '">' + e.level.toUpperCase() + '</td>' +
-               '<td style="font-size:10px">' + (e.message || '') + '</td></tr>';
+               '<td class="' + cls + '">' + esc(String(e.level || '').toUpperCase()) + '</td>' +
+               '<td style="font-size:10px">' + esc(e.message || '') + '</td></tr>';
       }).join('');
 
   var logPage = page([
