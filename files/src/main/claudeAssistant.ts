@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import { app, safeStorage } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import Anthropic from '@anthropic-ai/sdk';
@@ -7,7 +7,8 @@ import Anthropic from '@anthropic-ai/sdk';
 //
 // The renderer sends a question plus a snapshot of session context (live PIDs,
 // DTCs, recent logs). We assemble a vehicle-aware prompt and call the Messages
-// API. The API key is stored in the app's userData folder, never in the repo.
+// API. The API key is stored in the app's userData folder, never in the repo,
+// encrypted at rest via the OS keychain (safeStorage) where one is available.
 
 const CONFIG_FILE = (): string => path.join(app.getPath('userData'), 'claude-config.json');
 
@@ -27,11 +28,26 @@ interface ClaudeConfig {
   customSystemPrompt: string;   // empty = use built-in prompt
 }
 
+// Configs written before encryption was added hold the key in plaintext under
+// `apiKey`. Keep reading that so an upgrade doesn't lose it — the next save
+// rewrites the file in encrypted form and drops the plaintext field.
+function readApiKey(raw: { apiKey?: unknown; apiKeyEnc?: unknown }): string {
+  if (typeof raw.apiKeyEnc === 'string' && raw.apiKeyEnc) {
+    if (!safeStorage.isEncryptionAvailable()) return '';
+    try {
+      return safeStorage.decryptString(Buffer.from(raw.apiKeyEnc, 'base64'));
+    } catch {
+      return '';   // wrong keychain, or ciphertext from another machine
+    }
+  }
+  return typeof raw.apiKey === 'string' ? raw.apiKey : '';
+}
+
 export function loadConfig(): ClaudeConfig {
   try {
     const raw = JSON.parse(fs.readFileSync(CONFIG_FILE(), 'utf-8'));
     return {
-      apiKey:             raw.apiKey ?? '',
+      apiKey:             readApiKey(raw),
       model:              raw.model  ?? 'claude-opus-4-8',
       customSystemPrompt: raw.customSystemPrompt ?? '',
     };
@@ -41,8 +57,25 @@ export function loadConfig(): ClaudeConfig {
 }
 
 export function saveConfig(cfg: Partial<ClaudeConfig>): void {
-  const merged = { ...loadConfig(), ...cfg };
-  fs.writeFileSync(CONFIG_FILE(), JSON.stringify(merged), { mode: 0o600 });
+  const { apiKey, ...rest } = { ...loadConfig(), ...cfg };
+  const out: Record<string, unknown> = { ...rest };
+
+  if (apiKey) {
+    if (safeStorage.isEncryptionAvailable()) {
+      out.apiKeyEnc = safeStorage.encryptString(apiKey).toString('base64');
+    } else {
+      // No OS keychain (some Linux desktops). Storing plaintext is worse than
+      // encrypting but better than silently discarding the user's key; the
+      // 0600 below is then the only thing protecting it.
+      out.apiKey = apiKey;
+    }
+  }
+
+  const file = CONFIG_FILE();
+  fs.writeFileSync(file, JSON.stringify(out), { mode: 0o600 });
+  // `mode` is only applied when writeFileSync *creates* the file, so an
+  // existing config keeps whatever permissions it already had. Set them again.
+  fs.chmodSync(file, 0o600);
 }
 
 // ── Context payload sent from the renderer with each question ────────────────
