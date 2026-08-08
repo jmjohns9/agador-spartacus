@@ -19,6 +19,14 @@ files/*.log
 # Local-only experimental data
 files.zip
 parts/
+# Vendored upstream archives. EcuBus-Pro-master.zip alone is 119MB, over
+# GitHub's 100MB hard limit, so a push carrying it is rejected outright.
+*.zip
+
+# Skill clones vendored under .claude/skills/ that carry their own .git.
+# `git add` on these records a gitlink instead of the files, so a clone of
+# this repo gets an empty directory. Install them locally instead.
+.claude/skills/ui-ux-pro-max-skill/
 
 # Documents (binary, not source-tracked)
 *.pages
