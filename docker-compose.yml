@@ -1,0 +1,26 @@
+services:
+  obd-review:
+    build:
+      context: ./files
+      dockerfile: docker/Dockerfile
+    image: obd-review-architecture:latest
+    container_name: obd-review
+    restart: unless-stopped
+    ports:
+      # noVNC — open http://<host>:6080/vnc.html in a browser to see the app
+      - "6080:6080"
+    volumes:
+      # Live-mount host /dev so a USB OBD adapter plugged in after startup
+      # (e.g. hot-plugged ttyUSB0/ttyACM0) is visible without a restart.
+      - /dev:/dev
+      # App data (storage.db, storage.json) lands in Electron's userData dir,
+      # which resolves to ~/.config/<app name> when running as root.
+      - obd-data:/root/.config
+    device_cgroup_rules:
+      - "c 188:* rmw" # USB-serial adapters (FTDI, CP210x, CH340, ...)
+      - "c 166:* rmw" # USB CDC-ACM adapters (Arduino-style, some ELM327 clones)
+    group_add:
+      - dialout
+
+volumes:
+  obd-data:
