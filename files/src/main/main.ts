@@ -5,7 +5,8 @@ import { execFile } from 'child_process';
 import { ELM327Commander } from '../core/elm327Commander';
 import { ELM327Simulator } from '../core/elm327Simulator';
 import { OBDProtocolManager } from '../core/obdProtocolManager';
-import { PIDReading, DTCCode, ModuleState, ConnectionStatus, LogEntry } from '../shared/types';
+import { PIDReading, DTCCode, ModuleState, ConnectionStatus, LogEntry, PcmReadResult } from '../shared/types';
+import { PcmDiagnostics } from '../core/pcmDiagnostics';
 import { GMT800 } from '../core/platforms/gmt800';
 import { askClaude, loadConfig as loadClaudeConfig, saveConfig as saveClaudeConfig, SessionContext, ChatTurn, CLAUDE_MODELS, DEFAULT_SYSTEM_PROMPT } from './claudeAssistant';
 import * as fs from 'fs';
@@ -365,6 +366,38 @@ ipcMain.handle('obd:scan-dtc', async () => {
 ipcMain.handle('obd:clear-dtc', async () => {
   if (!obd) return false;
   return await obd.clearDTCs();
+});
+
+ipcMain.handle('pcm:read-ids', async (): Promise<PcmReadResult> => {
+  if (!elm) return { ok: false, error: 'Not connected to an adapter.' };
+  if (simulatorMode) {
+    return { ok: false, error: 'PCM identity is read from the physical module — not available in simulator mode.' };
+  }
+
+  // The read reprograms the adapter's header and turns headers on, which would
+  // corrupt parsePIDResponse mid-flight. Take the bus, then give it back.
+  const wasPolling = obd !== null;
+  obd?.stopPolling();
+  addLog({ timestamp: Date.now(), level: 'info', message: 'PCM identity read starting — PID polling paused' });
+
+  try {
+    const pcm = new PcmDiagnostics(elm);
+    const identity = await pcm.readIdentity((done, total) => {
+      sendToRenderer('pcm:read-progress', { done, total });
+    });
+    const found = identity.fields.filter(f => f.supported).length;
+    addLog({ timestamp: Date.now(), level: 'ok', message: `PCM identity read complete — ${found}/${identity.fields.length} blocks supported` });
+    return { ok: true, identity };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    addLog({ timestamp: Date.now(), level: 'error', message: `PCM identity read failed: ${msg}` });
+    return { ok: false, error: msg };
+  } finally {
+    if (wasPolling) {
+      obd?.startPolling();
+      addLog({ timestamp: Date.now(), level: 'info', message: 'PID polling resumed' });
+    }
+  }
 });
 
 ipcMain.handle('obd:check-modules', async () => {

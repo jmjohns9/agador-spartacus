@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useAppStore, selectBatteryVoltage, selectActiveDTCCount, vehicleDisplayName } from './store/appStore';
 import { buildCSSVars, FONTS } from './theme/theme';
-import { PIDReading, DTCCode, ModuleState, LogEntry, SessionSnapshot, DataRecording, FreezeFrame, StorageConfig, StorageInfo, ReportPayload } from '../shared/types';
+import { PIDReading, DTCCode, ModuleState, LogEntry, SessionSnapshot, DataRecording, FreezeFrame, StorageConfig, StorageInfo, ReportPayload, PcmReadResult } from '../shared/types';
 
 // Screens
 import { ConnectionScreen }   from './screens/ConnectionScreen';
@@ -19,6 +19,7 @@ import { ParasiteScreen }     from './screens/ParasiteScreen';
 import { CompareScreen }      from './screens/CompareScreen';
 import { LogsScreen }         from './screens/LogsScreen';
 import { EcuBusScreen }       from './screens/EcuBusScreen';
+import { PcmScreen }          from './screens/PcmScreen';
 import { SettingsScreen }     from './screens/SettingsScreen';
 import { DataLoggerScreen }  from './screens/DataLoggerScreen';
 import { FreezeFrameScreen } from './screens/FreezeFrameScreen';
@@ -32,6 +33,8 @@ declare global {
       scanDTCs: () => Promise<DTCCode[]>;
       clearDTCs: () => Promise<boolean>;
       checkModules: () => Promise<ModuleState[]>;
+      readPcmIds: () => Promise<PcmReadResult>;
+      onPcmProgress: (cb: (p: { done: number; total: number }) => void) => () => void;
       exportLog: (filename: string) => Promise<void>;
       exportCSV: (data: string, filename: string) => Promise<void>;
       onPIDReading: (cb: (r: PIDReading) => void) => () => void;
@@ -84,7 +87,7 @@ declare global {
 
 // ─── Nav Item Definition ───────────────────────────────────────────────────────
 
-type ScreenId = 'connect' | 'assistant' | 'health' | 'live' | 'allpids' | 'engine' | 'electrical' | 'hvac' | 'transmission' | 'dtc' | 'modules' | 'parasite' | 'compare' | 'logs' | 'ecubus' | 'logger' | 'freezeframes' | 'settings';
+type ScreenId = 'connect' | 'assistant' | 'health' | 'live' | 'allpids' | 'engine' | 'electrical' | 'hvac' | 'transmission' | 'dtc' | 'modules' | 'parasite' | 'compare' | 'logs' | 'ecubus' | 'pcm' | 'logger' | 'freezeframes' | 'settings';
 
 const NAV_ITEMS: Array<{ id: ScreenId; icon: string; label: string; tooltip: string; groupLabel?: string }> = [
   { id: 'connect',      icon: 'ti-bluetooth',            label: 'Connect', tooltip: 'Bluetooth / serial connection' },
@@ -101,6 +104,7 @@ const NAV_ITEMS: Array<{ id: ScreenId; icon: string; label: string; tooltip: str
   { id: 'modules',      icon: 'ti-cpu',                  label: 'Modules', tooltip: 'Module wake monitor' },
   { id: 'parasite',     icon: 'ti-zoom-exclamation',     label: 'Draw',    tooltip: 'Parasitic draw analysis' },
   { id: 'ecubus',       icon: 'ti-circuit-diode',         label: 'EcuBus',  tooltip: 'EcuBus-Pro CAN/UDS tools',   groupLabel: 'Advanced' },
+  { id: 'pcm',          icon: 'ti-id-badge-2',           label: 'PCM',     tooltip: 'Powertrain control module identity' },
   { id: 'compare',      icon: 'ti-arrows-diff',          label: 'Compare', tooltip: 'Live vs historic compare',    groupLabel: 'Records' },
   { id: 'freezeframes', icon: 'ti-camera',               label: 'Freeze',  tooltip: 'Freeze frame viewer' },
   { id: 'logs',         icon: 'ti-file-text',            label: 'Logs',    tooltip: 'Session event log' },
@@ -121,6 +125,7 @@ const SCREEN_TITLES: Record<ScreenId, string> = {
   modules:      'Module wake monitor',
   parasite:     'Parasitic draw analysis',
   ecubus:       'EcuBus-Pro — CAN / UDS / LIN',
+  pcm:          'PCM diagnostics — module identity',
   compare:      'Live vs historic compare',
   logs:         'Session event log',
   logger:       'Data logger',
@@ -472,6 +477,7 @@ export function App(): React.ReactElement {
             {activeScreen === 'modules'      && <ModulesScreen />}
             {activeScreen === 'parasite'     && <ParasiteScreen />}
             {activeScreen === 'ecubus'       && <EcuBusScreen />}
+            {activeScreen === 'pcm'          && <PcmScreen />}
             {activeScreen === 'compare'      && <CompareScreen />}
             {activeScreen === 'logs'         && <LogsScreen />}
             {activeScreen === 'settings'     && <SettingsScreen />}

@@ -380,3 +380,29 @@ export interface ReportPayload {
   protocol: string;
   appVersion: string;
 }
+
+// ─── PCM identity (GM Mode 3C over J1850 VPW) ────────────────────────────────
+
+export type PcmFieldGroup = 'identity' | 'calibration' | 'level' | 'service';
+
+export interface PcmField {
+  key: string;
+  label: string;
+  group: PcmFieldGroup;
+  /** Decoded value, or null when the PCM did not answer this block. */
+  value: string | null;
+  /** Raw payload hex, kept so an unexpected decode can be checked by hand. */
+  raw: string | null;
+  /** False means this calibration does not expose the block — not an error. */
+  supported: boolean;
+}
+
+export interface PcmIdentity {
+  fields: PcmField[];
+  readAt: number;
+  protocol: string;
+}
+
+export type PcmReadResult =
+  | { ok: true; identity: PcmIdentity }
+  | { ok: false; error: string };

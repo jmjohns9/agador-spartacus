@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { PIDReading, DTCCode, ModuleState, ConnectionStatus, LogEntry, SessionSnapshot, DataRecording, FreezeFrame, StorageConfig, StorageInfo, ReportPayload } from '../shared/types';
+import { PIDReading, DTCCode, ModuleState, ConnectionStatus, LogEntry, SessionSnapshot, DataRecording, FreezeFrame, StorageConfig, StorageInfo, ReportPayload, PcmReadResult } from '../shared/types';
 
 // ─── Secure IPC Bridge (contextIsolation: true) ────────────────────────────────
 // All communication between the renderer (React) and main process
@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   scanDTCs:     ()                               => ipcRenderer.invoke('obd:scan-dtc'),
   clearDTCs:    ()                               => ipcRenderer.invoke('obd:clear-dtc'),
   checkModules: ()                               => ipcRenderer.invoke('obd:check-modules'),
+  readPcmIds:   ()                               => ipcRenderer.invoke('pcm:read-ids') as Promise<PcmReadResult>,
   exportLog:    (filename: string)               => ipcRenderer.invoke('session:export-log', { filename }),
   exportCSV:    (data: string, filename: string) => ipcRenderer.invoke('session:export-csv', { data, filename }),
 
@@ -32,6 +33,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onPIDReading: (cb: (r: PIDReading) => void) => {
     ipcRenderer.on('obd:pid-reading', (_e, r) => cb(r));
     return () => ipcRenderer.removeAllListeners('obd:pid-reading');
+  },
+
+  onPcmProgress: (cb: (p: { done: number; total: number }) => void) => {
+    ipcRenderer.on('pcm:read-progress', (_e, p) => cb(p));
+    return () => ipcRenderer.removeAllListeners('pcm:read-progress');
   },
 
   onDTCResult: (cb: (dtcs: DTCCode[]) => void) => {

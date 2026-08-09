@@ -126,6 +126,7 @@ export type ScreenId =
   | 'compare'
   | 'logs'
   | 'ecubus'
+  | 'pcm'
   | 'logger'
   | 'freezeframes'
   | 'settings';
