@@ -8,6 +8,14 @@ const ELM_ERROR    = 'ERROR';
 const ELM_NO_DATA  = 'NO DATA';
 const ELM_TIMEOUT  = 2500; // ms per command during init
 
+// Ceiling on unterminated receive data. A legitimate multi-frame Mode 09 reply
+// is a few hundred bytes, so 64 KB is far above anything real while still
+// bounding a peripheral that streams without ever sending the '>' prompt.
+const MAX_RECV_BUF = 64 * 1024;
+
+// SAE J853 vehicle identification numbers are exactly 17 characters.
+const VIN_LENGTH = 17;
+
 export type ELM327Event =
   | 'ready'
   | 'protocol'
@@ -53,6 +61,18 @@ export class ELM327Commander extends EventEmitter {
 
   // ── Called by the transport layer with each chunk of incoming bytes ──────────
   onData(chunk: string): void {
+    // Without this cap the buffer grows for as long as the peripheral keeps
+    // talking: a hostile adapter, a wrong-baud link, or a device emitting
+    // binary never produces the '>' below, and the per-command timeout only
+    // clears recvBuf while a command is actually pending.
+    if (this.recvBuf.length + chunk.length > MAX_RECV_BUF) {
+      this.log(
+        `Discarded ${this.recvBuf.length + chunk.length} bytes: no '>' prompt within ${MAX_RECV_BUF} bytes`,
+        'warn',
+      );
+      this.recvBuf = '';
+      return;
+    }
     this.recvBuf += chunk;
 
     // ELM327 responses end with the '>' prompt
@@ -171,7 +191,9 @@ export class ELM327Commander extends EventEmitter {
       }
     }
     if (vinBytes.length < 11) return null;
-    return String.fromCharCode(...vinBytes).trim();
+    // A VIN is 17 characters. Truncate before building the string: spreading an
+    // adapter-sized array into String.fromCharCode overflows the argument limit.
+    return vinBytes.slice(0, VIN_LENGTH).map(b => String.fromCharCode(b)).join('').trim();
   }
 
   // ── Send a raw AT or OBD command and wait for the prompt ─────────────────────
@@ -303,9 +325,9 @@ export class ELM327Commander extends EventEmitter {
     resolve(response);
   }
 
-  private log(msg: string): void {
+  private log(msg: string, level: 'info' | 'warn' = 'info'): void {
     const message = `[ELM327] ${msg}`;
     console.log(message);
-    this.emit('log', { timestamp: Date.now(), level: 'info', message });
+    this.emit('log', { timestamp: Date.now(), level, message });
   }
 }
