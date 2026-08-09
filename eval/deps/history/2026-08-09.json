@@ -1,0 +1,108 @@
+{
+  "review_type": "deps",
+  "scope": {
+    "root": "files",
+    "files": [
+      "files/package.json",
+      "files/package-lock.json",
+      "files/index.html",
+      "files/src/**/*.ts",
+      "files/src/**/*.tsx",
+      "files/scripts/gen-dtc-catalog.ts"
+    ],
+    "git_sha": "045a37f8e039d0c0a0b20b3022d9367b1c3a426b"
+  },
+  "findings": [
+    {
+      "id": "DEP-001",
+      "category": "precarious_pre_1_0",
+      "severity": "medium",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "The actively-used @anthropic-ai/sdk dependency is pinned with a caret on a 0.x version, which cannot adopt fixes published outside the 0.104.* patch line.",
+      "evidence": "dependencies: \"@anthropic-ai/sdk\": \"^0.104.1\". Under semver, a caret on a 0.x package resolves to >=0.104.1 <0.105.0, so any security or correctness fix shipped in 0.105.0+ is unreachable without a manual manifest edit. The package is genuinely in use: files/src/main/claudeAssistant.ts:4 has `import Anthropic from '@anthropic-ai/sdk';`.",
+      "recommendation": "Widen the range to `~0.104` only as a stopgap and add @anthropic-ai/sdk to a Renovate/Dependabot config so 0.x minor bumps are raised as PRs automatically; re-pin deliberately at each minor rather than relying on caret resolution.",
+      "confidence": 0.95,
+      "fingerprint_inputs": ["precarious_pre_1_0", "files/package.json", "@anthropic-ai/sdk:^0.104.1"]
+    },
+    {
+      "id": "DEP-002",
+      "category": "other",
+      "category_detail": "unpinned CDN dependency",
+      "severity": "medium",
+      "file": "files/index.html",
+      "line": null,
+      "summary": "index.html loads @tabler/icons-webfont from a third-party CDN at the floating `@latest` tag with no subresource integrity, duplicating a dependency that is already declared and bundled.",
+      "evidence": "files/index.html:8: `<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css\" />`. The same package is declared in dependencies as \"@tabler/icons-webfont\": \"^3.44.0\" and imported through the bundler at files/src/renderer/index.tsx:3. The CDN copy is outside the lockfile entirely: `@latest` resolves to whatever jsdelivr serves at load time, and there is no `integrity` attribute to detect substitution.",
+      "recommendation": "Delete the CDN <link> from files/index.html and rely on the bundled `import '@tabler/icons-webfont/dist/tabler-icons.min.css'` that already exists, so the stylesheet is covered by package-lock.json.",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["other", "files/index.html", "@tabler/icons-webfont:cdn-latest"]
+    },
+    {
+      "id": "DEP-003",
+      "category": "missing_audit",
+      "severity": "medium",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "The repository has no CI pipeline, no vulnerability-scan step, and no Renovate or Dependabot configuration, so no dependency update or advisory is surfaced automatically.",
+      "evidence": "None of .github/workflows/, .gitlab-ci.yml, .circleci/config.yml, renovate.json, .dependabot/config.yml, or .github/dependabot.yml exist in the repository. package.json scripts contains only dev/watch:main/watch:renderer/build/dist/typecheck/gen:dtcs — there is no `audit` or test entry. This is the root cause behind several stale majors that would otherwise be reported separately: \"react\": \"^18.0.0\" and \"react-dom\": \"^18.0.0\" (React 19 is the current line), \"zustand\": \"^4.0.0\" (v5 is current), and \"electron-store\": \"^8.0.0\" (several majors behind). Each is one boundary or more behind and none can advance on its own, because a caret range never crosses a major.",
+      "recommendation": "Add a .github/workflows/ci.yml that runs `npm ci` followed by `npm audit --audit-level=high` and `npm run typecheck`, and commit a renovate.json (or .github/dependabot.yml) so major-version bumps such as react 18→19 and zustand 4→5 arrive as reviewable PRs.",
+      "confidence": 0.95,
+      "fingerprint_inputs": ["missing_audit", "files/package.json", "no-ci-audit"]
+    },
+    {
+      "id": "DEP-004",
+      "category": "unused_dep",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "electron-store is declared as a runtime dependency but is never imported anywhere in the source tree.",
+      "evidence": "dependencies: \"electron-store\": \"^8.0.0\". A recursive search across every .ts/.tsx/.js/.jsx/.html/.css file under files/ (excluding node_modules and package-lock.json) returns zero occurrences of the string `electron-store` — no `import`, no `require`, not even a comment. Persistence is instead handled by better-sqlite3 in files/src/main/storageService.ts:45. The declared ^8.0.0 is also several majors behind current, which is moot if the package is removed.",
+      "recommendation": "Remove \"electron-store\" from dependencies in files/package.json and regenerate package-lock.json.",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["unused_dep", "files/package.json", "electron-store:^8.0.0"]
+    },
+    {
+      "id": "DEP-005",
+      "category": "unpinned_runtime",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "package.json declares no `engines` field, leaving the Node and npm versions used to build the app unconstrained.",
+      "evidence": "There is no `engines` key anywhere in files/package.json. This matters more than usual here because the project depends on better-sqlite3 (^12.11.1), a native module whose prebuilt binaries are tied to a specific Node/Electron ABI, and it is packaged with electron-builder (^26.15.3). A contributor on a mismatched Node major can produce a silently broken native build.",
+      "recommendation": "Add an `engines` block to files/package.json pinning the supported runtime, e.g. `\"engines\": {\"node\": \">=22 <23\", \"npm\": \">=10\"}`, matching the @types/node ^22.0.0 already declared.",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["unpinned_runtime", "files/package.json", "no-engines"]
+    },
+    {
+      "id": "DEP-006",
+      "category": "missing_overrides",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "package.json has no `overrides` block, so a vulnerable transitive dependency cannot be pinned without waiting for every direct parent to publish a fix.",
+      "evidence": "No `overrides` (npm) or `resolutions` (yarn) key is present in files/package.json. The dependency surface that sits below the direct deps is large — package-lock.json is 357790 bytes — and deep toolchain trees such as webpack ^5, electron-builder ^26 and ts-node ^10 are exactly where transitive advisories land.",
+      "recommendation": "Add an empty `\"overrides\": {}` block to files/package.json as a documented emergency lever, so a transitive pin is a one-line edit during an incident rather than a structural change.",
+      "confidence": 0.85,
+      "fingerprint_inputs": ["missing_overrides", "files/package.json", "no-overrides"]
+    },
+    {
+      "id": "DEP-007",
+      "category": "unused_dep",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "recharts is declared as a runtime dependency but is never imported anywhere in the source tree.",
+      "evidence": "dependencies: \"recharts\": \"^2.0.0\". A recursive search across every .ts/.tsx/.js/.jsx/.html/.css file under files/ (excluding node_modules and package-lock.json) returns zero occurrences of the string `recharts`, including in the charting-heavy screens under files/src/renderer/screens/ such as LiveScreen.tsx and HealthScreen.tsx.",
+      "recommendation": "Remove \"recharts\" from dependencies in files/package.json and regenerate package-lock.json; re-add it deliberately if charting is reintroduced.",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["unused_dep", "files/package.json", "recharts:^2.0.0"]
+    }
+  ],
+  "skipped": [
+    {"path": "files/.npmrc", "reason": "not found"},
+    {"path": ".npmrc", "reason": "not found"},
+    {"path": "files/EcuBus-Pro-master.zip", "reason": "vendored third-party archive, not a declared dependency input"}
+  ],
+  "stats": {"files_scanned": 72, "elapsed_ms": 154000}
+}
