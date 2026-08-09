@@ -1,0 +1,84 @@
+{
+  "review_type": "architecture",
+  "scope": {
+    "root": "files/src",
+    "globs": ["files/src/**/*.ts", "files/src/**/*.tsx"],
+    "git_sha": "83283ee690ad7863b15831391f5d2ec411b68f49"
+  },
+  "findings": [
+    {
+      "id": "ARC-001",
+      "category": "god_module",
+      "severity": "high",
+      "file": "files/src/main/main.ts",
+      "line": 1,
+      "summary": "main.ts owns window lifecycle, serial transport, simulator wiring, OBD session state, ~30 IPC handlers, two external HTTP clients, Bluetooth RSSI scraping, and PDF rendering in one 583-line file.",
+      "evidence": "Distinct concerns in a single module: window lifecycle (createWindow, app.whenReady, window-all-closed at :22/:565/:574); serial transport and port lifecycle (require('serialport') :16, connectToPort :143, releaseActivePort :130, activePort/isConnecting module state :57-58); simulator transport wiring (startSimulator :84 builds a fake EventEmitter send/recv pair); OBD session orchestration (startOBDManager :269 wires discovery, polling, protocol refresh, VIN read); ~30 ipcMain.handle registrations (:310-:555); platform data lookup (imports GMT800 directly at :9, returns GMT800.modules at :374 instead of going through resolvePlatform from core/platforms); two network clients (NHTSA vPIC :379, CarsXE :541); macOS Bluetooth RSSI scraping via execFile('system_profiler') :235; and PDF report rendering in a hidden BrowserWindow :509-535. The seam is obvious because these groups share almost no state — only sendToRenderer/addLog.",
+      "recommendation": "Split into: main/windowManager.ts (BrowserWindow lifecycle + sendToRenderer), main/transport/SerialTransport.ts and main/transport/SimulatorTransport.ts behind a shared `Transport { send(data: string): void; onData(cb): void; close(): Promise<void> }` interface, main/obdSession.ts (owns elm/obd/sessionLog and the connect/disconnect state machine), main/services/reportService.ts (PDF), main/services/vinDecoder.ts and main/services/carsxeClient.ts (HTTP), main/services/btRssi.ts, and main/ipc/register.ts that binds handlers to those services. main.ts then reduces to app bootstrap plus one registerIpc(services) call.",
+      "confidence": 0.93,
+      "fingerprint_inputs": ["god_module", "files/src/main/main.ts", "main process owns window lifecycle, transport, IPC, HTTP clients, and PDF rendering"]
+    },
+    {
+      "id": "ARC-002",
+      "category": "missing_abstraction",
+      "severity": "high",
+      "file": "files/src/main/storageService.ts",
+      "line": 76,
+      "summary": "StorageService hand-branches between a JSON-file backend and a SQLite backend with an inline `if (this.backend === 'sqlite')` in every one of its ten data methods, with no StorageBackend interface.",
+      "evidence": "Two concrete implementations of the same role live as free functions plus inline branches rather than behind an interface: local JSON backend at readLocal/writeLocal (:20-:35), SQLite backend at getDb (:43-:57). Every persistence method repeats the dispatch — saveSnapshot :139, getSnapshots :151, deleteSnapshot :159, saveRecording :171, getRecordings :183, deleteRecording :191, saveFreezeFrame :203, getFreezeFrames :220, deleteFreezeFrame :231, plus migrate :108. The two arms have already drifted: the SQLite arm of saveFreezeFrame (:204-:209) reuses the existing row id when a freeze frame for the same dtcCode exists, while the local arm (:211-:216) overwrites in place and returns the incoming ff.id, so the same call returns different ids depending on backend. Adding a third backend, or any new record type, means touching every method.",
+      "recommendation": "Define `interface StorageBackend { saveSnapshot/getSnapshots/deleteSnapshot, saveRecording/getRecordings/deleteRecording, saveFreezeFrame/getFreezeFrames/deleteFreezeFrame }` in main/storage/StorageBackend.ts, implement LocalJsonBackend.ts and SqliteBackend.ts against it, and reduce StorageService to backend selection, migrate (a generic read-all-from-A / write-all-to-B loop over the interface), and delegation. Inject the backend via the constructor so tests can substitute an in-memory implementation.",
+      "confidence": 0.92,
+      "fingerprint_inputs": ["missing_abstraction", "files/src/main/storageService.ts", "local and sqlite storage backends branched inline without a StorageBackend interface"]
+    },
+    {
+      "id": "ARC-003",
+      "category": "circular_responsibility",
+      "severity": "high",
+      "file": "files/src/core/elm327Commander.ts",
+      "line": 82,
+      "summary": "ELM327Commander promises generic ELM327 support but its initialize() path hard-codes OBDLink/STN vendor commands and one vehicle's bus assumptions, and emits user-facing presentation prose.",
+      "evidence": "The class name and file describe the generic ELM327 command set, but initialize() (:82-:144) mixes in vendor and vehicle specifics: steps 10 and 11 issue 'STI' (:127) and 'STDI' (:131), which are STN/OBDLink extensions — a genuine ELM327 answers '?' and the adapter is then reported as firmwareVersion 'Unknown' (:128), which main.ts surfaces directly as the connection banner (main.ts :212). setSleepTimer ('STSLLT' :259) and setPowerControl ('STPC' :264) are likewise OBDLink-only but sit unqualified on the generic class. The same method is documented as 'Full ELM327 initialization sequence for 2004 Silverado J1850 VPW' (:81) and step 8 states the 010C ping exists to 'lock onto J1850 VPW for the Silverado' (:117-:119) — single-vehicle knowledge in the protocol layer, even though core/platforms/ already owns per-vehicle data. The abort message at :91 is a paragraph of end-user UI copy about macOS Bluetooth SPP embedded in a protocol class.",
+      "recommendation": "Reduce ELM327Commander to the SAE/ELM327 baseline (ATZ/ATE0/ATL0/ATH0/ATS0/ATSP0/ATAT1/ATDP/ATRV plus send/parsePIDResponse). Introduce `interface AdapterCapabilities { readFirmware(): Promise<string>; readDeviceInfo(): Promise<string>; setSleepTimer?; setPowerControl? }` with an ObdLinkAdapter implementation holding the ST* commands, selected after the ATI/ATZ banner identifies the adapter. Replace the throw at :91 with a typed error code (e.g. `AdapterNotRespondingError`) and move the user-facing wording to the renderer's connection screen.",
+      "confidence": 0.85,
+      "fingerprint_inputs": ["circular_responsibility", "files/src/core/elm327Commander.ts", "generic ELM327 class hard-codes OBDLink ST commands and Silverado J1850 assumptions"]
+    },
+    {
+      "id": "ARC-004",
+      "category": "leaky_boundary",
+      "severity": "medium",
+      "file": "files/src/main/main.ts",
+      "line": 377,
+      "summary": "Nothing validates data crossing the IPC and network boundaries — external JSON is consumed as `any` and forwarded to the renderer, and renderer payloads are destructured straight into privileged main-process operations.",
+      "evidence": "Network boundary: the NHTSA vPIC response is parsed as `const json: any` and its fields are copied out untyped (:380-:390); the CarsXE response is likewise `const d: any` with fields probed by fallback chains (:544-:551). The decoded VIN result flows over IPC into App.tsx :168-:180, which writes it directly into the vehicle profile via setVehicle, which persists it to localStorage (appStore.ts :240) — an unvalidated third-party payload reaches persisted app state with no parse step. IPC boundary: no handler validates its argument. `report:generate` accepts `payload: unknown` (:509) and interpolates it into a string executed in a BrowserWindow via `executeJavaScript` (:524-:526), so a malformed or hostile payload is evaluated as code. `storage:set-config` (:490) and `storage:migrate` (:491) pass renderer-supplied values into StorageService, whose setConfig assigns updates.backend unchecked (storageService.ts :88). On the inbound side App.tsx casts IPC data in with `s.status as any` (:155) and hands PIDReading/DTCCode/ModuleState objects to the store unparsed (:157-:160).",
+      "recommendation": "Add a shared/schemas.ts with a runtime validator per IPC channel and per external response (zod or hand-written type guards keyed off the existing IPC channel map in shared/types.ts :311-:315). Wrap ipcMain.handle in a `handle(channel, schema, fn)` helper in main/ipc/register.ts that rejects non-conforming payloads before the handler body runs, and parse the NHTSA and CarsXE responses into declared DTOs in the extracted vinDecoder/carsxeClient services. Replace the executeJavaScript string interpolation in report:generate with a preload + IPC message or `win.webContents.send` so the payload is passed as structured data rather than source text.",
+      "confidence": 0.88,
+      "fingerprint_inputs": ["leaky_boundary", "files/src/main/main.ts", "IPC handlers and external HTTP responses consumed without validation or parsing"]
+    },
+    {
+      "id": "ARC-005",
+      "category": "tangled_state_ownership",
+      "severity": "medium",
+      "file": "files/src/renderer/screens/EcuBusScreen.tsx",
+      "line": 167,
+      "summary": "EcuBus state exists in both the zustand store and local component useState, and the CAN read path silently picks between the two copies at render time.",
+      "evidence": "appStore.ts declares an ecubus slice owning canFrames, canPaused, canFilter, udsRequests, udsResponses, udsTxId, udsRxId (:44-:60) with mutators addCANFrame, toggleCANPause, setCANFilter, addUDSExchange, clearCANFrames (:336-:351). EcuBusScreen re-declares the same state locally instead: CANMonitorTab holds its own `paused` and `filter` useState (:170-:171) and seeds `frames` from makeDemoCANFrames() (:169); UDSClientTab holds its own `txId`, `rxId`, and `history` (:331-:336). A repo-wide grep shows addCANFrame, toggleCANPause, setCANFilter, addUDSExchange, and clearCANFrames have no call sites outside the store definition, and udsTxId/udsRxId/canPaused/canFilter are never read — the store slice is written by nobody and read by nobody, yet remains the declared owner. The ambiguity is explicit at :176, where the render path chooses between the two owners with `ecubus.canFrames.length > 0 ? ecubus.canFrames : frames`, so filtering and pausing apply to whichever copy happens to be non-empty.",
+      "recommendation": "Pick one owner. Since live CAN traffic must arrive from the main process, make the store authoritative: delete the local useState in CANMonitorTab and UDSClientTab, read canFrames/canPaused/canFilter/udsRequests/udsResponses/udsTxId/udsRxId via useAppStore selectors, and drive them through the existing mutators. Move makeDemoCANFrames/makeDemoSignals/makeDemoLINFrames/makeDemoDoIPEntities (:108-:165) into a seedEcuBusDemoData() action so demo data enters through the same owner as real data, and drop the :176 fallback expression.",
+      "confidence": 0.87,
+      "fingerprint_inputs": ["tangled_state_ownership", "files/src/renderer/screens/EcuBusScreen.tsx", "ecubus store slice duplicated by local component state with a fallback read path"]
+    },
+    {
+      "id": "ARC-006",
+      "category": "wrong_layer_for_concern",
+      "severity": "medium",
+      "file": "files/src/core/obdProtocolManager.ts",
+      "line": 325,
+      "summary": "The protocol layer hard-codes GM-specific module names for DTC attribution, duplicating the module map that core/platforms already owns.",
+      "evidence": "getDTCModule (:325-:332) maps DTC prefixes to concrete module names — 'BCM/IPC', 'Network', 'ABS/EBCM', 'PCM' — inside OBDProtocolManager, whose job is SAE J1979 request/response handling. Vehicle knowledge already has a home: core/platforms/types.ts defines PlatformProfile.modules (:26-:27), gmt800.ts populates it with the real address map ('0x10 PCM', '0xE0 IPC', '0x28 BCM', '0x60 TCM', '0x40 ABS', '0xA0 HVAC', '0xC0 Radio' :8-:15), generic.ts leaves it empty on purpose because 'those are platform-specific and shouldn't be invented' (:5-:7), and index.ts exposes resolvePlatform (:14). So the same fact is stated twice, with the vehicle-agnostic layer holding the GM-flavored copy and the abbreviations not even matching. main.ts compounds it by importing GMT800 directly and returning GMT800.modules for the simulator (:9, :374) rather than resolving a platform. A non-GM vehicle gets 'ABS/EBCM' attribution from the protocol layer regardless of its actual bus.",
+      "recommendation": "Remove getDTCModule's hard-coded map. Add an optional `moduleResolver?: (code: string) => string | undefined` to the OBDProtocolManager constructor, and have the caller supply one derived from the resolved PlatformProfile; extend PlatformProfile with a `dtcPrefixToModule` map (empty for GENERIC) so the GM prefixes live in gmt800.ts alongside its module list. Fall back to the raw code with no module attribution when the platform has no mapping, and route main.ts's obd:check-modules through resolvePlatform(vehicle) instead of the direct GMT800 import.",
+      "confidence": 0.78,
+      "fingerprint_inputs": ["wrong_layer_for_concern", "files/src/core/obdProtocolManager.ts", "DTC-to-module vehicle knowledge hard-coded in the protocol layer instead of PlatformProfile"]
+    }
+  ],
+  "skipped": [],
+  "stats": {"files_scanned": 38, "elapsed_ms": 447000}
+}
