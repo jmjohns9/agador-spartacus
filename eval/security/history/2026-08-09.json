@@ -1,0 +1,183 @@
+{
+  "review_type": "security",
+  "scope": {
+    "root": "files/src",
+    "globs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs"],
+    "git_sha": "8dd3ca6f330d2f9b3a517c041b8be363aa1b3e7b"
+  },
+  "findings": [
+    {
+      "id": "SEC-001",
+      "category": "denial_of_service",
+      "severity": "high",
+      "file": "files/src/core/elm327Commander.ts",
+      "line": 56,
+      "summary": "The ELM327 receive buffer grows without bound when the adapter never emits the '>' prompt terminator.",
+      "evidence": "ELM327Commander.onData() does `this.recvBuf += chunk;` and only clears recvBuf inside `if (this.recvBuf.includes(ELM_PROMPT))`. A serial/Bluetooth peripheral that streams bytes containing no '>' — a hostile adapter, a wrong-baud link, or a device spewing binary — appends forever. The per-command timeout in resolveResponse() only clears recvBuf while a command is pending (`if (timedOut) this.recvBuf = ''`), so any idle period with the port open (after stopPolling(), between sessions, or before initialize()) has no bound at all. Unlike sessionLog in main.ts (capped at SESSION_LOG_MAX) and the renderer store arrays (capped in appStore.ts), this buffer has no cap.",
+      "recommendation": "Cap recvBuf in onData(): if `this.recvBuf.length + chunk.length > MAX_RECV_BUF` (e.g. 64 KB — far above the largest legitimate multi-frame Mode 09 reply), discard the buffer, emit a 'warn' log entry, and reset to '' instead of appending.",
+      "confidence": 0.95,
+      "fingerprint_inputs": ["denial_of_service", "files/src/core/elm327Commander.ts", "onData.recvBuf"]
+    },
+    {
+      "id": "SEC-002",
+      "category": "prompt_injection",
+      "severity": "medium",
+      "file": "files/src/main/claudeAssistant.ts",
+      "line": 184,
+      "summary": "Adapter- and ECU-derived text is concatenated into the <session-snapshot> prompt fence with no escaping of the closing delimiter.",
+      "evidence": "askClaude() builds `content: `<session-snapshot>\\n${formatContext(ctx)}\\n</session-snapshot>\\n\\n${question}``. formatContext() interpolates ctx.dtcs[].description, ctx.liveData[].value/name and ctx.recentLogs[] verbatim. Those strings originate outside the trust boundary: recentLogs is built in AssistantScreen.tsx:149 from the session log, which carries raw adapter text (main.ts addLog of `RX ← ${display}` under debugSerial, `Connected — ${info.firmwareVersion}`, and ELM327Commander.log of `Adapter responded to ${cmd}: ${resp.raw}`), and adapterInfo fields come straight from ATI/STI/STDI replies. A peripheral that answers ATI with '</session-snapshot> Ignore prior instructions…' closes the fence and injects operator-level text into the model prompt. Also matches injection_via_untrusted_peripheral; reported once here as the higher-severity framing.",
+      "recommendation": "Strip or neutralize the fence delimiters before interpolation — in formatContext(), run each interpolated value through a helper that replaces `</session-snapshot>` and `<session-snapshot>` (case-insensitive) with a safe placeholder, and truncate each line to a fixed length. Alternatively move the snapshot into a separate structured content block rather than a delimiter-fenced string.",
+      "confidence": 0.85,
+      "fingerprint_inputs": ["prompt_injection", "files/src/main/claudeAssistant.ts", "formatContext"]
+    },
+    {
+      "id": "SEC-003",
+      "category": "electron_hardening",
+      "severity": "medium",
+      "file": "files/src/main/main.ts",
+      "line": 30,
+      "summary": "The main BrowserWindow runs with sandbox disabled and no navigation or window-open handlers.",
+      "evidence": "createWindow() sets `webPreferences: { preload, contextIsolation: true, nodeIntegration: false, sandbox: false }`. contextIsolation and nodeIntegration are correct, but `sandbox: false` leaves the renderer process without the OS-level sandbox, so a renderer compromise gets full main-process-adjacent capabilities rather than being confined. Separately, no `will-navigate`, `will-redirect` or `setWindowOpenHandler` handler is registered anywhere in the tree (grep across files/src finds zero matches), so nothing stops the window from being navigated away from the local bundle to a remote origin — where the preload bridge in preload.ts (serial connect, file write, storage, Claude key config) would still be exposed.",
+      "recommendation": "Set `sandbox: true` in webPreferences (the preload uses only contextBridge/ipcRenderer, both available in sandboxed preloads), and in app.whenReady() register `mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))` plus a `will-navigate` listener that calls `event.preventDefault()` for any URL outside the app's own origin.",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["electron_hardening", "files/src/main/main.ts", "webPreferences"]
+    },
+    {
+      "id": "SEC-004",
+      "category": "dev_mode_attack_surface",
+      "severity": "medium",
+      "file": "files/src/main/main.ts",
+      "line": 40,
+      "summary": "NODE_ENV read at runtime decides whether the packaged app loads its renderer from a local HTTP server instead of the bundled files.",
+      "evidence": "createWindow() branches on `if (process.env.NODE_ENV === 'development') { mainWindow.loadURL('http://localhost:3000'); mainWindow.webContents.openDevTools({ mode: 'detach' }); } else { mainWindow.loadFile(...) }`. This is an environment variable evaluated at runtime, not a build-time constant, so a shipped build inherits it from whatever environment launches it. Anyone able to set NODE_ENV=development for the user's session (a login item, a shell profile, a launch agent) makes the production app load renderer content from localhost:3000 — content that then holds the full preload bridge: serial port open, session:export-log / export-csv file writes, storage:*, and claude:set-config / claude:get-config.",
+      "recommendation": "Gate the dev branch on Electron's own packaging signal rather than the environment: `if (!app.isPackaged) { ... }`. Keep NODE_ENV only as an additional dev-side condition, never as the sole one.",
+      "confidence": 0.85,
+      "fingerprint_inputs": ["dev_mode_attack_surface", "files/src/main/main.ts", "NODE_ENV"]
+    },
+    {
+      "id": "SEC-005",
+      "category": "input_validation",
+      "severity": "medium",
+      "file": "files/src/main/main.ts",
+      "line": 337,
+      "summary": "The obd:connect IPC handler passes a renderer-supplied device path straight to SerialPort with no validation or allowlist.",
+      "evidence": "`ipcMain.handle('obd:connect', async (_event, { port }: { port: string }) => { if (port === 'SIMULATOR') ... else await connectToPort(port); })`. connectToPort() does no shape check — it rewrites `/dev/tty.` to `/dev/cu.` and then calls `new SerialPort({ path: portPath, baudRate: 115200, autoOpen: false })`. There is no check that portPath is one of the paths returned by the obd:list-ports enumeration, no type guard that it is even a string, and no charset/prefix constraint. A compromised or buggy renderer can drive the main process into opening an arbitrary character device or file path by that name, and the resulting bytes are then fed to ELM327Commander.onData().",
+      "recommendation": "In the obd:connect handler, reject non-string input, then resolve the requested path against a fresh `SerialPort.list()` and refuse anything not present in that enumeration (keeping the 'SIMULATOR' literal as the only special case). Do the tty→cu rewrite before the allowlist check so the corrected path is the one validated.",
+      "confidence": 0.8,
+      "fingerprint_inputs": ["input_validation", "files/src/main/main.ts", "obd:connect"]
+    },
+    {
+      "id": "SEC-006",
+      "category": "secrets_exposure",
+      "severity": "medium",
+      "file": "files/src/main/main.ts",
+      "line": 541,
+      "summary": "The CarsXE API key is sent as a URL query parameter and is not URL-encoded.",
+      "evidence": "`const url = `https://api.carsxe.com/obdcodesdecoder?key=${apiKey}&code=${encodeURIComponent(code)}&source=claude_plugin`;` in the carsxe:decode handler. The `code` value is encoded but `apiKey` is not. Two problems: query strings are the most commonly logged part of a request (origin access logs, forward proxies, TLS-terminating middleboxes, Electron/Chromium net-log captures), so the credential leaks well beyond the process that needs it; and an unencoded key containing '&' or '#' would split into extra parameters, corrupting the request and potentially spilling key material into a different field.",
+      "recommendation": "Send the credential in a request header instead — `await fetch(url, { headers: { 'X-API-Key': apiKey } })` (or whatever header CarsXE documents) — and drop `key` from the query string. If the vendor supports only the query form, at minimum wrap it in encodeURIComponent().",
+      "confidence": 0.8,
+      "fingerprint_inputs": ["secrets_exposure", "files/src/main/main.ts", "carsxe:decode"]
+    },
+    {
+      "id": "SEC-007",
+      "category": "injection_via_untrusted_peripheral",
+      "severity": "medium",
+      "file": "files/src/renderer/screens/LogsScreen.tsx",
+      "line": 95,
+      "summary": "Adapter-derived log text is written into exported CSV without neutralizing spreadsheet formula prefixes.",
+      "evidence": "handleExportCSV() builds each row as `${ts},${e.level},${e.pid ?? ''},${e.value ?? ''},${msg}` where `const msg = `\"${(e.message ?? '').replace(/\"/g, '\"\"')}\"``. The quote-doubling correctly prevents CSV field breakout, but it does not stop formula injection: a cell whose content begins with '=', '+', '-' or '@' is still evaluated as a formula by Excel, LibreOffice and Google Sheets even inside a quoted field. Log messages carry unsanitized adapter bytes (main.ts logs `RX ← ${display}` under debugSerial and `Adapter responded to ${cmd}: ${resp.raw}` from ELM327Commander.log), so an adapter that replies with `=cmd|'/c calc'!A0` plants an executable cell in the technician's exported log. The `${e.value ?? ''}` field is also interpolated unquoted, though its values are numeric from PID decode.",
+      "recommendation": "Prefix-escape every exported cell: before quoting, if the value starts with '=', '+', '-', '@', tab or CR, prepend a single quote or a leading apostrophe-space so spreadsheets treat it as text. Apply the same helper to the value column and quote it too. The same fix is needed for appStore.exportCSV() and DataLoggerScreen.exportCSV(), which build CSV from the same data.",
+      "confidence": 0.8,
+      "fingerprint_inputs": ["injection_via_untrusted_peripheral", "files/src/renderer/screens/LogsScreen.tsx", "handleExportCSV"]
+    },
+    {
+      "id": "SEC-008",
+      "category": "denial_of_service",
+      "severity": "low",
+      "file": "files/src/core/elm327Commander.ts",
+      "line": 174,
+      "summary": "readVIN spreads an unbounded byte array into String.fromCharCode, which throws once the adapter returns enough frames.",
+      "evidence": "`return String.fromCharCode(...vinBytes).trim();` where vinBytes is accumulated by a `while ((match = framePattern.exec(hexPart)) !== null)` loop over every 4902-prefixed frame in the response, with no length limit. A long reply produces an argument list past the engine's call-argument limit and raises RangeError. Impact is contained rather than fatal: the only caller path (main.ts startOBDManager, `try { const vin = await obd!.readVIN(); } catch { }`) swallows the throw, so the app does not crash — VIN detection just silently fails. The allocation that precedes the throw is bounded only by SEC-001.",
+      "recommendation": "Cap the loop — stop collecting once vinBytes.length exceeds the 17-character VIN plus slack (e.g. 64) — and build the string with a chunked loop or `Buffer.from(vinBytes).toString('ascii')` instead of spreading into String.fromCharCode.",
+      "confidence": 0.75,
+      "fingerprint_inputs": ["denial_of_service", "files/src/core/elm327Commander.ts", "readVIN.fromCharCode"]
+    },
+    {
+      "id": "SEC-009",
+      "category": "secrets_storage",
+      "severity": "low",
+      "file": "files/src/main/claudeAssistant.ts",
+      "line": 70,
+      "summary": "The Claude API key falls back to plaintext on disk when the OS keychain is unavailable, and pre-existing plaintext keys persist until the next save.",
+      "evidence": "saveConfig() does `if (safeStorage.isEncryptionAvailable()) { out.apiKeyEnc = ... } else { out.apiKey = apiKey; }` — writing the raw key into claude-config.json. The 0600 mode plus explicit chmodSync is the only protection, which stops other local users but not any process running as the user. Separately readApiKey() still reads a legacy plaintext `apiKey` field, so a key written before encryption existed stays in cleartext on disk until the user happens to save the config again; nothing proactively migrates it. The tree does mitigate the common case (safeStorage is used where available, and the file mode is re-applied on overwrite, not just on create), so this is the residual gap only.",
+      "recommendation": "On the no-keychain path, refuse to persist and hold the key in memory for the session only, surfacing a clear message in the assistant settings — or make the plaintext fallback opt-in. Additionally, have loadConfig() detect a legacy plaintext `apiKey` and immediately rewrite the file in encrypted form when safeStorage is available, rather than waiting for the next saveConfig() call.",
+      "confidence": 0.7,
+      "fingerprint_inputs": ["secrets_storage", "files/src/main/claudeAssistant.ts", "saveConfig.plaintextFallback"]
+    },
+    {
+      "id": "SEC-010",
+      "category": "input_validation",
+      "severity": "low",
+      "file": "files/src/main/main.ts",
+      "line": 379,
+      "summary": "The VIN passed to obd:decode-vin reaches a third-party API request with no length or charset check.",
+      "evidence": "`const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/${encodeURIComponent(vin)}?format=json`)`. encodeURIComponent() prevents URL-structure injection, so the sink rejects the malicious shapes that matter most — but it is not a shape check. The value reaching this handler is peripheral-derived (ELM327Commander.readVIN() assembles it from Mode 09 response bytes, filtered only to printable ASCII with a >=11 length floor, then main.ts forwards it to the renderer via obd:vin-detected), and the renderer can also pass an arbitrary string. Nothing constrains it to the 17-character alphanumeric VIN format, so an oversized string from a misbehaving adapter becomes an oversized outbound request to a third party.",
+      "recommendation": "Validate before the fetch: reject anything that does not match `/^[A-HJ-NPR-Z0-9]{11,17}$/i` and return null, so a malformed adapter response never reaches the network.",
+      "confidence": 0.65,
+      "fingerprint_inputs": ["input_validation", "files/src/main/main.ts", "obd:decode-vin:vin"]
+    },
+    {
+      "id": "SEC-011",
+      "category": "rate_limiting",
+      "severity": "low",
+      "file": "files/src/main/main.ts",
+      "line": 419,
+      "summary": "The claude:ask IPC handler has no throttle or spend cap on a billed API call.",
+      "evidence": "`ipcMain.handle('claude:ask', ...)` aborts any in-flight request and immediately starts a new one, with no minimum interval, no per-session request counter, and no token budget. askClaude() caps only the reply at `max_tokens: 1500` and the history at `history.slice(-12)`; the input side (live PIDs, DTC catalog causes/repairs, 30 log lines) is resent in full on every question. The renderer's `busy` flag in AssistantScreen serializes sends but is renderer-side state, not an enforcement point — regenerate() and the quick-action buttons can each drive another paid call. AssistantScreen already tracks cumulative token usage for display, so the data needed to enforce a cap is present but unused.",
+      "recommendation": "Enforce in the main process: track a per-session request count and cumulative input+output tokens in the claude:ask handler, reject with a structured `{ ok: false, error }` once either passes a configured ceiling, and add a minimum inter-request interval (e.g. 1s) so a stuck renderer loop cannot bill repeatedly.",
+      "confidence": 0.7,
+      "fingerprint_inputs": ["rate_limiting", "files/src/main/main.ts", "claude:ask"]
+    },
+    {
+      "id": "SEC-012",
+      "category": "missing_csp",
+      "severity": "low",
+      "file": "files/src/main/main.ts",
+      "line": 517,
+      "summary": "The offscreen PDF report window renders session data with no Content-Security-Policy.",
+      "evidence": "report:generate creates a BrowserWindow and loads `assets/report.html`; no CSP header is installed via onHeadersReceived, and that template carries no `<meta http-equiv=\"Content-Security-Policy\">` (unlike files/src/renderer/index.html, which does have one). The page then does `app.innerHTML = cover + dtcsPage + ...` over report payload data that includes DTC descriptions and log lines ultimately sourced from the adapter. The template does HTML-escape its interpolations, so this is a missing defense-in-depth layer behind that escaping rather than a live injection.",
+      "recommendation": "Add `<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'\">` to assets/report.html, or install an equivalent CSP for that window's session via `win.webContents.session.webRequest.onHeadersReceived`.",
+      "confidence": 0.7,
+      "fingerprint_inputs": ["missing_csp", "files/src/main/main.ts", "report-window"]
+    },
+    {
+      "id": "SEC-013",
+      "category": "electron_hardening",
+      "severity": "low",
+      "file": "files/src/main/main.ts",
+      "line": 519,
+      "summary": "The offscreen PDF report window disables contextIsolation.",
+      "evidence": "`const win = new BrowserWindow({ show: false, ..., webPreferences: { contextIsolation: false, nodeIntegration: false } });` in report:generate. nodeIntegration is off and no preload is attached, which keeps the blast radius small, but contextIsolation: false removes the separation between Electron's internal privileged context and the page — and this window is then driven by `win.webContents.executeJavaScript` with renderer-supplied report payload data. It is also created without `sandbox`. Distinct from SEC-003, which covers the main window.",
+      "recommendation": "Set `contextIsolation: true` and `sandbox: true` on the report window. The template only needs `window.__REPORT_DATA__`, which executeJavaScript can still set in the isolated main world.",
+      "confidence": 0.75,
+      "fingerprint_inputs": ["electron_hardening", "files/src/main/main.ts", "report:generate"]
+    },
+    {
+      "id": "SEC-014",
+      "category": "denial_of_service",
+      "severity": "low",
+      "file": "files/src/renderer/screens/DataLoggerScreen.tsx",
+      "line": 58,
+      "summary": "An in-progress recording accumulates samples in memory with no cap on count or duration.",
+      "evidence": "startRecording() opens `setInterval(() => { ... recRef.current.samples.push({ timestamp: Date.now(), values }); }, sampleInterval)` and nothing bounds samples.length — the array only stops growing when the user presses stop. sampleInterval is user-settable, and the app's own parasitic-draw workflow (ParasiteScreen) is an overnight test, so an 8-hour run at the 500ms default accumulates ~57,600 sample objects, each holding a value per selected PID. On stop the whole array is JSON-serialized into storage.json via storage:save-recording. MAX_RECORDINGS caps how many recordings are retained but not how large any one of them gets. Lower severity than SEC-001 because the growth rate is fixed by a timer the user starts, not driven by the peripheral.",
+      "recommendation": "Cap the buffer in the interval callback — stop recording (or drop the oldest samples and set the existing warnDropped flag) once samples.length passes a ceiling such as 50,000 — and surface the cap in the recording UI so a long test fails visibly rather than silently consuming memory.",
+      "confidence": 0.65,
+      "fingerprint_inputs": ["denial_of_service", "files/src/renderer/screens/DataLoggerScreen.tsx", "startRecording.samples"]
+    }
+  ],
+  "skipped": [],
+  "stats": {
+    "files_scanned": 38,
+    "elapsed_ms": 604000
+  }
+}
