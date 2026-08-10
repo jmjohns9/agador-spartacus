@@ -1,0 +1,164 @@
+{
+  "review_type": "performance",
+  "scope": {
+    "root": "files/src",
+    "globs": [
+      "files/src/**/*.ts",
+      "files/src/**/*.tsx",
+      "files/src/**/*.js",
+      "files/src/**/*.mjs"
+    ],
+    "git_sha": "b47bcf113d637dc855b82a98a43674579c8c1b59"
+  },
+  "findings": [
+    {
+      "id": "PRF-001",
+      "category": "unbounded_buffer",
+      "severity": "high",
+      "file": "files/src/renderer/screens/DataLoggerScreen.tsx",
+      "line": 65,
+      "summary": "The in-progress recording sample buffer grows without any cap for as long as the user leaves the logger running.",
+      "evidence": "startRecording() installs `setInterval(..., sampleInterval)` with sampleInterval selectable down to 100ms (INTERVALS = [100, 500, 1000, 5000]), and the tick does `recRef.current.samples.push({ timestamp, values })` where `values` holds one entry per selected PID (KEY_PIDS = 12 by default). There is no length cap, no duration cap, and no drop-oldest path. Every other growable buffer in this codebase is bounded — sessionLog at SESSION_LOG_MAX=5000 (main.ts:66), history at historyMaxPoints=500 (appStore.ts:187), canFrames at 1000 (appStore.ts:340), log at 1000 (appStore.ts:327) — this one is the outlier. At 100ms a one-hour drive-along logging session accumulates 36,000 sample objects each holding a 12-key record, all resident in the renderer heap, and is then handed whole to JSON.stringify on save.",
+      "recommendation": "Bound the buffer the way the rest of the app does: cap `samples` at an explicit MAX_SAMPLES and either stop recording with a visible notice or drop-oldest via a splice block (mirroring the amortized splice in main.ts addLog), and surface the cap in the UI next to the sample count.",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["unbounded_buffer", "files/src/renderer/screens/DataLoggerScreen.tsx", "startRecording samples buffer"]
+    },
+    {
+      "id": "PRF-002",
+      "category": "large_synchronous_work",
+      "severity": "high",
+      "file": "files/src/renderer/screens/DataLoggerScreen.tsx",
+      "line": 234,
+      "summary": "Every saved recording is fully JSON-serialized during render solely to display its size, on a component that re-renders on every PID reading.",
+      "evidence": "The recordings list renders `{fmtBytes(JSON.stringify(rec).length)}` inline for each of up to MAX_RECORDINGS=10 entries, with no memoization. The component subscribes to the whole live map via `const liveData = useAppStore(s => s.liveData)` (line 28), so it re-renders on every store notification from the poll loop. Each `rec` carries its complete `samples` array (see PRF-001), so this serializes and immediately discards potentially multi-megabyte strings several times per second while the poll loop is running — the string is used only for `.length`.",
+      "recommendation": "Compute the size once when recordings are loaded — store a `sizeBytes` alongside each recording in `loadRecordings`, or persist it on the DataRecording record at save time — so render reads a number instead of re-serializing. Failing that, wrap the list in `useMemo` keyed on `recordings`.",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["large_synchronous_work", "files/src/renderer/screens/DataLoggerScreen.tsx", "recordings list JSON.stringify size display"]
+    },
+    {
+      "id": "PRF-003",
+      "category": "excessive_ipc_or_rerender",
+      "severity": "high",
+      "file": "files/src/renderer/App.tsx",
+      "line": 144,
+      "summary": "The App root subscribes to the entire store with no selector, so every PID reading re-renders the whole component tree including the active screen.",
+      "evidence": "`const { connectionStatus, protocol, adapterInfo, isDarkMode, activeScreen, sessionStartMs, setConnectionStatus, updatePIDReading, ... } = useAppStore();` — a selector-less call returns the whole state object, and zustand replaces that object on every `set()`. The poll loop drives `updatePIDReading` via the `obd:pid-reading` IPC channel (main.ts:274), so each reading re-renders App: the header, the 19-entry NAV_ITEMS sidebar, the status bar, and the entire `activeScreen` subtree beneath it. None of the destructured values (protocol, adapterInfo, activeScreen, the action functions) change per reading.",
+      "recommendation": "Split into per-field selectors as the screens already do (`useAppStore(s => s.connectionStatus)` etc.), or select the action functions once via a stable `useShallow`/equality-fn subscription, so the root re-renders only when a value it actually displays changes.",
+      "confidence": 0.9,
+      "fingerprint_inputs": ["excessive_ipc_or_rerender", "files/src/renderer/App.tsx", "App selector-less useAppStore subscription"]
+    },
+    {
+      "id": "PRF-004",
+      "category": "missing_short_circuit",
+      "severity": "medium",
+      "file": "files/src/renderer/store/appStore.ts",
+      "line": 278,
+      "summary": "The unchanged-value fast path in updatePIDReading still returns a partial object, so zustand replaces the state and notifies every subscriber anyway.",
+      "evidence": "`if (!valueChanged) { prev.timestamp = reading.timestamp; return {}; }` — the comment says this avoids cloning liveData, and it does, but zustand's setState only skips notification when `Object.is(nextState, state)`. `{}` is not the state object, so it does `Object.assign({}, state, {})` and fires every listener with a fresh root state reference. The cheap pre-check is therefore only half-applied: every re-poll of a steady PID (idle RPM, a settled coolant temp, an unchanged ATRV reading) still runs every mounted selector and re-renders the selector-less App root (PRF-003).",
+      "recommendation": "Return the state object itself — `return state;` — from the unchanged branch so `Object.is` matches and zustand skips the notification entirely; or guard the call site so `set` is never invoked when nothing changed.",
+      "confidence": 0.85,
+      "fingerprint_inputs": ["missing_short_circuit", "files/src/renderer/store/appStore.ts", "updatePIDReading unchanged-value early return"]
+    },
+    {
+      "id": "PRF-005",
+      "category": "hot_loop_allocation",
+      "severity": "medium",
+      "file": "files/src/renderer/store/appStore.ts",
+      "line": 283,
+      "summary": "Each changed PID reading rebuilds the full 500-point history array twice and shallow-clones the entire history and liveData maps.",
+      "evidence": "`const newHistory = prevHistory.length >= state.historyMaxPoints ? [...prevHistory.slice(1), reading] : [...prevHistory, reading];` followed by `liveData: { ...state.liveData, [reading.pid]: reading }, history: { ...state.history, [reading.pid]: newHistory }`. Once a PID's ring buffer reaches historyMaxPoints (500), every subsequent reading for that PID allocates a 499-element intermediate from `.slice(1)` plus a 500-element spread result, then clones both top-level maps. This is the per-reading path off the sequential poll loop (obdProtocolManager.runPollLoop → 'pid-reading' → IPC → updatePIDReading), with POLLING_FAST every cycle plus ATRV every cycle.",
+      "recommendation": "Hold history in a fixed-capacity ring buffer with a write index and mutate in place, exposing a stable snapshot only to consumers that need it; or at minimum drop the double allocation by cloning once (`const next = prevHistory.slice(prevHistory.length >= max ? 1 : 0); next.push(reading);`).",
+      "confidence": 0.8,
+      "fingerprint_inputs": ["hot_loop_allocation", "files/src/renderer/store/appStore.ts", "updatePIDReading history ring buffer"]
+    },
+    {
+      "id": "PRF-006",
+      "category": "large_synchronous_work",
+      "severity": "medium",
+      "file": "files/src/main/main.ts",
+      "line": 236,
+      "summary": "RSSI polling spawns the system_profiler subprocess every 3 seconds and JSON-parses its entire Bluetooth dump on the Electron main thread.",
+      "evidence": "`rssiTimer = setInterval(() => { execFile('system_profiler', ['SPBluetoothDataType', '-json'], { timeout: 5000 }, (err, stdout) => { ... JSON.parse(stdout) ... }) }, 3000)` — started by startRSSIPolling() for the whole life of a serial connection. SPBluetoothDataType enumerates the full Bluetooth stack and its JSON output is parsed synchronously on the main thread, which is the same thread serving every ipcMain handler and the serial data path. The 5000ms execFile timeout also exceeds the 3000ms interval, so a slow enumeration lets concurrent subprocesses stack up. All of this to extract one `device_rssi` integer.",
+      "recommendation": "Lengthen the interval well past the subprocess cost (RSSI is a signal-strength indicator, not telemetry), skip the tick while a previous execFile is still outstanding, and narrow the payload — parse only after a cheap substring pre-check for an OBD device name rather than JSON.parse-ing the whole dump each time.",
+      "confidence": 0.8,
+      "fingerprint_inputs": ["large_synchronous_work", "files/src/main/main.ts", "startRSSIPolling system_profiler interval"]
+    },
+    {
+      "id": "PRF-007",
+      "category": "quadratic_algorithm",
+      "severity": "medium",
+      "file": "files/src/core/elm327Commander.ts",
+      "line": 79,
+      "summary": "The serial RX handler re-scans the entire accumulated receive buffer for the prompt character on every incoming chunk.",
+      "evidence": "`this.recvBuf += chunk;` then `if (this.recvBuf.includes(ELM_PROMPT))` in onData(), which the transport calls per serial chunk (main.ts:183 `port.on('data', ...)` → `elm?.onData(ascii)`). This is concatenation-then-scan in an event handler: with n chunks accumulating before a prompt arrives, the scanning is O(n²) in the buffered length, bounded only by MAX_RECV_BUF = 64 KB. A wrong-baud link or a device emitting binary — exactly the case the 64 KB cap was added for — drives the buffer to the cap through hundreds of small chunks, re-scanning tens of megabytes before the discard fires.",
+      "recommendation": "ELM_PROMPT is a single character, so scan only the newly arrived data: `if (chunk.includes(ELM_PROMPT))` before appending (no cross-chunk boundary case exists for a 1-char needle), keeping the handler O(chunk) instead of O(buffer).",
+      "confidence": 0.8,
+      "fingerprint_inputs": ["quadratic_algorithm", "files/src/core/elm327Commander.ts", "onData recvBuf concat-then-scan"]
+    },
+    {
+      "id": "PRF-008",
+      "category": "sequential_await_in_loop",
+      "severity": "medium",
+      "file": "files/src/core/pcmDiagnostics.ts",
+      "line": 187,
+      "summary": "readIdentity awaits 27 PCM block reads in sequence with a 1200ms per-block timeout and no early exit, compounding to roughly half a minute with PID polling paused throughout.",
+      "evidence": "PCM_BLOCK_COUNT = BLOCKS.length (21) + COMPOSITE blocks (6) = 27 reads, each `await this.readBlock(block)` → `this.elm.send(..., BLOCK_TIMEOUT_MS)` with BLOCK_TIMEOUT_MS = 1200. Nothing breaks out of either loop when the PCM is not answering, so a module that responds to none of the blocks — a non-GM vehicle, or a P01/P59 that is asleep — burns 27 × 1200ms ≈ 32s of wall time. The main-process handler stops PID polling for the whole duration (`obd?.stopPolling()` at main.ts:380, resumed only in the `finally`), so live telemetry is dead for that window. The ELM327 is single-command-at-a-time, so Promise.all is not available here — the compounding timeout is the cost.",
+      "recommendation": "Add an early bail-out: if the first N block reads (for example the three VIN composite blocks, which every supported PCM answers) all return null, abort the remaining reads and report the module as unsupported rather than grinding the full 27. Optionally drop BLOCK_TIMEOUT_MS once a block has answered, since the header comment already notes a supported PCM replies fast.",
+      "confidence": 0.8,
+      "fingerprint_inputs": ["sequential_await_in_loop", "files/src/core/pcmDiagnostics.ts", "readIdentity sequential block reads"]
+    },
+    {
+      "id": "PRF-009",
+      "category": "missing_short_circuit",
+      "severity": "medium",
+      "file": "files/src/renderer/components/layout/UIComponents.tsx",
+      "line": 166,
+      "summary": "useStaleness re-renders its tile twice a second regardless of whether the staleness flag changed, and tears down and recreates its interval on every reading.",
+      "evidence": "`const id = setInterval(() => setNow(Date.now()), 500)` inside `useEffect(..., [staleAt])`, with the hook returning the derived boolean `now - staleAt > staleAfterMs`. Two separate costs: (a) `setNow` fires unconditionally at 2 Hz, re-rendering the tile even though the derived boolean is unchanged on almost every tick; (b) the dependency is `staleAt`, the reading's timestamp, which changes on every poll — so each PID update clears and reinstalls the interval. The hook is used by MetricTile, ArcGauge and HeroCard, and `staleAt=` is passed at 17 call sites across the screens, so a populated screen carries that many independent 500ms timers all churning.",
+      "recommendation": "Only commit state when the derived flag actually flips — `setNow(n => (Date.now() - staleAt > staleAfterMs) === (n - staleAt > staleAfterMs) ? n : Date.now())`, or store the boolean and bail when unchanged — and key the effect on staleness-relevant inputs rather than the raw timestamp so the interval survives across readings. A single shared ticker feeding all tiles would remove the per-tile timers entirely.",
+      "confidence": 0.8,
+      "fingerprint_inputs": ["missing_short_circuit", "files/src/renderer/components/layout/UIComponents.tsx", "useStaleness 500ms interval"]
+    },
+    {
+      "id": "PRF-010",
+      "category": "hot_loop_allocation",
+      "severity": "low",
+      "file": "files/src/renderer/components/layout/UIComponents.tsx",
+      "line": 550,
+      "summary": "Sparkline rebuilds a up-to-500-point polyline string on every reading for a 36px decorative graphic rendered at 0.3 opacity.",
+      "evidence": "The `useMemo` is keyed on `history`, whose array reference changes on every reading for that PID (appStore.ts:289), so it recomputes fully: a `.map` plus `.filter` over up to historyMaxPoints=500 entries, `Math.min(...nums)` and `Math.max(...nums)` spreading 500 arguments onto the stack, then 500 `toFixed(1)` calls joined into one string. The output is drawn into a 200-unit-wide viewBox at height 36 — more than two points per horizontal unit, most of which cannot be resolved. LiveScreen mounts three of these (HeroCard for 010C, 0104, 0111).",
+      "recommendation": "Downsample to the rendered width before building the string — take at most ~200 points (stride or last-N) — and compute min/max with a single reduce pass instead of spreading into Math.min/Math.max.",
+      "confidence": 0.7,
+      "fingerprint_inputs": ["hot_loop_allocation", "files/src/renderer/components/layout/UIComponents.tsx", "Sparkline points useMemo"]
+    },
+    {
+      "id": "PRF-011",
+      "category": "hot_loop_allocation",
+      "severity": "low",
+      "file": "files/src/renderer/App.tsx",
+      "line": 239,
+      "summary": "The status-bar telemetry selector allocates an array and runs two filter passes over the whole live map on every store notification.",
+      "evidence": "`useAppStore((s) => { const now = Date.now(); const readings = Object.values(s.liveData); const fresh = readings.filter(...); const lastSec = readings.filter(...).length / 2; return { livePIDCount: fresh.length, readingsPerSec: lastSec.toFixed(1) }; }, ...)` — zustand runs the selector on every state change to feed the equality function, so the `Object.values` allocation, two full filter passes and a `toFixed` string run per reading even though the custom equality fn usually suppresses the re-render. The live map holds an entry per polled PID (POLLING_FAST + POLLING_NORMAL + POLLING_SLOW + ATRV = 30).",
+      "recommendation": "Move the freshness tally out of the selector — count on a 1s timer that reads `useAppStore.getState().liveData` once per tick — so the poll loop does not pay two array passes per reading for a value the status bar only displays once a second.",
+      "confidence": 0.7,
+      "fingerprint_inputs": ["hot_loop_allocation", "files/src/renderer/App.tsx", "status bar livePIDCount selector"]
+    },
+    {
+      "id": "PRF-012",
+      "category": "redundant_recomputation",
+      "severity": "low",
+      "file": "files/src/renderer/components/layout/UIComponents.tsx",
+      "line": 792,
+      "summary": "StatusBar's rate-sampling interval is destroyed and recreated on every PID reading because the effect depends on the whole live map.",
+      "evidence": "`useEffect(() => { const id = setInterval(() => { ... Object.values(liveData).filter(...) ... }, 1000); return () => clearInterval(id); }, [liveData])` — `liveData` is a fresh object on each changed reading (appStore.ts:288), so the 1s timer is cleared and reinstalled at poll frequency rather than once. A side effect is that the timer rarely survives long enough to fire cleanly between updates, making the displayed rate depend on poll timing rather than on the 1s cadence it is written for.",
+      "recommendation": "Install the interval once with an empty dependency array and read the current map inside the tick via `useAppStore.getState().liveData`, so the timer is created on mount and the tick reads fresh data without re-subscribing.",
+      "confidence": 0.7,
+      "fingerprint_inputs": ["redundant_recomputation", "files/src/renderer/components/layout/UIComponents.tsx", "StatusBar rate interval effect"]
+    }
+  ],
+  "skipped": [],
+  "stats": {
+    "files_scanned": 40,
+    "elapsed_ms": 486000
+  }
+}
