@@ -1,0 +1,119 @@
+{
+  "review_type": "deps",
+  "scope": {
+    "root": "files",
+    "files": [
+      "files/package.json",
+      "files/package-lock.json"
+    ],
+    "git_sha": "ef042d61ad523ab4786bbb91f54f0edf2c54dd2b"
+  },
+  "findings": [
+    {
+      "id": "DEP-001",
+      "category": "precarious_pre_1_0",
+      "severity": "medium",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "The actively-used @anthropic-ai/sdk dependency is declared with a caret on a 0.x version, so npm can never resolve past the 0.104.x patch line.",
+      "evidence": "dependencies: \"@anthropic-ai/sdk\": \"^0.104.1\". Caret on a 0.x package expands to >=0.104.1 <0.105.0, not <1.0.0. The package is actively imported (files/src/main/claudeAssistant.ts) and the SDK is still pre-1.0 with releases well past 0.104 (0.110.x line), all of which this range excludes.",
+      "recommendation": "Widen the range to \"~0.110\" (or the current 0.x line) and re-run `npm install` to refresh the lockfile; add @anthropic-ai/sdk to a Renovate/Dependabot config so 0.x minor bumps are proposed automatically rather than requiring a manual range edit each time.",
+      "confidence": 0.9,
+      "fingerprint_inputs": [
+        "precarious_pre_1_0",
+        "files/package.json",
+        "@anthropic-ai/sdk:^0.104.1"
+      ]
+    },
+    {
+      "id": "DEP-002",
+      "category": "missing_audit",
+      "severity": "medium",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "The project has no automated vulnerability scan and no dependency-update bot, so nothing surfaces advisories or proposes upgrades for its 25 declared dependencies.",
+      "evidence": "No .github/workflows/, .gitlab-ci.yml, .circleci/config.yml, renovate.json, .dependabot/config.yml, or .github/dependabot.yml exists anywhere in the repo (the only tracked YAML is docker-compose.yml). Combined with the caret ranges used on every dependency (e.g. \"electron\": \"^42.4.1\", \"better-sqlite3\": \"^12.11.1\", \"serialport\": \"^12.0.0\"), there is no CI gate running `npm ci` + `npm audit` to detect when a resolved transitive version becomes vulnerable.",
+      "recommendation": "Add .github/workflows/deps.yml running `npm ci && npm audit --audit-level=high` on push and on a weekly schedule, and commit .github/dependabot.yml with a weekly npm ecosystem update for files/.",
+      "confidence": 0.95,
+      "fingerprint_inputs": [
+        "missing_audit",
+        "files/package.json",
+        "no-ci-audit"
+      ]
+    },
+    {
+      "id": "DEP-003",
+      "category": "unused_dep",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "electron-store is declared as a runtime dependency but is never imported anywhere in the source tree.",
+      "evidence": "dependencies: \"electron-store\": \"^8.0.0\". A grep for `electron-store`, `electron_store`, and `new Store` across every .ts/.tsx/.js file under files/ returns zero matches; persistence is implemented in files/src/main/storageService.ts using node fs plus a lazy `require('better-sqlite3')`. The pinned major is also several releases behind the current line, so it is dead weight that still ships in the packaged app.",
+      "recommendation": "Remove \"electron-store\" from dependencies in files/package.json and re-run `npm install` to drop it and its transitives from files/package-lock.json.",
+      "confidence": 0.9,
+      "fingerprint_inputs": [
+        "unused_dep",
+        "files/package.json",
+        "electron-store:^8.0.0"
+      ]
+    },
+    {
+      "id": "DEP-004",
+      "category": "unpinned_runtime",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "package.json declares no engines field, so no Node or npm version constraint is enforced at install time.",
+      "evidence": "No \"engines\" key is present in files/package.json. The project is a native-module Electron app (better-sqlite3, serialport both require node-gyp ABI matching) and @types/node is pinned at \"^22.0.0\", but nothing prevents an install under a mismatched Node major.",
+      "recommendation": "Add \"engines\": {\"node\": \">=22 <23\", \"npm\": \">=10\"} to files/package.json and set engine-strict=true in an .npmrc so a mismatched runtime fails the install rather than producing a broken native build.",
+      "confidence": 0.9,
+      "fingerprint_inputs": [
+        "unpinned_runtime",
+        "files/package.json",
+        "no-engines"
+      ]
+    },
+    {
+      "id": "DEP-005",
+      "category": "missing_overrides",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "package.json has no overrides block, leaving no mechanism to force-pin a vulnerable transitive dependency ahead of an upstream fix.",
+      "evidence": "No \"overrides\" (npm) or \"resolutions\" (yarn) key is present in files/package.json, despite a committed npm lockfile (files/package-lock.json, lockfileVersion 3) and deep transitive trees under electron-builder, webpack, and exceljs.",
+      "recommendation": "Add an empty \"overrides\": {} block to files/package.json as the documented escape hatch, so an emergency transitive pin is a one-line edit rather than a lockfile hand-edit.",
+      "confidence": 0.85,
+      "fingerprint_inputs": [
+        "missing_overrides",
+        "files/package.json",
+        "no-overrides"
+      ]
+    },
+    {
+      "id": "DEP-006",
+      "category": "unused_dep",
+      "severity": "low",
+      "file": "files/package.json",
+      "line": null,
+      "summary": "recharts is declared as a runtime dependency but no chart component from it is imported anywhere in the source tree.",
+      "evidence": "dependencies: \"recharts\": \"^2.0.0\". A grep for `recharts`, `LineChart`, `ResponsiveContainer`, and `AreaChart` across every .ts/.tsx file under files/ returns zero matches, including in the graphing-oriented screens (LiveScreen.tsx, CompareScreen.tsx).",
+      "recommendation": "Remove \"recharts\" from dependencies in files/package.json and re-run `npm install` to drop it from files/package-lock.json; re-add it explicitly if charting is implemented later.",
+      "confidence": 0.85,
+      "fingerprint_inputs": [
+        "unused_dep",
+        "files/package.json",
+        "recharts:^2.0.0"
+      ]
+    }
+  ],
+  "skipped": [
+    {
+      "path": "files/.npmrc",
+      "reason": "not found (no .npmrc at repo root either)"
+    }
+  ],
+  "stats": {
+    "files_scanned": 2,
+    "elapsed_ms": 232000
+  }
+}
