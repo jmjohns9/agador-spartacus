@@ -8,8 +8,23 @@ The app runs fully offline against a built-in ELM327 simulator, so no vehicle or
 
 ---
 
+## Screenshots
+
+All captured from the built-in simulator — no vehicle or adapter required to see them.
+
+| | |
+|---|---|
+| **Vehicle health overview** — battery voltage, parasite risk score, I/M readiness monitors, adapter/protocol status at a glance | ![Health screen](docs/screenshots/health.png) |
+| **Live telemetry** — RPM, load, throttle and timing gauges, plus temperature, fuel trim, and electrical readings updating in real time | ![Live telemetry screen](docs/screenshots/live.png) |
+| **Diagnostic fault codes** — active/pending/permanent DTCs cross-referenced against the GMT800 known-fault-code table | ![DTC screen](docs/screenshots/dtc.png) |
+| **Parasitic draw analysis** — risk score, active power consumers with estimated draw, and a live battery voltage timeline | ![Parasitic draw screen](docs/screenshots/draw.png) |
+| **Module wake monitor** — per-module address, latency, awake/asleep state, and known draw-risk annotations | ![Modules screen](docs/screenshots/modules.png) |
+
+---
+
 ## Table of contents
 
+- [Screenshots](#screenshots)
 - [Features](#features)
 - [Screens](#screens)
 - [Architecture](#architecture)
@@ -30,7 +45,7 @@ The app runs fully offline against a built-in ELM327 simulator, so no vehicle or
 
 **Live diagnostics**
 - Sequential PID polling loop with three priority tiers — battery voltage and fast PIDs (RPM, ECM voltage) every cycle, normal PIDs every 3rd cycle, slow PIDs every 10th. Commands never overlap on the serial line.
-- 36-PID catalog with SAE J1979 decode formulas, ranges, units, and plain-English descriptions.
+- 34-PID catalog with SAE J1979 decode formulas, ranges, units, and plain-English descriptions.
 - Telemetry ingest buffer decouples wire rate from render rate: samples are absorbed at adapter speed and committed to React on a fixed interval, with unchanged values dropped before they leave the buffer.
 - VIN detection and decode, with automatic vehicle profile population.
 
