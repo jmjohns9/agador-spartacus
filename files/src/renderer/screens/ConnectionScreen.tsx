@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAppStore, VehicleProfile, vehicleDisplayName } from '../store/appStore';
 import {
-  Card, SectionHeader, Badge, AlertBanner, ScrollPane, Button,
+  Card, SectionHeader, Badge, AlertBanner, ScrollPane, Button, DataRow, EmptyState, Grid, Metric,
 } from '../components/layout/UIComponents';
+import { TYPE, NUMERIC, WEIGHT, RADIUS, STATUS_TEXT } from '../theme/theme';
+import type { Status } from '../theme/theme';
+import { connectionTone, batteryStatus } from '../components/shell/shellLogic';
 
 // ─── Port entry type (returned by main process serialport.list()) ─────────────
 
@@ -39,13 +42,9 @@ function VehicleEditor(): React.ReactElement {
     } finally { setDecoding(false); }
   };
 
-  const field = (key: keyof VehicleProfile, label: string, placeholder: string, flex = 1) => (
+  const field = (key: keyof VehicleProfile, label: string, placeholder: string, flex = 1, numeric = false) => (
     <div style={{ flex, minWidth: 90 }}>
-      <div style={{
-        fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-        letterSpacing: 1.2, textTransform: 'uppercase',
-        color: 'var(--tm)', marginBottom: 3,
-      }}>
+      <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>
         {label}
       </div>
       <input
@@ -53,12 +52,7 @@ function VehicleEditor(): React.ReactElement {
         value={draft[key]}
         placeholder={placeholder}
         onChange={e => setDraft(d => ({ ...d, [key]: e.target.value }))}
-        style={{
-          width: '100%', padding: '6px 8px', fontSize: 12,
-          background: 'var(--bg4)', border: '2px solid var(--br)', borderRadius: 0,
-          color: 'var(--tw)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
-          outline: 'none',
-        }}
+        style={{ width: '100%', ...(numeric ? NUMERIC : {}) }}
       />
     </div>
   );
@@ -69,12 +63,12 @@ function VehicleEditor(): React.ReactElement {
       <Card>
         {!editing ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <i className="ti ti-car" style={{ fontSize: 22, color: 'var(--pp)', flexShrink: 0 }} />
+            <i className="ti ti-car" style={{ fontSize: 22, color: 'var(--accent)', flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--tw)', letterSpacing: 0.5 }}>
+              <div style={{ ...TYPE.headline, color: 'var(--label)' }}>
                 {vehicleDisplayName(vehicle)}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--tm)', marginTop: 2 }}>
+              <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginTop: 2 }}>
                 {[vehicle.vin && `VIN ${vehicle.vin}`, vehicle.engine, vehicle.nickname, vehicle.notes].filter(Boolean).join(' · ') || 'No details yet'}
               </div>
             </div>
@@ -95,7 +89,7 @@ function VehicleEditor(): React.ReactElement {
               {field('engine','Engine','5.3L V8')}
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-              {field('vin',      'VIN (optional)',      '1GCEK19T04E…', 1.2)}
+              {field('vin',      'VIN (optional)',      '1GCEK19T04E…', 1.2, true)}
               <Button
                 size="sm"
                 icon={decoding ? 'ti-loader' : 'ti-search'}
@@ -148,36 +142,22 @@ function ELM327Reference(): React.ReactElement {
   ];
   return (
     <>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6, width: '100%',
-          background: 'none', border: 'none', padding: '4px 0', cursor: 'pointer',
-          color: 'var(--tm)', fontSize: 10, fontFamily: "'Inter','Roboto',system-ui,sans-serif",
-          fontWeight: 700, letterSpacing: 1.4, textTransform: 'uppercase',
-        }}
-      >
-        <div style={{ flex: 1, height: 1, background: 'var(--br)' }} />
-        <i className={`ti ${open ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ fontSize: 10 }} />
-        <span>ELM327 init reference</span>
-        <i className={`ti ${open ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ fontSize: 10 }} />
-        <div style={{ flex: 1, height: 1, background: 'var(--br)' }} />
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, height: 1, background: 'var(--separator)' }} />
+        <Button
+          variant="plain"
+          size="sm"
+          icon={open ? 'ti-chevron-up' : 'ti-chevron-down'}
+          onClick={() => setOpen(o => !o)}
+        >
+          ELM327 init reference
+        </Button>
+        <div style={{ flex: 1, height: 1, background: 'var(--separator)' }} />
+      </div>
       {open && (
         <Card padding={0}>
-          {CMDS.map(({ cmd, desc }, i) => (
-            <div
-              key={cmd}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '6px 12px', borderBottom: i < CMDS.length - 1 ? '1px solid var(--bg3)' : 'none',
-              }}
-            >
-              <span style={{ fontFamily: "'JetBrains Mono','Roboto Mono',monospace", fontSize: 11, color: 'var(--pp)', width: 48, flexShrink: 0 }}>
-                {cmd}
-              </span>
-              <span style={{ fontSize: 11, color: 'var(--tm)' }}>{desc}</span>
-            </div>
+          {CMDS.map(({ cmd, desc }) => (
+            <DataRow key={cmd} pid={cmd} name={desc} value="" />
           ))}
         </Card>
       )}
@@ -271,16 +251,9 @@ export function ConnectionScreen(): React.ReactElement {
     await window.electronAPI.disconnect();
   };
 
-  // ── Status color / label ──────────────────────────────────────────────────
+  // ── Status tone / label ────────────────────────────────────────────────────
 
-  const statusColor = {
-    disconnected: 'var(--tm)',
-    scanning:     'var(--sa)',
-    connecting:   'var(--sa)',
-    initializing: 'var(--sa)',
-    connected:    'var(--sg)',
-    error:        'var(--sr)',
-  }[connectionStatus];
+  const tone = connectionTone(connectionStatus);
 
   const statusLabel = {
     disconnected: 'Disconnected',
@@ -290,6 +263,10 @@ export function ConnectionScreen(): React.ReactElement {
     connected:    'Connected',
     error:        'Connection error',
   }[connectionStatus];
+
+  const rssiTone = (r: number): Status => (r > -60 ? 'ok' : r > -80 ? 'warn' : 'crit');
+  const battRaw = batteryVoltage > 0 ? batteryStatus(batteryVoltage) : 'none';
+  const battTone: Status = battRaw === 'none' ? 'neutral' : battRaw;
 
   return (
     <ScrollPane>
@@ -305,76 +282,76 @@ export function ConnectionScreen(): React.ReactElement {
       <Card>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '4px 0' }}>
           {/* Status indicator */}
-          <div style={{
-            width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
-            background: isConnected ? 'rgba(0,230,118,0.08)' : 'var(--bg4)',
-            border: `2px solid ${statusColor}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            animation: isBusy ? 'blink 1.2s infinite' : 'none',
-          }}>
+          <div
+            className={isBusy ? 'pulse' : undefined}
+            style={{
+              width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
+              background: isConnected ? 'var(--ok-tint)' : tone === 'crit' ? 'var(--crit-tint)' : tone === 'warn' ? 'var(--warn-tint)' : 'var(--fill)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
             <i
               className={`ti ${isConnected ? 'ti-plug-connected' : isBusy ? 'ti-loader' : 'ti-plug'}`}
-              style={{ fontSize: 20, color: statusColor }}
+              style={{ fontSize: 20, color: STATUS_TEXT[tone] }}
             />
           </div>
 
           <div style={{ flex: 1 }}>
-            <div style={{
-              fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
-              fontSize: 15, color: statusColor, letterSpacing: 0.5,
-            }}>
+            <div style={{ ...TYPE.headline, color: STATUS_TEXT[tone] }}>
               {statusLabel}
             </div>
             {isConnected && protocol && (
-              <div style={{ fontSize: 11, color: 'var(--tm)', marginTop: 3 }}>
+              <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginTop: 3 }}>
                 {protocol}
                 {adapterInfo && ` · ${adapterInfo}`}
               </div>
             )}
             {isConnected && batteryVoltage > 0 && (
-              <div style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 13, color: 'var(--pp)', marginTop: 4 }}>
+              <div style={{ ...TYPE.body, ...NUMERIC, color: 'var(--accent-text)', marginTop: 4 }}>
                 Battery: {batteryVoltage.toFixed(2)} V
               </div>
             )}
           </div>
 
           {isConnected && (
-            <Button variant="danger" icon="ti-plug-x" onClick={handleDisconnect}>
+            <Button variant="destructive" icon="ti-plug-x" onClick={handleDisconnect}>
               Disconnect
             </Button>
           )}
         </div>
       </Card>
 
-      {/* ── ELM327 Initialization guide ───────────────────────────────── */}
+      {/* ── Adapter details ──────────────────────────────────────────── */}
       {isConnected && (
         <>
           <SectionHeader>Adapter details</SectionHeader>
-          <Card>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-              {[
-                { label: 'Adapter',        value: adapterInfo || 'OBDLink MX+' },
-                { label: 'Protocol',       value: protocol    || '—' },
-                { label: 'Battery at OBD', value: batteryVoltage > 0 ? `${batteryVoltage.toFixed(3)} V` : '—' },
-                { label: 'BT Signal (RSSI)', value: btRSSI !== null ? `${btRSSI} dBm` : '—', color: btRSSI !== null ? (btRSSI > -60 ? 'var(--sg)' : btRSSI > -80 ? 'var(--sa)' : 'var(--sr)') : undefined },
-                { label: 'BT Distance',     value: btDistance !== null ? `~${btDistance} m` : '—' },
-                { label: 'Signal Quality',   value: btRSSI !== null ? (btRSSI > -60 ? 'Excellent' : btRSSI > -70 ? 'Good' : btRSSI > -80 ? 'Fair' : 'Weak') : '—', color: btRSSI !== null ? (btRSSI > -60 ? 'var(--sg)' : btRSSI > -70 ? 'var(--pp)' : btRSSI > -80 ? 'var(--sa)' : 'var(--sr)') : undefined },
-              ].map(({ label, value, color }) => (
-                <div key={label}>
-                  <div style={{
-                    fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-                    letterSpacing: 1.2, textTransform: 'uppercase',
-                    color: 'var(--tm)', marginBottom: 4,
-                  }}>
-                    {label}
-                  </div>
-                  <div style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 13, color: (color as string) ?? 'var(--tw)' }}>
-                    {value}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
+          <Grid cols={3}>
+            <Metric size="compact" label="Adapter" value={adapterInfo || '—'} />
+            <Metric size="compact" label="Protocol" value={protocol || '—'} />
+            <Metric
+              size="compact"
+              label="Battery at OBD"
+              value={batteryVoltage > 0 ? `${batteryVoltage.toFixed(3)} V` : '—'}
+              status={batteryVoltage > 0 ? battTone : 'neutral'}
+            />
+            <Metric
+              size="compact"
+              label="BT signal (RSSI)"
+              value={btRSSI !== null ? `${btRSSI} dBm` : '—'}
+              status={btRSSI !== null ? rssiTone(btRSSI) : 'neutral'}
+            />
+            <Metric
+              size="compact"
+              label="BT distance"
+              value={btDistance !== null ? `~${btDistance} m` : '—'}
+            />
+            <Metric
+              size="compact"
+              label="Signal quality"
+              value={btRSSI !== null ? (btRSSI > -60 ? 'Excellent' : btRSSI > -70 ? 'Good' : btRSSI > -80 ? 'Fair' : 'Weak') : '—'}
+              status={btRSSI !== null ? rssiTone(btRSSI) : 'neutral'}
+            />
+          </Grid>
         </>
       )}
 
@@ -385,7 +362,7 @@ export function ConnectionScreen(): React.ReactElement {
 
           {/* Step guide */}
           <Card>
-            <div style={{ fontSize: 11, color: 'var(--tm)', marginBottom: 10, lineHeight: 1.6 }}>
+            <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginBottom: 10 }}>
               Before scanning, pair the adapter in macOS:
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
@@ -398,14 +375,14 @@ export function ConnectionScreen(): React.ReactElement {
                 <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   <div style={{
                     width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
-                    background: 'var(--bg4)', border: '2px solid var(--br)',
+                    background: 'var(--accent-tint)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 10,
-                    color: 'var(--pp)', fontWeight: 700,
+                    ...TYPE.caption, ...NUMERIC, fontWeight: WEIGHT.semibold,
+                    color: 'var(--accent-text)',
                   }}>
                     {i + 1}
                   </div>
-                  <span style={{ fontSize: 12, color: 'var(--tm)', lineHeight: 1.5 }}>{step}</span>
+                  <span style={{ ...TYPE.body, color: 'var(--label-2)' }}>{step}</span>
                 </div>
               ))}
             </div>
@@ -430,144 +407,86 @@ export function ConnectionScreen(): React.ReactElement {
             const visiblePorts = ports.filter(p => p.isOBD);
             if (visiblePorts.length === 0) return null;
             return (
-            <Card padding={0}>
-              <div style={{
-                padding: '8px 12px', background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
-              }}>
-                <span style={{
-                  fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-                  letterSpacing: 1.2, textTransform: 'uppercase',
-                  color: 'var(--tm)',
-                }}>
-                  {visiblePorts.length} {visiblePorts.length === 1 ? 'adapter' : 'adapters'} found
-                </span>
-              </div>
-
-              {visiblePorts.map((port, i) => (
-                <button
-                  key={port.path}
-                  onClick={() => setSelectedPort(port.path)}
-                  aria-pressed={selectedPort === port.path}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
-                    padding: '10px 12px', cursor: 'pointer',
-                    borderBottom: i < visiblePorts.length - 1 ? '1px solid var(--bg3)' : 'none',
-                    background: 'transparent',
-                    border: selectedPort === port.path ? '2px solid var(--pp)' : '2px solid var(--br)',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-                >
-                  {/* Selection radio */}
-                  <div style={{
-                    width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
-                    border: `2px solid ${selectedPort === port.path ? 'var(--pp)' : 'var(--br)'}`,
-                    background: selectedPort === port.path ? 'var(--pp)' : 'transparent',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    {selectedPort === port.path && (
-                      <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#000' }} />
-                    )}
-                  </div>
-
-                  <i
-                    className={`ti ${port.isOBD ? 'ti-bluetooth-connected' : 'ti-usb'}`}
-                    style={{ fontSize: 16, color: port.isOBD ? 'var(--pp)' : 'var(--tm)', flexShrink: 0 }}
+              <Card padding={0}>
+                <div style={{ padding: '8px 12px', background: 'var(--fill)' }}>
+                  <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>
+                    {visiblePorts.length} {visiblePorts.length === 1 ? 'adapter' : 'adapters'} found
+                  </span>
+                </div>
+                {visiblePorts.map(port => (
+                  <DataRow
+                    key={port.path}
+                    pid={port.path}
+                    name={friendlyPortName(port)}
+                    subtext={['Bluetooth · OBD-II adapter', port.serialNumber].filter(Boolean).join(' · ')}
+                    value=""
+                    badge={
+                      <>
+                        {selectedPort === port.path && <Badge label="Selected" variant="ok" />}
+                        <Badge label="OBD adapter" variant="info" />
+                      </>
+                    }
+                    onClick={() => setSelectedPort(port.path)}
                   />
-
-                  <div style={{ flex: 1, minWidth: 0 }} title={port.path /* full path on hover for debugging */}>
-                    <div style={{
-                      fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 14,
-                      color: 'var(--tw)', overflow: 'hidden', textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap', fontWeight: 700, letterSpacing: 0.3,
-                    }}>
-                      {friendlyPortName(port)}
-                    </div>
-                    <div style={{ fontSize: 10, color: 'var(--tm)', marginTop: 2 }}>
-                      {port.isOBD
-                        ? 'Bluetooth · OBD-II adapter'
-                        : port.path.startsWith('/dev/cu.') || port.path.startsWith('/dev/tty.')
-                          ? (port.path.includes('Bluetooth') || port.path.toLowerCase().includes('bt') ? 'Bluetooth device' : 'Serial device')
-                          : 'Connected device'}
-                      {port.serialNumber && ` · ${port.serialNumber}`}
-                    </div>
-                  </div>
-
-                  <Badge label="OBD adapter" variant="ok" />
-                </button>
-              ))}
-            </Card>
+                ))}
+              </Card>
             );
           })()}
 
           {/* Empty state — split into "nothing at all" vs "no adapter among devices" */}
           {!scanning && !scanError && ports.filter(p => p.isOBD).length === 0 && (
             <Card>
-              <div style={{ padding: '14px 12px', textAlign: 'center', fontSize: 12, color: 'var(--tm)', lineHeight: 1.6 }}>
-                <i className="ti ti-bluetooth-off" style={{ fontSize: 22, color: 'var(--tm)', display: 'block', marginBottom: 8 }} />
-                {ports.length === 0
-                  ? <>No devices found — pair the OBDLink adapter in macOS Bluetooth settings, then scan again.</>
-                  : <>No OBD adapter found. Pair the OBDLink in macOS Bluetooth settings and scan again.</>}
-              </div>
+              <EmptyState
+                icon="ti-bluetooth-off"
+                title="No adapter found"
+                message={ports.length === 0
+                  ? 'No devices found — pair the OBDLink adapter in macOS Bluetooth settings, then scan again.'
+                  : 'No OBD adapter found. Pair the OBDLink in macOS Bluetooth settings and scan again.'}
+              />
             </Card>
           )}
 
           {/* Connect button — primary action on the screen */}
           {(() => {
             const ready = !!effectivePort && !isBusy;
+            const label = isBusy
+              ? 'Connecting…'
+              : effectivePort
+                ? `Connect to ${friendlyPortName(ports.find(p => p.path === effectivePort) ?? { path: effectivePort, manufacturer: '', serialNumber: '', isOBD: false })}`
+                : 'Select a device above';
             return (
-              <button
+              <Button
+                variant="primary"
+                size="md"
+                icon={isBusy ? 'ti-loader' : 'ti-plug-connected'}
+                disabled={!ready}
                 onClick={() => handleConnect(effectivePort)}
-                disabled={!effectivePort || isBusy}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-                  width: '100%', padding: '16px', cursor: ready ? 'pointer' : 'not-allowed',
-                  background: ready ? 'var(--pp)' : 'var(--bg4)',
-                  border: `1px solid ${ready ? 'var(--pp)' : 'var(--br)'}`,
-                  borderRadius: 0,
-                  color: ready ? '#0B0B0B' : 'var(--tm)',
-                  fontSize: 15, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
-                  letterSpacing: 0.8, textTransform: 'uppercase',
-
-                  transition: 'transform 0.08s, box-shadow 0.12s, background 0.12s',
-                }}
-                onMouseEnter={e => { if (ready) (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(0)'; }}
+                style={{ width: '100%', height: 40 }}
               >
-                <i className={`ti ${isBusy ? 'ti-loader' : 'ti-plug-connected'}`} style={{ fontSize: 20, animation: isBusy ? 'spin 1s linear infinite' : 'none' }} />
-                {isBusy
-                  ? 'Connecting…'
-                  : effectivePort
-                    ? `Connect to ${friendlyPortName(ports.find(p => p.path === effectivePort) ?? { path: effectivePort, manufacturer: '', serialNumber: '', isOBD: false })}`
-                    : 'Select a device above'}
-              </button>
+                {label}
+              </Button>
             );
           })()}
 
           {/* ── Built-in Emulator ─────────────────────────────────────── */}
-          <SectionHeader>Built-in Emulator</SectionHeader>
+          <SectionHeader>Built-in emulator</SectionHeader>
           <Card>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
               {/* Icon */}
               <div style={{
-                width: 44, height: 44, flexShrink: 0,
-                background: 'rgba(63,185,80,0.08)',
-                border: '1px solid rgba(63,185,80,0.25)',
+                width: 44, height: 44, flexShrink: 0, borderRadius: RADIUS.card,
+                background: 'var(--ok-tint)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <i className="ti ti-cpu" style={{ fontSize: 22, color: 'var(--gb)' }} />
+                <i className="ti ti-cpu" style={{ fontSize: 22, color: 'var(--ok-text)' }} />
               </div>
 
               {/* Description */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-                  fontWeight: 700, fontSize: 14, color: 'var(--tw)', marginBottom: 4,
-                }}>
+                <div style={{ ...TYPE.headline, color: 'var(--label)', marginBottom: 4 }}>
                   2004 Silverado 1500 Z71 — J1850 VPW
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--tm)', lineHeight: 1.6, marginBottom: 10 }}>
+                <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginBottom: 10 }}>
                   Runs a full OBD-II session in-process — no adapter required. Sensor
                   values drift realistically, battery voltage decays over time, and the
                   session pre-loads three fault codes to exercise the DTC scanner.
@@ -575,27 +494,10 @@ export function ConnectionScreen(): React.ReactElement {
 
                 {/* Spec chips */}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-                  {[
-                    { icon: 'ti-alert-triangle', label: 'B1982 · P0300 · U0100', color: 'var(--sr)', bg: 'rgba(248,81,73,0.08)' },
-                    { icon: 'ti-battery-2',      label: '12.89 V → 11.8 V drain', color: 'var(--sa)', bg: 'rgba(210,153,34,0.08)' },
-                    { icon: 'ti-engine',          label: 'RPM · Temps · Trims · O₂', color: 'var(--pp)', bg: 'rgba(33,136,255,0.08)' },
-                    { icon: 'ti-clock',           label: 'IPC awake after engine-off', color: 'var(--gb)', bg: 'rgba(63,185,80,0.08)' },
-                  ].map(({ icon, label, color, bg }) => (
-                    <div key={label} style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 5,
-                      padding: '3px 8px',
-                      background: bg,
-                      border: `1px solid ${color}30`,
-                    }}>
-                      <i className={`ti ${icon}`} style={{ fontSize: 11, color }} />
-                      <span style={{
-                        fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
-                        fontSize: 10, color,
-                      }}>
-                        {label}
-                      </span>
-                    </div>
-                  ))}
+                  <Badge label="B1982 · P0300 · U0100" variant="crit" />
+                  <Badge label="12.89 V → 11.8 V drain" variant="warn" />
+                  <Badge label="RPM · Temps · Trims · O₂" variant="info" />
+                  <Badge label="IPC awake after engine-off" variant="ok" />
                 </div>
 
                 <Button
