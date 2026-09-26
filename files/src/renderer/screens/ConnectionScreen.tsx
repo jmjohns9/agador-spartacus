@@ -44,7 +44,7 @@ function VehicleEditor(): React.ReactElement {
 
   const field = (key: keyof VehicleProfile, label: string, placeholder: string, flex = 1, numeric = false) => (
     <div style={{ flex, minWidth: 90 }}>
-      <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>
+      <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>
         {label}
       </div>
       <input
@@ -81,14 +81,14 @@ function VehicleEditor(): React.ReactElement {
             </Button>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {field('year',  'Year',  '2004', 0.6)}
               {field('make',  'Make',  'Chevrolet')}
               {field('model', 'Model', 'Silverado 1500', 1.4)}
               {field('engine','Engine','5.3L V8')}
             </div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               {field('vin',      'VIN (optional)',      '1GCEK19T04E…', 1.2, true)}
               <Button
                 size="sm"
@@ -100,7 +100,7 @@ function VehicleEditor(): React.ReactElement {
               </Button>
               {field('nickname', 'Nickname (optional)', 'My daily')}
             </div>
-            <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
               {field('notes', 'Notes for the assistant (known issues, mission)', 'chasing a parasitic battery drain', 1)}
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -301,7 +301,7 @@ export function ConnectionScreen(): React.ReactElement {
               {statusLabel}
             </div>
             {isConnected && protocol && (
-              <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginTop: 3 }}>
+              <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginTop: 4 }}>
                 {protocol}
                 {adapterInfo && ` · ${adapterInfo}`}
               </div>
@@ -362,17 +362,17 @@ export function ConnectionScreen(): React.ReactElement {
 
           {/* Step guide */}
           <Card>
-            <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginBottom: 10 }}>
+            <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginBottom: 8 }}>
               Before scanning, pair the adapter in macOS:
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
               {[
                 'Plug the OBDLink MX+ into the vehicle OBD-II port under the dash (driver side)',
                 'Turn the ignition key to ON — engine does not need to start',
                 'Open System Settings → Bluetooth and pair "OBDLink MX+"',
                 'Return here and click Scan Ports — the adapter appears as /dev/tty.OBDLink-… or /dev/tty.OBDII',
               ].map((step, i) => (
-                <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                   <div style={{
                     width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
                     background: 'var(--accent-tint)',
@@ -471,7 +471,7 @@ export function ConnectionScreen(): React.ReactElement {
           {/* ── Built-in Emulator ─────────────────────────────────────── */}
           <SectionHeader>Built-in emulator</SectionHeader>
           <Card>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
               {/* Icon */}
               <div style={{
                 width: 44, height: 44, flexShrink: 0, borderRadius: RADIUS.card,
@@ -486,14 +486,14 @@ export function ConnectionScreen(): React.ReactElement {
                 <div style={{ ...TYPE.headline, color: 'var(--label)', marginBottom: 4 }}>
                   2004 Silverado 1500 Z71 — J1850 VPW
                 </div>
-                <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginBottom: 10 }}>
+                <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginBottom: 8 }}>
                   Runs a full OBD-II session in-process — no adapter required. Sensor
                   values drift realistically, battery voltage decays over time, and the
                   session pre-loads three fault codes to exercise the DTC scanner.
                 </div>
 
                 {/* Spec chips */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
                   <Badge label="B1982 · P0300 · U0100" variant="crit" />
                   <Badge label="12.89 V → 11.8 V drain" variant="warn" />
                   <Badge label="RPM · Temps · Trims · O₂" variant="info" />

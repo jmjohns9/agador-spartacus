@@ -15,7 +15,7 @@ const TYPE_LABELS: Record<DTCType, string> = {
 const STATUS_VARIANT: Record<DTCStatus, 'crit' | 'warn' | 'info' | 'muted'> = {
   active:    'crit',
   pending:   'warn',
-  permanent: 'warn',
+  permanent: 'muted',
   historical: 'muted',
 };
 
@@ -71,8 +71,8 @@ function DTCRow({ dtc, expanded, onToggle, hasFreezeFrame, onViewFreezeFrame }: 
         onClick={onToggle}
         className={expanded ? undefined : 'row-hover'}
         style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '10px 12px', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 12px', cursor: 'pointer',
           background: expanded ? 'var(--fill)' : 'transparent',
         }}
       >
@@ -125,7 +125,7 @@ function DTCRow({ dtc, expanded, onToggle, hasFreezeFrame, onViewFreezeFrame }: 
           {/* Left: causes + repair (CarsXE enriched when available) */}
           <div style={{ flex: 1, minWidth: 0 }}>
             {carsxe.state === 'loading' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, ...TYPE.caption, color: 'var(--label-2)', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, ...TYPE.caption, color: 'var(--label-2)', marginBottom: 8 }}>
                 <i className="ti ti-loader-2" style={{ fontSize: 13 }} />
                 Looking up {dtc.code} via CarsXE…
               </div>
@@ -134,7 +134,7 @@ function DTCRow({ dtc, expanded, onToggle, hasFreezeFrame, onViewFreezeFrame }: 
             {carsxe.state === 'ok' && carsxe.description && (
               <>
                 <SectionHeader>CarsXE definition</SectionHeader>
-                <div style={{ ...TYPE.body, color: 'var(--label)', marginTop: 4, marginBottom: 10 }}>{carsxe.description}</div>
+                <div style={{ ...TYPE.body, color: 'var(--label)', marginTop: 4, marginBottom: 8 }}>{carsxe.description}</div>
               </>
             )}
 
@@ -152,43 +152,43 @@ function DTCRow({ dtc, expanded, onToggle, hasFreezeFrame, onViewFreezeFrame }: 
                 {carsxe.state === 'ok' && carsxe.repair ? 'CarsXE — tech notes' : 'Repair procedure'}
               </SectionHeader>
             </div>
-            <div style={{ ...TYPE.body, color: 'var(--label)', marginTop: 6 }}>
+            <div style={{ ...TYPE.body, color: 'var(--label)', marginTop: 8 }}>
               {carsxe.state === 'ok' && carsxe.repair ? carsxe.repair : dtc.repairSummary}
             </div>
 
             {carsxe.state === 'no-key' && (
-              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginTop: 10 }}>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginTop: 8 }}>
                 Set CARSXE_API_KEY to enable live DTC lookup
               </div>
             )}
             {carsxe.state === 'error' && (
-              <div style={{ ...TYPE.caption, color: 'var(--warn-text)', marginTop: 10 }}>CarsXE: {carsxe.error}</div>
+              <div style={{ ...TYPE.caption, color: 'var(--warn-text)', marginTop: 8 }}>CarsXE: {carsxe.error}</div>
             )}
           </div>
 
           {/* Right: metadata */}
-          <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10, minWidth: 160 }}>
+          <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, minWidth: 160 }}>
             <div>
-              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Code</div>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Code</div>
               <span style={{ ...TYPE.headline, ...NUMERIC, color: 'var(--accent-text)' }}>{dtc.code}</span>
             </div>
             <div>
-              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Module</div>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Module</div>
               <span style={{ ...TYPE.body, color: 'var(--label)' }}>{dtc.module}</span>
             </div>
             <div>
-              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>First seen</div>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>First seen</div>
               <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label)' }}>
                 {new Date(dtc.firstSeen).toLocaleTimeString()}
               </span>
             </div>
             <div>
-              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Last seen</div>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Last seen</div>
               <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label)' }}>
                 {new Date(dtc.lastSeen).toLocaleTimeString()}
               </span>
             </div>
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               <Badge label={TYPE_LABELS[dtc.type]} variant={TYPE_VARIANT[dtc.type]} />
               <Badge label={dtc.status} variant={STATUS_VARIANT[dtc.status]} />
             </div>
@@ -403,7 +403,7 @@ export function DTCScreen(): React.ReactElement {
                 return (
                   <React.Fragment key={code}>
                     <div style={{
-                      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                      display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
                       background: stored ? 'var(--warn-tint)' : 'transparent',
                     }}>
                       <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-3)', width: 48, flexShrink: 0 }}>{code}</span>
