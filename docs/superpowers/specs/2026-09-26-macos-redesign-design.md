@@ -36,7 +36,8 @@ Semantic tokens, each with light and dark values based on Apple system colors:
 - Text: `label`, `secondaryLabel`, `tertiaryLabel`, `quaternaryLabel`.
 - `separator` (1px hairline).
 - Accent: systemBlue — light `#007AFF`, dark `#0A84FF`.
-- Status: systemGreen / systemOrange / systemRed — dark `#30D158` / `#FF9F0A` / `#FF453A`, light `#34C759` / `#FF9500` / `#FF3B30`. Light-mode status *text* uses Apple's accessible variants — `#248A3D` / `#C93400` / `#D70015` — which meet WCAG AA on the grouped background.
+- Status fills (dots, bars, arcs): systemGreen / systemOrange / systemRed — dark `#30D158` / `#FF9F0A` / `#FF453A`, light `#34C759` / `#FF9500` / `#FF3B30`.
+- Status and accent *text* use separate `*-text` tokens that pass WCAG AA (≥ 4.5:1) on `grouped` and `content`: light `#1F7A35` / `#C93400` / `#D70015`, accent `#0066CC`; dark `#30D158` / `#FF9F0A` / `#FF6961`, accent `#409CFF`. (Planning measured Apple's `#248A3D` at 4.40:1 on white and dark `#FF453A` / `#0A84FF` below 4.5:1 on `grouped`, so those are not used for text.)
 - Data series: systemTeal, systemIndigo, systemPurple, systemPink.
 - Tint helper: status/accent colors at low alpha for badge and callout backgrounds.
 
@@ -51,7 +52,7 @@ Semantic tokens, each with light and dark values based on Apple system colors:
 
 ### Appearance
 - Renderer resolves theme from `prefers-color-scheme` unless the user override is Light or Dark.
-- Main process reads `nativeTheme` for the window `backgroundColor` so there is no wrong-colour flash at launch.
+- The override is persisted by the main process (`userData/appearance.json`) and applied to `nativeTheme.themeSource` before the window is created; renderer reads/writes it over two IPC calls (`app:get-appearance`, `app:set-appearance`). Setting `themeSource` also flips `prefers-color-scheme` and the vibrancy material, so the renderer needs no dark-mode state.
 
 ### Migration
 - Existing CSS variable names (`--bg`, `--bg2`, `--pp`, `--sg`, `--sa`, `--sr`, `--tw`, `--tm`, `--br`, …) remain as aliases of the new tokens during the sweep so every unswept screen still renders. Aliases are removed in the cleanup step.
@@ -61,7 +62,7 @@ Semantic tokens, each with light and dark values based on Apple system colors:
 ### Window
 - Keep `titleBarStyle: 'hiddenInset'`; set `trafficLightPosition` so the traffic lights are vertically centred in the 52px toolbar.
 - `vibrancy: 'sidebar'` for the sidebar region; the content area stays opaque.
-- `backgroundColor` derived from `nativeTheme.shouldUseDarkColors` (replaces hardcoded `#0D1117`).
+- Transparent `backgroundColor` with `show: false` + `ready-to-show` (replaces hardcoded `#0D1117`): the window appears only once painted, so there is no wrong-colour flash.
 
 ### Sidebar
 - 220px source list replacing the 84px icon rail.
@@ -120,8 +121,9 @@ Semantic tokens, each with light and dark values based on Apple system colors:
 ## Section 4 — Screen sweep and verification
 
 ### Order (one commit per step; app runs after each)
-1. Tokens + app shell (aliases keep all screens rendering).
+1. Tokens, then native window chrome + appearance persistence (aliases keep all screens rendering).
 2. Component library (with compatibility wrappers).
+2b. App shell (built on the component library, so it comes after it).
 3. Core: Live, Health, DTC, Connection, Parasite.
 4. Subsystems: Engine, Electrical, HVAC, Transmission, All PIDs, Logger, Modules.
 5. Advanced: PCM, then EcuBus (1,200 lines; own step).
@@ -136,7 +138,7 @@ Semantic tokens, each with light and dark values based on Apple system colors:
 - Every interactive control on the screen exercised in simulator mode; behaviour unchanged.
 
 ### Out of scope
-- Logic, IPC, store, or `core/` changes.
+- Logic, store, or `core/` changes — except the two appearance IPC calls above and removing the now-unused `isDarkMode`/`toggleDarkMode` store fields.
 - New features or screen merges.
 - Bugs discovered during the sweep are recorded for the code review, not fixed here.
 
