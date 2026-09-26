@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import { useAppStore, selectBatteryVoltage, selectActiveDTCCount, selectParasiteRiskScore, selectVoltageTrend } from '../store/appStore';
 import { FreezeFrame, ReportPayload, LogEntry } from '../../shared/types';
 import {
-  ScrollPane, SectionHeader, Grid, Card, DenseMetricTile, CompactArcGauge, Badge, AlertBanner,
+  ScrollPane, SectionHeader, Grid, Card, Metric, Gauge, Badge, AlertBanner, Button, DataRow, EmptyState,
 } from '../components/layout/UIComponents';
+import { connectionTone } from '../components/shell/shellLogic';
+import { TYPE, NUMERIC, STATUS_TEXT } from '../theme/theme';
+import type { Status } from '../theme/theme';
 
 // ─── Readiness monitor definitions ────────────────────────────────────────────
 
@@ -36,13 +39,6 @@ function voltageLabel(v: number): string {
   return 'Low — check for draw';
 }
 
-function voltageColor(v: number): string {
-  if (v <= 0)    return 'var(--tm)';
-  if (v < 12.0)  return 'var(--sr)';
-  if (v < 12.4)  return 'var(--sa)';
-  return 'var(--sg)';
-}
-
 function riskLabel(score: number): string {
   if (score <= 2)  return 'Low risk';
   if (score <= 5)  return 'Moderate risk';
@@ -50,10 +46,10 @@ function riskLabel(score: number): string {
   return 'High risk — investigate';
 }
 
-function riskColor(score: number): string {
-  if (score <= 2)  return 'var(--sg)';
-  if (score <= 5)  return 'var(--sa)';
-  return 'var(--sr)';
+function riskStatus(score: number): Status {
+  if (score > 5) return 'crit';
+  if (score > 2) return 'warn';
+  return 'neutral';
 }
 
 // ─── HealthScreen ─────────────────────────────────────────────────────────────
@@ -126,19 +122,16 @@ export function HealthScreen(): React.ReactElement {
     <ScrollPane>
 
       {/* ── Export button ──────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
-        <button
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={exporting ? 'ti-loader-2' : 'ti-file-report'}
           disabled={exporting}
           onClick={exportReport}
-          style={{
-            padding: '4px 10px', background: 'var(--bg4)', border: '1px solid var(--br)',
-            color: exporting ? 'var(--tm)' : 'var(--tw)', fontSize: 11, cursor: exporting ? 'not-allowed' : 'pointer',
-            display: 'flex', alignItems: 'center', gap: 6, opacity: exporting ? 0.6 : 1,
-          }}
         >
-          <i className={`ti ${exporting ? 'ti-loader-2' : 'ti-file-report'}`} style={{ fontSize: 12 }} />
-          {exporting ? 'Generating…' : 'Export Report'}
-        </button>
+          {exporting ? 'Generating…' : 'Export report'}
+        </Button>
       </div>
 
       {/* ── Critical alerts ────────────────────────────────────────────────── */}
@@ -171,138 +164,94 @@ export function HealthScreen(): React.ReactElement {
       <Grid cols={4}>
 
         {/* Battery voltage — compact arc gauge */}
-        <CompactArcGauge
+        <Gauge
+          size="compact"
           label="Battery voltage"
           value={batteryV > 0 ? parseFloat(batteryV.toFixed(1)) : 0}
           max={13}
           unit={batteryV > 0 ? voltageLabel(batteryV) : '—'}
-          color={voltageColor(batteryV)}
+          warnLow={batteryV > 0 ? 12.4 : undefined}
+          critLow={batteryV > 0 ? 12.0 : undefined}
         />
 
         {/* MIL / Check Engine */}
-        <div
-          style={{
-            background: 'var(--bg2)',
-            border: `1px solid ${milOn ? 'rgba(255,36,64,0.4)' : 'var(--br)'}`,
-            borderRadius: 0, padding: 10,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
-            transition: 'border-color 0.15s',
-          }}
-          onMouseEnter={e => { if (!milOn) (e.currentTarget as HTMLElement).style.borderColor = 'var(--bs)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = milOn ? 'rgba(255,36,64,0.4)' : 'var(--br)'; }}
-        >
-          <span style={{
-            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-            letterSpacing: 1.2, textTransform: 'uppercase',
-            color: 'var(--tm)',
-          }}>
-            Check engine light
+        <Card padding={12} style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>Check engine light</span>
+          <span
+            aria-hidden
+            className={milOn ? 'pulse' : undefined}
+            style={{ width: 14, height: 14, borderRadius: 7, background: milOn ? 'var(--crit)' : 'var(--label-4)' }}
+          />
+          <span style={{ ...TYPE.caption, color: milOn ? 'var(--crit-text)' : 'var(--label-2)' }}>
+            {milOn ? `On — ${activeDTCs} active fault${activeDTCs !== 1 ? 's' : ''}` : connectionStatus === 'connected' ? 'Off — no active faults' : 'Not connected'}
           </span>
-          <div style={{
-            width: 44, height: 44, borderRadius: '50%',
-            background: milOn ? 'rgba(255,36,64,0.12)' : 'var(--bg4)',
-            border: `2px solid ${milOn ? 'var(--sr)' : 'var(--br)'}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            animation: milOn ? 'blink 2s infinite' : 'none',
-          }}>
-            <i className="ti ti-engine" style={{ fontSize: 20, color: milOn ? 'var(--sr)' : 'var(--bs)' }} />
-          </div>
-          <span style={{
-            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 10,
-            color: milOn ? 'var(--sr)' : 'var(--sg)',
-          }}>
-            {milOn ? `ON — ${activeDTCs} active fault${activeDTCs !== 1 ? 's' : ''}` : connectionStatus === 'connected' ? 'OFF — No active faults' : 'Not connected'}
-          </span>
-        </div>
+        </Card>
 
         {/* Parasite risk score */}
-        <div
-          style={{
-            background: 'var(--bg2)',
-            border: `1px solid ${riskScore > 5 ? 'rgba(255,36,64,0.4)' : riskScore > 2 ? 'rgba(255,179,0,0.3)' : 'var(--br)'}`,
-            borderRadius: 0, padding: 10,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
-            transition: 'border-color 0.15s',
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--bs)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = riskScore > 5 ? 'rgba(255,36,64,0.4)' : riskScore > 2 ? 'rgba(255,179,0,0.3)' : 'var(--br)'; }}
-        >
-          <span style={{
-            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-            letterSpacing: 1.2, textTransform: 'uppercase',
-            color: 'var(--tm)',
-          }}>
-            Parasite risk score
-          </span>
-          <div style={{
-            fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 32, fontWeight: 600,
-            color: riskColor(riskScore), lineHeight: 1,
-          }}>
+        <Card padding={12} style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+          <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>Parasite risk score</span>
+          <span style={{ ...TYPE.title1, ...NUMERIC, color: connectionStatus === 'connected' ? STATUS_TEXT[riskStatus(riskScore)] : 'var(--label-3)' }}>
             {connectionStatus === 'connected' ? riskScore.toFixed(1) : '—'}
-          </div>
-          <span style={{ fontSize: 10, color: 'var(--tm)' }}>out of 10</span>
-          <span style={{
-            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 10,
-            color: riskColor(riskScore),
-          }}>
+          </span>
+          <span style={{ ...TYPE.caption, color: 'var(--label-3)' }}>out of 10</span>
+          <span style={{ ...TYPE.caption, color: connectionStatus === 'connected' ? STATUS_TEXT[riskStatus(riskScore)] : 'var(--label-2)' }}>
             {connectionStatus === 'connected' ? riskLabel(riskScore) : 'Not connected'}
           </span>
-        </div>
+        </Card>
 
         {/* Engine status */}
-        <DenseMetricTile
+        <Metric
+          size="compact"
           label="Engine status"
           value={connectionStatus !== 'connected' ? '—' : engineOn ? `${rpm.toLocaleString()} rpm` : 'Off'}
           subtext={connectionStatus === 'connected' ? (engineOn ? `Coolant: ${coolantF > 0 ? coolantF + ' °F' : '—'}` : 'Engine not running') : 'Adapter not connected'}
-          valueColor={engineOn ? 'var(--sg)' : 'var(--tm)'}
         />
       </Grid>
 
       {/* ── DTC summary ────────────────────────────────────────────────────── */}
       <SectionHeader>Diagnostic fault codes</SectionHeader>
       <Grid cols={4}>
-        <DenseMetricTile
+        <Metric
+          size="compact"
           label="Active faults"
           value={activeDTCs}
           subtext={activeDTCs > 0 ? 'MIL illuminated' : 'No active faults'}
-          valueColor={activeDTCs > 0 ? 'var(--sr)' : 'var(--sg)'}
-          accentBorder={activeDTCs > 0 ? 'var(--sr)' : undefined}
+          status={activeDTCs > 0 ? 'crit' : 'neutral'}
         />
-        <DenseMetricTile
+        <Metric
+          size="compact"
           label="Pending faults"
           value={pendingDTCs}
           subtext={pendingDTCs > 0 ? 'Detected, not yet confirmed' : 'None pending'}
-          valueColor={pendingDTCs > 0 ? 'var(--sa)' : 'var(--tm)'}
+          status={pendingDTCs > 0 ? 'warn' : 'neutral'}
         />
-        <DenseMetricTile
+        <Metric
+          size="compact"
           label="Permanent faults"
           value={permDTCs}
           subtext={permDTCs > 0 ? 'Cannot be cleared by scan tool' : 'None permanent'}
-          valueColor={permDTCs > 0 ? 'var(--sa)' : 'var(--tm)'}
+          status={permDTCs > 0 ? 'warn' : 'neutral'}
         />
-        <DenseMetricTile
+        <Metric
+          size="compact"
           label="Total stored"
           value={dtcs.length}
           subtext={dtcs.length > 0 ? 'Navigate to DTC screen for details' : 'No codes stored'}
-          valueColor={dtcs.length > 0 ? 'var(--sa)' : 'var(--sg)'}
+          status={dtcs.length > 0 ? 'warn' : 'neutral'}
         />
       </Grid>
 
       {/* Active DTC list if any */}
       {dtcs.filter(d => d.status === 'active').length > 0 && (
         <Card padding={0}>
-          {dtcs.filter(d => d.status === 'active').map((dtc, i) => (
-            <div key={dtc.code} style={{
-              display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px',
-              borderBottom: i < dtcs.filter(d => d.status === 'active').length - 1 ? '1px solid var(--bg3)' : 'none',
-            }}>
-              <Badge label={dtc.code} variant="crit" />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, color: 'var(--tw)', fontWeight: 500 }}>{dtc.description}</div>
-                <div style={{ fontSize: 11, color: 'var(--tm)', marginTop: 2 }}>{dtc.module} · {dtc.likelyCauses[0]}</div>
-              </div>
-              <Badge label={dtc.type === 'P' ? 'Powertrain' : dtc.type === 'B' ? 'Body' : dtc.type === 'C' ? 'Chassis' : 'Network'} variant="muted" />
-            </div>
+          {dtcs.filter(d => d.status === 'active').map(dtc => (
+            <DataRow
+              key={dtc.code}
+              name={dtc.description}
+              subtext={`${dtc.module} · ${dtc.likelyCauses[0]}`}
+              value={dtc.type === 'P' ? 'Powertrain' : dtc.type === 'B' ? 'Body' : dtc.type === 'C' ? 'Chassis' : 'Network'}
+              badge={<Badge label={dtc.code} variant="crit" />}
+            />
           ))}
         </Card>
       )}
@@ -310,23 +259,22 @@ export function HealthScreen(): React.ReactElement {
       {/* ── Readiness monitors ─────────────────────────────────────────────── */}
       <SectionHeader>I/M readiness monitors</SectionHeader>
       <Card padding={0}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 0 }}>
-          {READINESS_MONITORS.map((m, i) => {
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)' }}>
+          {READINESS_MONITORS.map(m => {
             // Without live 0101 data use a placeholder state
             const ready = connectionStatus === 'connected';
             return (
-              <div key={m.id} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '7px 12px',
-                borderBottom: i < READINESS_MONITORS.length - 2 ? '1px solid var(--bg3)' : 'none',
-                borderRight: i % 2 === 0 ? '1px solid var(--bg3)' : 'none',
-              }}>
-                <span style={{ fontSize: 12, color: 'var(--tw)' }}>{m.name}</span>
-                <Badge
-                  label={connectionStatus !== 'connected' ? 'N/A' : ready ? 'Ready' : 'Not ready'}
-                  variant={connectionStatus !== 'connected' ? 'muted' : ready ? 'ok' : 'warn'}
-                />
-              </div>
+              <DataRow
+                key={m.id}
+                name={m.name}
+                value=""
+                badge={
+                  <Badge
+                    label={connectionStatus !== 'connected' ? 'N/A' : ready ? 'Ready' : 'Not ready'}
+                    variant={connectionStatus !== 'connected' ? 'muted' : ready ? 'ok' : 'warn'}
+                  />
+                }
+              />
             );
           })}
         </div>
@@ -336,45 +284,24 @@ export function HealthScreen(): React.ReactElement {
       <SectionHeader>Module status</SectionHeader>
       {modules.length === 0 ? (
         <Card>
-          <div style={{ padding: '14px 12px', fontSize: 12, color: 'var(--tm)', textAlign: 'center' }}>
-            No module data — connect adapter and run a module scan
-          </div>
+          <EmptyState icon="ti-cpu-off" title="No module data" message="Connect adapter and run a module scan." />
         </Card>
       ) : (
         <Card padding={0}>
-          {modules.map((mod, i) => {
-            const statusColor = mod.status === 'alive' ? 'var(--sg)'
-              : mod.status === 'rogue' ? 'var(--sr)'
-              : mod.status === 'suspect' ? 'var(--sa)'
-              : mod.status === 'sleeping' ? 'var(--gb)'
-              : 'var(--tm)';
+          {modules.map(mod => {
             const badgeVariant = mod.status === 'alive' ? 'ok'
               : mod.status === 'rogue' ? 'crit'
               : mod.status === 'suspect' ? 'warn'
-              : 'info' as any;
+              : 'info';
             return (
-              <div
+              <DataRow
                 key={mod.address}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-                  borderBottom: i < modules.length - 1 ? '1px solid var(--bg3)' : 'none',
-                  transition: 'background 0.1s',
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-              >
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
-                <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--tm)', width: 38, flexShrink: 0 }}>
-                  {mod.address}
-                </span>
-                <span style={{ fontSize: 12, color: 'var(--tw)', flex: 1 }}>{mod.name}</span>
-                {mod.latencyMs > 0 && (
-                  <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--tm)' }}>
-                    {mod.latencyMs} ms
-                  </span>
-                )}
-                <Badge label={mod.status} variant={badgeVariant} />
-              </div>
+                pid={mod.address}
+                name={mod.name}
+                subtext={mod.latencyMs > 0 ? `${mod.latencyMs} ms` : undefined}
+                value=""
+                badge={<Badge label={mod.status} variant={badgeVariant} />}
+              />
             );
           })}
         </Card>
@@ -383,22 +310,23 @@ export function HealthScreen(): React.ReactElement {
       {/* ── Adapter info ───────────────────────────────────────────────────── */}
       <SectionHeader>Adapter &amp; connection</SectionHeader>
       <Grid cols={3}>
-        <DenseMetricTile
+        <Metric
+          size="compact"
           label="Connection status"
           value={connectionStatus}
-          valueColor={connectionStatus === 'connected' ? 'var(--sg)' : connectionStatus === 'error' ? 'var(--sr)' : 'var(--sa)'}
+          status={connectionTone(connectionStatus)}
         />
-        <DenseMetricTile
+        <Metric
+          size="compact"
           label="Negotiated protocol"
           value={protocol || '—'}
           subtext={isGMT800 ? 'Expected: SAE J1850 VPW (GM Class II)' : undefined}
-          valueColor={protocol ? 'var(--tw)' : 'var(--tm)'}
         />
-        <DenseMetricTile
+        <Metric
+          size="compact"
           label="Adapter firmware"
           value={adapterInfo || '—'}
           subtext="OBDLink MX+ ELM327 v1.5"
-          valueColor="var(--tm)"
         />
       </Grid>
 
