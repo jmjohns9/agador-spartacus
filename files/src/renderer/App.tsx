@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useAppStore, selectBatteryVoltage, selectActiveDTCCount, vehicleDisplayName } from './store/appStore';
-import { buildCSSVars, FONTS } from './theme/theme';
+import { buildThemeCSS, FONTS } from './theme/theme';
+import { GLOBAL_CSS, LEGACY_CSS } from './theme/globalStyles';
 import { PIDReading, DTCCode, ModuleState, LogEntry, SessionSnapshot, DataRecording, FreezeFrame, StorageConfig, StorageInfo, ReportPayload, PcmReadResult } from '../shared/types';
 
 // Screens
@@ -148,11 +149,6 @@ export function App(): React.ReactElement {
   const vehicle        = useAppStore(s => s.vehicle);
   const dtcs           = useAppStore(s => s.dtcs);
   const liveData       = useAppStore(s => s.liveData);
-
-  // ── Inject CSS variables on mount and when theme changes ──────────────────
-  useEffect(() => {
-    document.documentElement.style.cssText = buildCSSVars(isDarkMode);
-  }, [isDarkMode]);
 
   // ── Wire Electron IPC events ───────────────────────────────────────────────
   useEffect(() => {
@@ -407,6 +403,7 @@ export function App(): React.ReactElement {
                 )}
                 <button
                   className="nav-btn"
+                  data-screen={item.id}
                   onClick={() => setActiveScreen(item.id)}
                   title={item.tooltip}
                   aria-label={item.tooltip}
@@ -510,126 +507,7 @@ export function App(): React.ReactElement {
         </div>
       </div>
 
-      {/* Global CSS */}
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        html { scroll-behavior: smooth; }
-        body { overflow: hidden; }
-        ::-webkit-scrollbar { width: 3px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
-
-        @keyframes blink    { 0%,100%{opacity:1} 50%{opacity:.3} }
-        @keyframes spin     { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-        @keyframes waveAnim { 0%,100%{transform:scaleY(.2)} 50%{transform:scaleY(1)} }
-
-        /* ── Screen enter — fade-up with blur for cinematic depth ── */
-        @keyframes screenIn {
-          from { opacity: 0; transform: translateY(8px); filter: blur(3px); }
-          to   { opacity: 1; transform: translateY(0);   filter: blur(0); }
-        }
-        .screen-enter { animation: screenIn 0.38s cubic-bezier(0.32,0.72,0,1) both; }
-
-        /* ── Nav — spring physics, left-edge glow on active ── */
-        .nav-btn {
-          transition: background 0.4s cubic-bezier(0.32,0.72,0,1),
-                      box-shadow 0.4s cubic-bezier(0.32,0.72,0,1),
-                      transform  0.2s cubic-bezier(0.32,0.72,0,1) !important;
-        }
-        .nav-btn:hover:not([aria-current="page"]) {
-          background: rgba(255,255,255,0.04) !important;
-        }
-        .nav-btn:active { transform: scale(0.95); }
-        .nav-btn[aria-current="page"] {
-          background: linear-gradient(90deg, rgba(33,136,255,0.10) 0%, rgba(33,136,255,0.02) 100%) !important;
-          box-shadow: inset 2px 0 0 var(--pp) !important;
-        }
-
-        /* ── Button — spring physics, scale-on-press ── */
-        .btn {
-          transition: filter      0.35s cubic-bezier(0.32,0.72,0,1),
-                      transform   0.2s  cubic-bezier(0.32,0.72,0,1),
-                      box-shadow  0.35s cubic-bezier(0.32,0.72,0,1) !important;
-          position: relative;
-        }
-        .btn:hover:not(:disabled) {
-          filter: brightness(1.25);
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.12) !important;
-        }
-        .btn:active:not(:disabled) {
-          transform: scale(0.96);
-          filter: brightness(0.88);
-        }
-        /* Button-in-Button icon: diagonal nudge on hover */
-        .btn:hover:not(:disabled) span:first-child {
-          transform: translate(1px, -1px) scale(1.08);
-        }
-
-        /* ── Card — smooth border brightening ── */
-        .card-lift {
-          transition: border-color 0.4s cubic-bezier(0.32,0.72,0,1),
-                      box-shadow   0.4s cubic-bezier(0.32,0.72,0,1) !important;
-        }
-        .card-lift:hover {
-          border-color: rgba(255,255,255,0.1) !important;
-        }
-
-        /* ── Data row hover ── */
-        .data-row {
-          transition: background 0.25s cubic-bezier(0.32,0.72,0,1) !important;
-        }
-        .data-row:hover { background: rgba(255,255,255,0.03) !important; }
-
-        /* ── Header chips ── */
-        .chip { transition: border-color 0.3s cubic-bezier(0.32,0.72,0,1); }
-        .chip:hover { border-color: rgba(255,255,255,0.16) !important; }
-
-        /* ── Toggle thumb — bouncy spring ── */
-        .toggle-thumb {
-          transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
-        }
-
-        /* ── Input / select focus ── */
-        input:focus, select:focus {
-          outline: none;
-          border-color: var(--pp) !important;
-          box-shadow: 0 0 0 3px rgba(33,136,255,0.12) !important;
-        }
-
-        /* ── Reduced motion ── */
-        @media (prefers-reduced-motion: reduce) {
-          *, *::before, *::after { animation: none !important; transition: none !important; }
-        }
-
-        button { font-family: inherit; font-size: inherit; color: inherit; }
-        :focus { outline: none; }
-        :focus-visible { outline: 2px solid var(--pp); outline-offset: 2px; }
-        input, select {
-          color: var(--tw); background: var(--bg3);
-          border: 1px solid rgba(255,255,255,0.08);
-          font-family: inherit;
-          transition: border-color 0.3s cubic-bezier(0.32,0.72,0,1), box-shadow 0.3s cubic-bezier(0.32,0.72,0,1);
-        }
-
-        /* ── Compact sidebar at short window heights ── */
-        @media (max-height: 700px) {
-          .nav-btn { height: 40px !important; width: 68px !important; gap: 2px !important; }
-          .nav-btn span { font-size: 8px !important; }
-          .nav-btn i { font-size: 18px !important; }
-        }
-        @media (max-height: 500px) {
-          .nav-btn { height: 32px !important; width: 64px !important; flex-direction: row !important; gap: 4px !important; }
-          .nav-btn span { font-size: 7px !important; }
-          .nav-btn i { font-size: 14px !important; }
-        }
-
-        /* ── Responsive grid ── */
-        @media (max-width: 800px) {
-          .hero-grid { grid-template-columns: 1fr !important; }
-        }
-      `}</style>
+      <style>{`${buildThemeCSS()}\n${GLOBAL_CSS}\n${LEGACY_CSS}`}</style>
     </div>
   );
 }

@@ -39,3 +39,6 @@ eval/*/actual.json
 
 # Local app config
 files/claude-config.json
+
+# Redesign screenshot harness output
+files/.screens/
