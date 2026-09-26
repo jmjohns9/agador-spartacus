@@ -164,25 +164,3 @@ export const NUMERIC: CSSProperties = { fontFamily: FONTS.mono, fontVariantNumer
 export const SPACE = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32 } as const;
 export const RADIUS = { control: 6, card: 10, panel: 12 } as const;
 export const MOTION = { fast: '150ms ease-out', base: '200ms ease-out', slow: '250ms ease-out' } as const;
-
-// ─── Legacy helpers (removed in Task 4 once UIComponents is rebuilt) ─────────
-
-/** @deprecated use statusFor + STATUS_TEXT */
-export function valueColor(
-  value: number, warnLow?: number, warnHigh?: number, critLow?: number, critHigh?: number, _dark = true,
-): string {
-  return STATUS_TEXT[statusFor(value, { warnLow, warnHigh, critLow, critHigh })];
-}
-
-/** @deprecated replaced by components/ui/gaugeGeometry.ts */
-export function gaugeArc(
-  value: number, min: number, max: number, radius: number, sweep = 270,
-): { dashArray: string; dashOffset: number } {
-  const circumference = 2 * Math.PI * radius;
-  const fraction = Math.min(1, Math.max(0, (value - min) / (max - min)));
-  const arcLength = (sweep / 360) * circumference;
-  const filled = fraction * arcLength;
-  const gap = circumference - filled;
-  const dashOffset = -circumference * ((360 - sweep) / 2 / 360);
-  return { dashArray: `${filled.toFixed(1)} ${gap.toFixed(1)}`, dashOffset };
-}
