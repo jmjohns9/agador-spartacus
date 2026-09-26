@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { PIDReading, DTCCode, ModuleState, ConnectionStatus, LogEntry, SessionSnapshot, DataRecording, FreezeFrame, StorageConfig, StorageInfo, ReportPayload, PcmReadResult } from '../shared/types';
+import { PIDReading, DTCCode, ModuleState, ConnectionStatus, LogEntry, SessionSnapshot, DataRecording, FreezeFrame, StorageConfig, StorageInfo, ReportPayload, PcmReadResult, Appearance } from '../shared/types';
 
 // ─── Secure IPC Bridge (contextIsolation: true) ────────────────────────────────
 // All communication between the renderer (React) and main process
@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readPcmIds:   ()                               => ipcRenderer.invoke('pcm:read-ids') as Promise<PcmReadResult>,
   exportLog:    (filename: string)               => ipcRenderer.invoke('session:export-log', { filename }),
   exportCSV:    (data: string, filename: string) => ipcRenderer.invoke('session:export-csv', { data, filename }),
+  getAppearance: ()                  => ipcRenderer.invoke('app:get-appearance') as Promise<Appearance>,
+  setAppearance: (a: Appearance)     => ipcRenderer.invoke('app:set-appearance', a) as Promise<Appearance>,
 
   // ── Claude assistant ────────────────────────────────────────────────────────
   claudeAsk:        (payload: { question: string; context: unknown; history: unknown })                  => ipcRenderer.invoke('claude:ask', payload),

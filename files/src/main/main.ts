@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme } from 'electron';
 import * as path from 'path';
 import { EventEmitter } from 'events';
 import { execFile } from 'child_process';
@@ -11,6 +11,7 @@ import { GMT800 } from '../core/platforms/gmt800';
 import { askClaude, loadConfig as loadClaudeConfig, saveConfig as saveClaudeConfig, SessionContext, ChatTurn, CLAUDE_MODELS, DEFAULT_SYSTEM_PROMPT } from './claudeAssistant';
 import * as fs from 'fs';
 import { StorageService } from './storageService';
+import { loadAppearance, saveAppearance, parseAppearance } from './appearance';
 
 // SerialPort is a native module — use require() to avoid dynamic import issues in Electron
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -21,13 +22,21 @@ const { SerialPort } = require('serialport') as { SerialPort: any };
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
+  // Apply the saved override before the window exists so vibrancy and
+  // prefers-color-scheme are correct on the very first frame.
+  nativeTheme.themeSource = loadAppearance(app.getPath('userData'));
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1100,
     minHeight: 700,
     titleBarStyle: 'hiddenInset',
-    backgroundColor: '#0D1117',
+    trafficLightPosition: { x: 20, y: 19 },
+    vibrancy: 'sidebar',
+    visualEffectState: 'followWindow',
+    backgroundColor: '#00000000',
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -36,6 +45,8 @@ function createWindow(): void {
     },
     title: 'Project Agador Spartacus',
   });
+
+  mainWindow.once('ready-to-show', () => mainWindow?.show());
 
   // Load renderer
   if (process.env.NODE_ENV === 'development') {
@@ -307,6 +318,17 @@ function startOBDManager(): void {
 }
 
 // ─── IPC Handlers ─────────────────────────────────────────────────────────────
+
+// ─── Appearance ──────────────────────────────────────────────────────────────
+
+ipcMain.handle('app:get-appearance', () => loadAppearance(app.getPath('userData')));
+
+ipcMain.handle('app:set-appearance', (_event, value: unknown) => {
+  const appearance = parseAppearance(value);
+  nativeTheme.themeSource = appearance;
+  saveAppearance(app.getPath('userData'), appearance);
+  return appearance;
+});
 
 ipcMain.handle('obd:list-ports', async () => {
   try {
