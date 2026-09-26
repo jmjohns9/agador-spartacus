@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StorageConfig, StorageInfo } from '../../shared/types';
+import type { Appearance } from '../../shared/types';
+import { Card, SectionHeader, SegmentedControl } from '../components/layout/UIComponents';
+import { TYPE } from '../theme/theme';
 
 function fmtBytes(b: number): string {
   if (b < 1024)         return `${b} B`;
@@ -12,6 +15,13 @@ export function SettingsScreen(): React.ReactElement {
   const [info,      setInfo]        = useState<StorageInfo | null>(null);
   const [migrating, setMigrating]   = useState(false);
   const [pending,   setPending]     = useState<'local' | 'sqlite' | null>(null);
+
+  const [appearance, setAppearanceState] = useState<Appearance>('system');
+  useEffect(() => { window.electronAPI.getAppearance().then(setAppearanceState).catch(() => {}); }, []);
+  const changeAppearance = async (a: Appearance) => {
+    setAppearanceState(a);
+    setAppearanceState(await window.electronAPI.setAppearance(a));
+  };
 
   const reload = useCallback(async () => {
     const [cfg, inf] = await Promise.all([
@@ -50,6 +60,23 @@ export function SettingsScreen(): React.ReactElement {
 
   return (
     <div style={{ overflowY: 'auto', flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <SectionHeader>Appearance</SectionHeader>
+      <Card>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <span style={{ ...TYPE.body, color: 'var(--label)' }}>Theme</span>
+          <SegmentedControl<Appearance>
+            ariaLabel="Theme"
+            value={appearance}
+            onChange={changeAppearance}
+            options={[
+              { value: 'system', label: 'System' },
+              { value: 'light',  label: 'Light' },
+              { value: 'dark',   label: 'Dark' },
+            ]}
+          />
+        </div>
+      </Card>
+
       <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.0, textTransform: 'uppercase', color: 'var(--tm)', padding: '2px 0 6px' }}>
         Storage backend
       </div>
