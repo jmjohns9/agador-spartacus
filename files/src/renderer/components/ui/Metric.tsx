@@ -32,9 +32,9 @@ export interface MetricProps {
 }
 
 const SIZE = {
-  hero:    { value: TYPE.display, unit: TYPE.headline, pad: '16px 20px', gap: 6 },
+  hero:    { value: TYPE.display, unit: TYPE.headline, pad: '16px 20px', gap: 8 },
   regular: { value: TYPE.title2,  unit: TYPE.body,     pad: '12px 16px', gap: 4 },
-  compact: { value: TYPE.title3,  unit: TYPE.caption,  pad: '10px 12px', gap: 2 },
+  compact: { value: TYPE.title3,  unit: TYPE.caption,  pad: '8px 12px', gap: 4 },
 } as const;
 
 export function Metric({
@@ -50,10 +50,10 @@ export function Metric({
       position: 'relative', overflow: 'hidden',
       display: 'flex', flexDirection: 'column', gap: s.gap,
       padding: s.pad, height: '100%',
-      background: 'var(--grouped)', border: '1px solid var(--separator)', borderRadius: RADIUS.card, // style-ok: token border, not a raw literal
+      background: 'var(--grouped)', border: '1px solid var(--separator)', borderRadius: RADIUS.card,
       gridColumn: span === 2 ? 'span 2' : undefined,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 14 }}>
         <span style={{ ...TYPE.caption, fontWeight: WEIGHT.medium, color: 'var(--label-2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {label}
         </span>

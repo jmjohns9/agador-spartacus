@@ -35,8 +35,8 @@ export function Gauge({
   return (
     <div className="metric" style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-      padding: compact ? '10px 12px' : '12px 16px', height: '100%',
-      background: 'var(--grouped)', border: '1px solid var(--separator)', borderRadius: RADIUS.card, // style-ok: token border, not a raw literal
+      padding: compact ? '8px 12px' : '12px 16px', height: '100%',
+      background: 'var(--grouped)', border: '1px solid var(--separator)', borderRadius: RADIUS.card,
     }}>
       <div style={{ ...TYPE.caption, fontWeight: WEIGHT.medium, color: 'var(--label-2)', alignSelf: 'stretch', textAlign: 'center' }}>{label}</div>
       <div style={{ position: 'relative', width: '100%', maxWidth: compact ? 110 : 170 }}>
