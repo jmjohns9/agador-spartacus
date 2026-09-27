@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAppStore, vehicleDisplayName } from '../store/appStore';
 import { SessionSnapshot } from '../../shared/types';
+import {
+  ScrollPane, SectionHeader, Card, Grid, Badge, AlertBanner, Button, Divider, EmptyState,
+} from '../components/layout/UIComponents';
+import { TYPE, WEIGHT, NUMERIC, STATUS_TEXT, Status } from '../theme/theme';
 
 const COMPARE_PIDS: Array<{ pid: string; label: string; unit: string; decimals: number; isFuelTrim?: boolean }> = [
   { pid: 'ATRV', label: 'Battery Voltage', unit: 'V',   decimals: 3 },
@@ -25,9 +29,9 @@ function fmtVal(v: number | string | undefined, d: number, unit: string): string
 }
 
 function deltaColor(delta: number, isFuelTrim: boolean): string {
-  if (Math.abs(delta) < 0.05) return 'var(--tm)';
-  if (isFuelTrim) return Math.abs(delta) > 5 ? 'var(--sr)' : Math.abs(delta) > 2 ? 'var(--sa)' : 'var(--sg)';
-  return delta > 0 ? 'var(--sg)' : 'var(--sa)';
+  if (Math.abs(delta) < 0.05) return 'var(--label-2)';
+  if (isFuelTrim) return Math.abs(delta) > 5 ? 'var(--crit-text)' : Math.abs(delta) > 2 ? 'var(--warn-text)' : 'var(--ok-text)';
+  return delta > 0 ? 'var(--ok-text)' : 'var(--warn-text)';
 }
 
 function fmtDate(ts: number): string {
@@ -43,16 +47,16 @@ function VoltageOverlay({ live, snap }: { live: number[]; snap: number[] }): Rea
 
   const lastLive = live[live.length - 1] ?? 0;
   const lastSnap = snap[snap.length - 1] ?? 0;
-  const liveColor = lastLive < 12.0 ? 'var(--sr)' : lastLive < 12.4 ? 'var(--sa)' : 'var(--pp)';
-  const snapColor = lastSnap < 12.0 ? 'var(--sr)' : lastSnap < 12.4 ? 'var(--sa)' : 'var(--gb)';
+  const liveColor = lastLive < 12.0 ? 'var(--crit)' : lastLive < 12.4 ? 'var(--warn)' : 'var(--accent)';
+  const snapColor = lastSnap < 12.0 ? 'var(--crit)' : lastSnap < 12.4 ? 'var(--warn)' : 'var(--teal)';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <svg width="100%" viewBox={`-40 -8 ${W + 80} ${H + 20}`} style={{ overflow: 'visible' }}>
-        {[{ v: 12.6, c: 'var(--sg)' }, { v: 12.4, c: 'var(--sa)' }, { v: 12.0, c: 'var(--sr)' }].map(({ v, c }) => (
+        {[{ v: 12.6, s: 'ok' as Status }, { v: 12.4, s: 'warn' as Status }, { v: 12.0, s: 'crit' as Status }].map(({ v, s }) => (
           <g key={v}>
-            <line x1={0} y1={yOf(v)} x2={W} y2={yOf(v)} stroke={c} strokeWidth="0.6" strokeDasharray="3,3" />
-            <text x={W + 4} y={yOf(v) + 4} fontSize="7.5" fill={c} fontFamily="monospace">{v}V</text>
+            <line x1={0} y1={yOf(v)} x2={W} y2={yOf(v)} stroke={`var(--${s})`} strokeWidth="0.6" strokeDasharray="3,3" />
+            <text x={W + 4} y={yOf(v) + 4} style={{ ...TYPE.caption, ...NUMERIC, fill: STATUS_TEXT[s] }}>{v}V</text>
           </g>
         ))}
         {snap.length > 1 && (
@@ -62,16 +66,16 @@ function VoltageOverlay({ live, snap }: { live: number[]; snap: number[] }): Rea
           <polyline points={toPoints(live)} fill="none" stroke={liveColor} strokeWidth="1.8" />
         )}
         {live.length > 0 && (
-          <circle cx={W} cy={yOf(lastLive)} r="3.5" fill={liveColor} stroke="var(--bg3)" strokeWidth="1.5" />
+          <circle cx={W} cy={yOf(lastLive)} r="3.5" fill={liveColor} stroke="var(--grouped)" strokeWidth="1.5" />
         )}
       </svg>
-      <div style={{ display: 'flex', gap: 16, fontSize: 10, fontFamily: 'monospace', color: 'var(--tm)' }}>
+      <div style={{ display: 'flex', gap: 16, ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ display: 'inline-block', width: 18, height: 2, background: 'var(--pp)' }} />
+          <span style={{ display: 'inline-block', width: 18, height: 2, background: 'var(--accent)' }} />
           Live {lastLive ? `${lastLive.toFixed(3)} V` : '—'}
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ display: 'inline-block', width: 18, borderTop: '1px dashed var(--gb)' }} />
+          <span style={{ display: 'inline-block', width: 18, height: 2, backgroundImage: 'repeating-linear-gradient(to right, var(--teal) 0 4px, transparent 4px 7px)' }} />
           Snapshot {lastSnap ? `${lastSnap.toFixed(3)} V` : '—'}
         </span>
       </div>
@@ -83,37 +87,36 @@ function PIDTable({ snap, live }: {
   snap: SessionSnapshot;
   live: Record<string, { value: number | string; timestamp: number }>;
 }): React.ReactElement {
+  const cols = '1.3fr 90px 90px 90px';
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: 'monospace' }}>
-        <thead>
-          <tr style={{ borderBottom: '1px solid var(--br)' }}>
-            {['Parameter', 'Snapshot', 'Live', 'Δ'].map(h => (
-              <th key={h} style={{ padding: '4px 8px', textAlign: h === 'Parameter' ? 'left' : 'right', color: 'var(--tm)', fontWeight: 600, fontSize: 10, letterSpacing: 0.8, textTransform: 'uppercase' }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {COMPARE_PIDS.map(({ pid, label, unit, decimals, isFuelTrim }) => {
-            const sv = snap.liveData[pid]?.value;
-            const lv = live[pid]?.value;
-            const sn = typeof sv === 'number' ? sv : NaN;
-            const ln = typeof lv === 'number' ? lv : NaN;
-            const delta = !isNaN(sn) && !isNaN(ln) ? ln - sn : NaN;
-            return (
-              <tr key={pid} style={{ borderBottom: '1px solid var(--bg4)' }}>
-                <td style={{ padding: '5px 8px', color: 'var(--tm)', fontFamily: 'sans-serif', fontSize: 11 }}>{label}</td>
-                <td style={{ padding: '5px 8px', textAlign: 'right', color: 'var(--gb)' }}>{fmtVal(sv, decimals, unit)}</td>
-                <td style={{ padding: '5px 8px', textAlign: 'right', color: 'var(--pp)' }}>{fmtVal(lv, decimals, unit)}</td>
-                <td style={{ padding: '5px 8px', textAlign: 'right', color: isNaN(delta) ? 'var(--tm)' : deltaColor(delta, !!isFuelTrim) }}>
-                  {isNaN(delta) ? '—' : `${delta >= 0 ? '+' : ''}${delta.toFixed(decimals)} ${unit}`}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <Card padding={0}>
+      <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '6px 12px', background: 'var(--fill)' }}>
+        {['Parameter', 'Snapshot', 'Live', 'Δ'].map((h, i) => (
+          <span key={h} style={{ ...TYPE.caption, color: 'var(--label-3)', textAlign: i === 0 ? 'left' : 'right' }}>{h}</span>
+        ))}
+      </div>
+      <Divider />
+      {COMPARE_PIDS.map(({ pid, label, unit, decimals, isFuelTrim }, i, arr) => {
+        const sv = snap.liveData[pid]?.value;
+        const lv = live[pid]?.value;
+        const sn = typeof sv === 'number' ? sv : NaN;
+        const ln = typeof lv === 'number' ? lv : NaN;
+        const delta = !isNaN(sn) && !isNaN(ln) ? ln - sn : NaN;
+        return (
+          <React.Fragment key={pid}>
+            <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '6px 12px', alignItems: 'center' }}>
+              <span style={{ ...TYPE.body, color: 'var(--label-2)' }}>{label}</span>
+              <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--teal)', textAlign: 'right' }}>{fmtVal(sv, decimals, unit)}</span>
+              <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--accent-text)', textAlign: 'right' }}>{fmtVal(lv, decimals, unit)}</span>
+              <span style={{ ...TYPE.body, ...NUMERIC, color: isNaN(delta) ? 'var(--label-2)' : deltaColor(delta, !!isFuelTrim), textAlign: 'right' }}>
+                {isNaN(delta) ? '—' : `${delta >= 0 ? '+' : ''}${delta.toFixed(decimals)} ${unit}`}
+              </span>
+            </div>
+            {i < arr.length - 1 && <Divider />}
+          </React.Fragment>
+        );
+      })}
+    </Card>
   );
 }
 
@@ -127,35 +130,39 @@ function DTCDiff({ snap, live }: {
   const newCodes  = live.filter(d => !snapCodes.has(d.code));
   const unchanged = live.filter(d =>  snapCodes.has(d.code));
 
-  const dtcRow = (code: string, desc: string, mod: string, color: string, icon: string) => (
-    <div key={code} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderBottom: '1px solid var(--bg4)' }}>
-      <i className={`ti ${icon}`} style={{ color, fontSize: 12, flexShrink: 0 }} />
-      <span style={{ fontFamily: 'monospace', fontSize: 11, color, flexShrink: 0, minWidth: 54 }}>{code}</span>
-      <span style={{ fontSize: 11, color: 'var(--tm)', flex: 1 }}>{desc}</span>
-      <span style={{ fontSize: 10, color: 'var(--tm)', flexShrink: 0 }}>{mod}</span>
+  const dtcRow = (code: string, desc: string, mod: string, status: Status, icon: string) => (
+    <div key={code} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px' }}>
+      <i className={`ti ${icon}`} style={{ color: STATUS_TEXT[status], fontSize: 14, flexShrink: 0 }} aria-hidden />
+      <span style={{ ...TYPE.caption, ...NUMERIC, color: STATUS_TEXT[status], flexShrink: 0, minWidth: 60 }}>{code}</span>
+      <span style={{ ...TYPE.caption, color: 'var(--label-2)', flex: 1 }}>{desc}</span>
+      <span style={{ ...TYPE.caption, color: 'var(--label-3)', flexShrink: 0 }}>{mod}</span>
     </div>
   );
 
-  const section = (label: string, items: Array<{ code: string; description: string; module: string }>, color: string, icon: string) =>
+  const section = (label: string, items: Array<{ code: string; description: string; module: string }>, status: Status, icon: string) =>
     items.length === 0 ? null : (
       <div key={label}>
-        <div style={{ padding: '4px 8px', fontSize: 10, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', color, background: 'var(--bg4)' }}>
+        <div style={{ padding: '6px 12px', ...TYPE.caption, fontWeight: WEIGHT.semibold, color: STATUS_TEXT[status], background: 'var(--fill)' }}>
           {label} ({items.length})
         </div>
-        {items.map(d => dtcRow(d.code, d.description, d.module, color, icon))}
+        {items.map(d => dtcRow(d.code, d.description, d.module, status, icon))}
       </div>
     );
 
   if (!resolved.length && !newCodes.length && !unchanged.length) {
-    return <div style={{ padding: '12px 8px', fontSize: 11, color: 'var(--tm)', textAlign: 'center' }}>No DTCs in snapshot or live session.</div>;
+    return (
+      <Card>
+        <EmptyState icon="ti-circle-check" title="No DTC changes" message="No DTCs in snapshot or live session." />
+      </Card>
+    );
   }
 
   return (
-    <div>
-      {section('New since snapshot', newCodes.map(d => ({ code: d.code, description: d.description, module: d.module })), 'var(--sr)', 'ti-plus')}
-      {section('Resolved since snapshot', resolved, 'var(--sg)', 'ti-check')}
-      {section('Present in both', unchanged.map(d => ({ code: d.code, description: d.description, module: d.module })), 'var(--tm)', 'ti-minus')}
-    </div>
+    <Card padding={0}>
+      {section('New since snapshot', newCodes.map(d => ({ code: d.code, description: d.description, module: d.module })), 'crit', 'ti-plus')}
+      {section('Resolved since snapshot', resolved, 'ok', 'ti-check')}
+      {section('Present in both', unchanged.map(d => ({ code: d.code, description: d.description, module: d.module })), 'neutral', 'ti-minus')}
+    </Card>
   );
 }
 
@@ -218,114 +225,123 @@ export function CompareScreen(): React.ReactElement {
   };
 
   return (
-    <div style={{ overflowY: 'auto', flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <ScrollPane>
       {warnFull && (
-        <div style={{ padding: '6px 10px', fontSize: 11, color: 'var(--sa)', background: 'rgba(255,145,0,0.08)', border: '1px solid var(--sa)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>Cap reached ({MAX_SNAPS}). Oldest snapshot replaced.</span>
-          <button onClick={() => setWarnFull(false)} style={{ background: 'none', border: 'none', color: 'var(--tm)', cursor: 'pointer', fontSize: 13 }}>✕</button>
-        </div>
+        <AlertBanner
+          message={`Cap reached (${MAX_SNAPS}). Oldest snapshot replaced.`}
+          variant="warn"
+          action="Dismiss"
+          onAction={() => setWarnFull(false)}
+        />
       )}
 
       {/* Save toolbar */}
-      <div style={{ background: 'var(--bg3)', border: '1px solid var(--br)', padding: 10 }}>
+      <Card style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <i className="ti ti-camera" style={{ fontSize: 14, color: 'var(--pp)', flexShrink: 0 }} />
+          <i className="ti ti-camera" style={{ fontSize: 16, color: 'var(--label-2)', flexShrink: 0 }} aria-hidden />
           <input
             value={snapName}
             onChange={e => setSnapName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && hasLive) saveSnapshot(); }}
             placeholder="Label (e.g. Before fuse pull, After repair…)"
-            style={{ flex: 1, minWidth: 180, background: 'var(--bg4)', border: '1px solid var(--br)', color: 'var(--tw)', padding: '5px 8px', fontSize: 11, fontFamily: 'monospace', outline: 'none' }}
+            style={{ flex: 1, minWidth: 180 }}
           />
-          <button
-            disabled={!hasLive}
-            onClick={saveSnapshot}
-            style={{
-              padding: '5px 12px', fontSize: 11, fontWeight: 700,
-              background: hasLive ? 'var(--pp)' : 'var(--bg4)',
-              border: 'none', color: hasLive ? '#000' : 'var(--tm)', cursor: hasLive ? 'pointer' : 'not-allowed',
-            }}
-          >
-            <i className="ti ti-camera" style={{ marginRight: 5 }} />
+          <Button variant="primary" icon="ti-camera" disabled={!hasLive} onClick={saveSnapshot}>
             {saved ? 'Saved!' : 'Save'}
-          </button>
+          </Button>
         </div>
         {!hasLive && (
-          <div style={{ marginTop: 6, fontSize: 10, color: 'var(--tm)' }}>Connect to the vehicle to capture a snapshot.</div>
+          <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>Connect to the vehicle to capture a snapshot.</span>
         )}
-      </div>
+      </Card>
 
       {snapshots.length === 0 ? (
-        <div style={{ background: 'var(--bg3)', border: '1px solid var(--br)', padding: '24px', textAlign: 'center' }}>
-          <i className="ti ti-chart-arrows-vertical" style={{ fontSize: 28, color: 'var(--tm)', display: 'block', marginBottom: 10 }} />
-          <div style={{ fontSize: 12, color: 'var(--tm)', lineHeight: 1.7, maxWidth: 420, margin: '0 auto' }}>
-            No snapshots yet. Save one before and after a repair to compare voltage, fuel trims, and DTCs side-by-side.
-          </div>
-        </div>
+        <Card>
+          <EmptyState
+            icon="ti-chart-arrows-vertical"
+            title="No snapshots yet"
+            message="Save one before and after a repair to compare voltage, fuel trims, and DTCs side-by-side."
+          />
+        </Card>
       ) : (
         <>
           {/* Snapshot list */}
-          <div style={{ background: 'var(--bg3)', border: '1px solid var(--br)' }}>
-            <div style={{ padding: '5px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--tm)', background: 'var(--bg4)', borderBottom: '1px solid var(--br)' }}>
-              Saved snapshots — {snapshots.length} / {MAX_SNAPS}
-            </div>
-            {snapshots.map(s => (
-              <div key={s.id} onClick={() => setSelectedId(s.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', cursor: 'pointer', background: s.id === selectedId ? 'rgba(255,87,34,0.08)' : 'transparent', borderBottom: '1px solid var(--bg4)', borderLeft: `2px solid ${s.id === selectedId ? 'var(--pp)' : 'transparent'}` }}>
-                <i className="ti ti-camera" style={{ fontSize: 12, color: s.id === selectedId ? 'var(--pp)' : 'var(--tm)', flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, color: s.id === selectedId ? 'var(--tw)' : 'var(--tm)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</div>
-                  <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: 'monospace' }}>{fmtDate(s.savedAt)} · {s.vehicleName} · {s.dtcs.length} DTC{s.dtcs.length !== 1 ? 's' : ''}</div>
+          <SectionHeader>{`Saved snapshots — ${snapshots.length} / ${MAX_SNAPS}`}</SectionHeader>
+          <Card padding={0}>
+            {snapshots.map((s, i) => (
+              <React.Fragment key={s.id}>
+                <div
+                  className="row-hover"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedId(s.id)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setSelectedId(s.id); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer',
+                    background: s.id === selectedId ? 'var(--accent-tint)' : 'transparent',
+                    boxShadow: s.id === selectedId ? 'inset 2px 0 0 var(--accent)' : 'none',
+                  }}
+                >
+                  <i className="ti ti-camera" style={{ fontSize: 14, color: s.id === selectedId ? 'var(--accent-text)' : 'var(--label-3)', flexShrink: 0 }} aria-hidden />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ ...TYPE.body, color: 'var(--label)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</div>
+                    <div style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)' }}>
+                      {fmtDate(s.savedAt)} · {s.vehicleName} · {s.dtcs.length} DTC{s.dtcs.length !== 1 ? 's' : ''}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm" variant="plain" icon="ti-trash" aria-label="Delete snapshot"
+                    onClick={e => { e.stopPropagation(); deleteSnapshot(s.id); }}
+                  />
                 </div>
-                <button onClick={e => { e.stopPropagation(); deleteSnapshot(s.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tm)', padding: '2px 4px', flexShrink: 0 }}>
-                  <i className="ti ti-trash" style={{ fontSize: 12 }} />
-                </button>
-              </div>
+                {i < snapshots.length - 1 && <Divider />}
+              </React.Fragment>
             ))}
-          </div>
+          </Card>
 
           {selected && (
             <>
               {/* Session header cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                <div style={{ background: 'var(--bg3)', border: '1px solid var(--br)', borderLeft: '2px solid var(--gb)', padding: 10 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--gb)', marginBottom: 6 }}>Snapshot · {selected.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--tm)', fontFamily: 'monospace', lineHeight: 1.6 }}>
+              <Grid cols={2} gap={12}>
+                <Card style={{ boxShadow: 'inset 2px 0 0 var(--teal)' }}>
+                  <div style={{ ...TYPE.caption, fontWeight: WEIGHT.semibold, color: 'var(--teal)', marginBottom: 6 }}>
+                    Snapshot · {selected.name}
+                  </div>
+                  <div style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)', lineHeight: '18px' }}>
                     <div>{fmtDate(selected.savedAt)}</div>
                     <div>{selected.vehicleName}</div>
                     <div>{Object.keys(selected.liveData).length} PIDs · {selected.dtcs.length} DTCs</div>
                   </div>
-                </div>
-                <div style={{ background: 'var(--bg3)', border: '1px solid var(--br)', borderLeft: '2px solid var(--pp)', padding: 10 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--pp)', marginBottom: 6 }}>Live · {vehicleDisplayName(vehicle)}</div>
-                  <div style={{ fontSize: 11, color: 'var(--tm)', fontFamily: 'monospace', lineHeight: 1.6 }}>
-                    <div style={{ color: connStatus === 'connected' ? 'var(--sg)' : 'var(--tm)' }}>{connStatus}</div>
+                </Card>
+                <Card style={{ boxShadow: 'inset 2px 0 0 var(--accent)' }}>
+                  <div style={{ ...TYPE.caption, fontWeight: WEIGHT.semibold, color: 'var(--accent-text)', marginBottom: 6 }}>
+                    Live · {vehicleDisplayName(vehicle)}
+                  </div>
+                  <div style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)', lineHeight: '18px' }}>
+                    <div style={{ color: connStatus === 'connected' ? 'var(--ok-text)' : 'var(--label-2)' }}>{connStatus}</div>
                     <div>{Object.keys(liveData).length} PIDs · {dtcs.length} DTCs</div>
                     {sessionMs && <div>Session: {Math.round((Date.now() - sessionMs) / 60000)} min</div>}
                   </div>
-                </div>
-              </div>
+                </Card>
+              </Grid>
 
               {/* Voltage overlay */}
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.0, textTransform: 'uppercase', color: 'var(--tm)', padding: '6px 0 2px' }}>Voltage overlay</div>
-              <div style={{ background: 'var(--bg3)', border: '1px solid var(--br)' }}>
+              <SectionHeader>Voltage overlay</SectionHeader>
+              <Card>
                 <VoltageOverlay live={liveVolt} snap={selected.voltageHistory} />
-              </div>
+              </Card>
 
               {/* PID comparison */}
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.0, textTransform: 'uppercase', color: 'var(--tm)', padding: '6px 0 2px' }}>PID comparison</div>
-              <div style={{ background: 'var(--bg3)', border: '1px solid var(--br)' }}>
-                <PIDTable snap={selected} live={liveData} />
-              </div>
+              <SectionHeader>PID comparison</SectionHeader>
+              <PIDTable snap={selected} live={liveData} />
 
               {/* DTC changes */}
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.0, textTransform: 'uppercase', color: 'var(--tm)', padding: '6px 0 2px' }}>DTC changes</div>
-              <div style={{ background: 'var(--bg3)', border: '1px solid var(--br)' }}>
-                <DTCDiff snap={selected} live={dtcs} />
-              </div>
+              <SectionHeader>DTC changes</SectionHeader>
+              <DTCDiff snap={selected} live={dtcs} />
             </>
           )}
         </>
       )}
-    </div>
+    </ScrollPane>
   );
 }
