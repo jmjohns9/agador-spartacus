@@ -31,6 +31,7 @@ export function ConnectionItem({ onOpenConnection }: { onOpenConnection: () => v
   }, [open]);
 
   const connected = status === 'connected';
+  const inProgress = status === 'connecting' || status === 'initializing';
   const row = (label: string, value: string) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '3px 0' }}>
       <span style={{ color: 'var(--label-2)' }}>{label}</span>
@@ -65,6 +66,8 @@ export function ConnectionItem({ onOpenConnection }: { onOpenConnection: () => v
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
             {connected
               ? <Button size="sm" variant="destructive" onClick={() => { setOpen(false); void window.electronAPI.disconnect(); }}>Disconnect</Button>
+              : inProgress
+              ? <Button size="sm" onClick={() => { setOpen(false); void window.electronAPI.disconnect(); }}>Cancel</Button>
               : <Button size="sm" variant="primary" onClick={() => { setOpen(false); onOpenConnection(); }}>Open connection</Button>}
           </div>
         </div>
