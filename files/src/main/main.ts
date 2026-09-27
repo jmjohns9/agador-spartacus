@@ -138,7 +138,7 @@ function startSimulator(gen: number): void {
       adapterInfo: `${info.firmwareVersion} — SIMULATOR MODE`,
     });
     addLog({ timestamp: Date.now(), level: 'ok', message: 'Simulator mode started — synthetic J1850 VPW session' });
-    startOBDManager(gen);
+    startOBDManager(gen, commander);
   }).catch((err) => {
     if (gen !== sessionGen) return;
     const msg = err instanceof Error ? err.message : String(err);
@@ -155,19 +155,6 @@ function startSimulator(gen: number): void {
 // ─── Serial / Bluetooth connection ────────────────────────────────────────────
 
 // Close and release any port we currently hold. Resolves once fully closed.
-async function releaseActivePort(): Promise<void> {
-  if (!activePort) return;
-  const p = activePort;
-  activePort = null;
-  try {
-    if (p.isOpen) {
-      await new Promise<void>((resolve) => p.close(() => resolve()));
-    }
-  } catch {
-    // ignore — best effort
-  }
-}
-
 async function closePort(p: any): Promise<void> {
   try {
     if (p.isOpen) await new Promise<void>((resolve) => p.close(() => resolve()));
@@ -176,11 +163,21 @@ async function closePort(p: any): Promise<void> {
   }
 }
 
+async function releaseActivePort(): Promise<void> {
+  if (!activePort) return;
+  const p = activePort;
+  activePort = null;
+  await closePort(p);
+}
+
 // End the current session, whatever state it is in (connecting, initializing,
 // connected): invalidate its async chains, stop polling, fail its adapter's
 // pending commands fast, cancel simulator replies and release the port.
-async function endSession(): Promise<void> {
-  sessionGen++;
+// Returns the generation it opened. Releasing the port awaits, so another
+// connect/disconnect may have ended this one too by the time it resolves —
+// callers must check `gen === sessionGen` before acting on it.
+async function endSession(): Promise<number> {
+  const gen = ++sessionGen;
   obd?.stopPolling();
   obd?.removeAllListeners();
   obd = null;
@@ -192,14 +189,12 @@ async function endSession(): Promise<void> {
   simulatorMode = false;
   // Actually close the serial port so the lock is released for the next session
   await releaseActivePort();
+  return gen;
 }
 
+// Called by obd:connect, which has already refused overlapping serial attempts
+// and ended the previous session (releasing its port).
 async function connectToPort(portPath: string, gen: number): Promise<void> {
-  // Guard: never run two connect attempts at once (that causes "Cannot lock port")
-  if (isConnecting) {
-    addLog({ timestamp: Date.now(), level: 'warn', message: 'Connect ignored — a connection attempt is already in progress' });
-    return;
-  }
   isConnecting = true;
 
   sendToRenderer('obd:connection-status', { status: 'connecting' as ConnectionStatus });
@@ -212,9 +207,6 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
     addLog({ timestamp: Date.now(), level: 'info', message: `Using call-up device ${corrected} instead of ${portPath} (macOS Bluetooth requires cu.*)` });
     portPath = corrected;
   }
-
-  // Make sure no stale port is still holding the lock
-  await releaseActivePort();
 
   let port: any = null;
   let commander: ELM327Commander | null = null;
@@ -258,8 +250,8 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
       // The adapter went away under a live session: end it so nothing keeps
       // polling a closed port.
       addLog({ timestamp: Date.now(), level: 'warn', message: 'Serial port closed' });
-      void endSession().then(() => {
-        sendToRenderer('obd:connection-status', { status: 'disconnected' as ConnectionStatus });
+      void endSession().then((g) => {
+        if (g === sessionGen) sendToRenderer('obd:connection-status', { status: 'disconnected' as ConnectionStatus });
       });
     });
 
@@ -287,7 +279,7 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
     addLog({ timestamp: Date.now(), level: 'ok', message: `Connected — ${info.firmwareVersion} — Protocol: ${info.protocol} — Battery: ${info.voltage}` });
 
     startRSSIPolling();
-    startOBDManager(gen);
+    startOBDManager(gen, commander);
   } catch (err) {
     commander?.close();
     if (gen !== sessionGen) {
@@ -345,9 +337,11 @@ function wireELMEvents(): void {
   elm.on('log', (entry: LogEntry) => addLog(entry));
 }
 
-function startOBDManager(gen: number): void {
-  if (!elm || gen !== sessionGen) return;
-  const mgr = new OBDProtocolManager(elm);
+// Built on the session's own commander — never the global elm, which may
+// already belong to a newer session.
+function startOBDManager(gen: number, commander: ELM327Commander): void {
+  if (gen !== sessionGen) return;
+  const mgr = new OBDProtocolManager(commander);
   obd = mgr;
 
   mgr.on('pid-reading', (reading: PIDReading) => {
@@ -371,7 +365,7 @@ function startOBDManager(gen: number): void {
       sendToRenderer('obd:connection-status', {
         status: 'connected' as ConnectionStatus,
         protocol,
-        adapterInfo: elm?.getAdapterInfo()?.firmwareVersion ?? '',
+        adapterInfo: commander.getAdapterInfo()?.firmwareVersion ?? '',
       });
     } catch { /* non-fatal */ }
 
@@ -423,9 +417,10 @@ ipcMain.handle('obd:connect', async (_event, { port }: { port: string }) => {
     addLog({ timestamp: Date.now(), level: 'warn', message: 'Connect ignored — a connection attempt is already in progress' });
     return;
   }
-  // A new connection replaces whatever session is running.
-  await endSession();
-  const gen = sessionGen;
+  // A new connection replaces whatever session is running. If another
+  // connect/disconnect arrived while the old port was closing, it wins.
+  const gen = await endSession();
+  if (gen !== sessionGen) return;
   if (port === 'SIMULATOR') {
     startSimulator(gen);
   } else {
@@ -434,8 +429,10 @@ ipcMain.handle('obd:connect', async (_event, { port }: { port: string }) => {
 });
 
 ipcMain.handle('obd:disconnect', async () => {
-  await endSession();
+  const gen = await endSession();
   addLog({ timestamp: Date.now(), level: 'info', message: 'Session disconnected — port released' });
+  // A connect that arrived while the port was closing owns the status now
+  if (gen !== sessionGen) return;
   sendToRenderer('obd:connection-status', { status: 'disconnected' as ConnectionStatus });
 });
 
