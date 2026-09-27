@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAppStore } from '../store/appStore';
 import { FreezeFrame } from '../../shared/types';
+import {
+  ScrollPane, SectionHeader, Card, Button, Divider, EmptyState,
+} from '../components/layout/UIComponents';
+import { TYPE, WEIGHT, NUMERIC } from '../theme/theme';
 
 const COMPARE_PIDS = ['ATRV','010C','0104','0105','0110','010B','0111','0106','0107','0108','0109','012F'];
 const PID_LABELS: Record<string, string> = {
@@ -9,6 +13,8 @@ const PID_LABELS: Record<string, string> = {
   '0111': 'Throttle Pos',  '0106': 'STFT Bank 1', '0107': 'LTFT Bank 1',
   '0108': 'STFT Bank 2',   '0109': 'LTFT Bank 2', '012F': 'Fuel Level',
 };
+
+const COLS = '1.3fr 90px 90px 70px';
 
 function fmtDate(ts: number): string {
   return new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -51,89 +57,103 @@ export function FreezeFrameScreen(): React.ReactElement {
   };
 
   return (
-    <div style={{ overflowY: 'auto', flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <ScrollPane>
       {frames.length === 0 ? (
-        <div style={{ background: 'var(--bg3)', border: '1px solid var(--br)', padding: '32px 24px', textAlign: 'center' }}>
-          <i className="ti ti-camera" style={{ fontSize: 28, color: 'var(--tm)', display: 'block', marginBottom: 10 }} />
-          <div style={{ fontSize: 12, color: 'var(--tm)', lineHeight: 1.7, maxWidth: 400, margin: '0 auto' }}>
-            No freeze frames captured yet. When a DTC is detected, a snapshot of all live PID values is saved automatically.
-          </div>
-        </div>
+        <Card>
+          <EmptyState
+            icon="ti-camera"
+            title="No freeze frames"
+            message="Frames are captured automatically when a new fault code appears."
+          />
+        </Card>
       ) : (
         <>
           {/* Frame list */}
-          <div style={{ background: 'var(--bg3)', border: '2px solid var(--br)' }}>
-            {frames.map(f => (
-              <div
-                key={f.id}
-                onClick={() => setSelected(f.id)}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', cursor: 'pointer', background: f.id === selected ? 'rgba(33,136,255,0.08)' : 'transparent', borderBottom: '1px solid var(--bg4)', borderLeft: `2px solid ${f.id === selected ? 'var(--pp)' : 'transparent'}` }}
-              >
-                <i className="ti ti-camera" style={{ fontSize: 12, color: f.id === selected ? 'var(--pp)' : 'var(--tm)', flexShrink: 0 }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, color: f.id === selected ? 'var(--tw)' : 'var(--tm)', fontWeight: 600, fontFamily: 'monospace' }}>{f.dtcCode}</div>
-                  <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: 'monospace' }}>{fmtDate(f.capturedAt)} · {f.vehicleName}</div>
+          <SectionHeader>{`Freeze frames — ${frames.length}`}</SectionHeader>
+          <Card padding={0}>
+            {frames.map((f, i) => (
+              <React.Fragment key={f.id}>
+                <div
+                  className="row-hover"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelected(f.id)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setSelected(f.id); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer',
+                    background: f.id === selected ? 'var(--accent-tint)' : 'transparent',
+                    boxShadow: f.id === selected ? 'inset 2px 0 0 var(--accent)' : 'none',
+                  }}
+                >
+                  <i className="ti ti-camera" style={{ fontSize: 14, color: f.id === selected ? 'var(--accent-text)' : 'var(--label-3)', flexShrink: 0 }} aria-hidden />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ ...TYPE.body, ...NUMERIC, fontWeight: WEIGHT.semibold, color: 'var(--label)' }}>{f.dtcCode}</div>
+                    <div style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)' }}>{fmtDate(f.capturedAt)} · {f.vehicleName}</div>
+                  </div>
                 </div>
-              </div>
+                {i < frames.length - 1 && <Divider />}
+              </React.Fragment>
             ))}
-          </div>
+          </Card>
 
           {frame && (
             <>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.0, textTransform: 'uppercase', color: 'var(--tm)', padding: '6px 0 2px' }}>
-                PID values at fault — {frame.dtcCode}
-              </div>
-              <div style={{ background: 'var(--bg3)', border: '2px solid var(--br)' }}>
+              <SectionHeader>{`PID values at fault — ${frame.dtcCode}`}</SectionHeader>
+              <Card padding={0}>
                 {/* Battery voltage hero row */}
                 {frame.liveData['ATRV'] && (
-                  <div style={{ display: 'flex', padding: '8px 12px', borderBottom: '2px solid var(--br)', background: 'var(--bg4)' }}>
-                    <span style={{ flex: 1, fontSize: 12, color: 'var(--tw)', fontWeight: 600 }}>Battery Voltage</span>
-                    <span style={{ fontFamily: 'monospace', fontSize: 13, color: 'var(--gb)', fontWeight: 700 }}>{frame.liveData['ATRV'].value} V</span>
-                    <span style={{ width: 20 }} />
-                    <span style={{ fontFamily: 'monospace', fontSize: 13, color: 'var(--pp)' }}>
-                      {typeof liveData['ATRV']?.value === 'number' ? `${(liveData['ATRV'].value as number).toFixed(3)} V` : '—'}
-                    </span>
-                  </div>
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '8px 12px', alignItems: 'center', background: 'var(--fill)' }}>
+                      <span style={{ ...TYPE.body, fontWeight: WEIGHT.semibold, color: 'var(--label)' }}>Battery voltage</span>
+                      <span style={{ ...TYPE.body, ...NUMERIC, fontWeight: WEIGHT.semibold, color: 'var(--teal)', textAlign: 'right' }}>{frame.liveData['ATRV'].value} V</span>
+                      <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--accent-text)', textAlign: 'right' }}>
+                        {typeof liveData['ATRV']?.value === 'number' ? `${(liveData['ATRV'].value as number).toFixed(3)} V` : '—'}
+                      </span>
+                      <span />
+                    </div>
+                    <Divider />
+                  </>
                 )}
                 {/* Column headers */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px 70px', padding: '4px 12px', fontSize: 9, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--tm)', background: 'var(--bg4)', borderBottom: '1px solid var(--br)' }}>
-                  <span>Parameter</span>
-                  <span style={{ textAlign: 'right', color: 'var(--gb)' }}>At Fault</span>
-                  <span style={{ textAlign: 'right', color: 'var(--pp)' }}>Live Now</span>
-                  <span style={{ textAlign: 'right' }}>Δ</span>
+                <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '6px 12px', background: 'var(--fill)' }}>
+                  <span style={{ ...TYPE.caption, color: 'var(--label-3)' }}>Parameter</span>
+                  <span style={{ ...TYPE.caption, color: 'var(--teal)', textAlign: 'right' }}>At fault</span>
+                  <span style={{ ...TYPE.caption, color: 'var(--accent-text)', textAlign: 'right' }}>Live now</span>
+                  <span style={{ ...TYPE.caption, color: 'var(--label-3)', textAlign: 'right' }}>Δ</span>
                 </div>
-                {COMPARE_PIDS.filter(p => p !== 'ATRV').map(pid => {
+                <Divider />
+                {COMPARE_PIDS.filter(p => p !== 'ATRV').map((pid, i, arr) => {
                   const fv = frame.liveData[pid]?.value;
                   const lv = liveData[pid]?.value;
                   const fn = typeof fv === 'number' ? fv : NaN;
                   const ln = typeof lv === 'number' ? lv : NaN;
                   const delta = !isNaN(fn) && !isNaN(ln) ? ln - fn : NaN;
                   return (
-                    <div key={pid} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px 70px', padding: '5px 12px', borderBottom: '1px solid var(--bg4)', fontSize: 11 }}>
-                      <span style={{ color: 'var(--tm)', fontFamily: 'sans-serif' }}>{PID_LABELS[pid] ?? pid}</span>
-                      <span style={{ textAlign: 'right', fontFamily: 'monospace', color: 'var(--gb)' }}>{fv !== undefined ? String(fv) : '—'}</span>
-                      <span style={{ textAlign: 'right', fontFamily: 'monospace', color: 'var(--pp)' }}>{lv !== undefined ? String(lv) : '—'}</span>
-                      <span style={{ textAlign: 'right', fontFamily: 'monospace', color: isNaN(delta) ? 'var(--tm)' : Math.abs(delta) < 0.05 ? 'var(--tm)' : delta > 0 ? 'var(--sg)' : 'var(--sa)' }}>
-                        {isNaN(delta) ? '—' : `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}`}
-                      </span>
-                    </div>
+                    <React.Fragment key={pid}>
+                      <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '6px 12px', alignItems: 'center' }}>
+                        <span style={{ ...TYPE.body, color: 'var(--label-2)' }}>{PID_LABELS[pid] ?? pid}</span>
+                        <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--teal)', textAlign: 'right' }}>{fv !== undefined ? String(fv) : '—'}</span>
+                        <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--accent-text)', textAlign: 'right' }}>{lv !== undefined ? String(lv) : '—'}</span>
+                        <span style={{
+                          ...TYPE.body, ...NUMERIC, textAlign: 'right',
+                          color: isNaN(delta) || Math.abs(delta) < 0.05 ? 'var(--label-2)' : delta > 0 ? 'var(--ok-text)' : 'var(--warn-text)',
+                        }}>
+                          {isNaN(delta) ? '—' : `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}`}
+                        </span>
+                      </div>
+                      {i < arr.length - 1 && <Divider />}
+                    </React.Fragment>
                   );
                 })}
-              </div>
+              </Card>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => exportCSV(frame)} style={{ padding: '6px 12px', background: 'var(--bg4)', border: '2px solid var(--br)', color: 'var(--tm)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <i className="ti ti-file-spreadsheet" style={{ fontSize: 12 }} />Export CSV
-                </button>
-                <button onClick={() => deleteFrame(frame.id)} aria-label="Delete freeze frame" style={{ padding: '6px 12px', background: 'none', border: '2px solid var(--sr)', color: 'var(--sr)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: 0.7 }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '0.7'; }}>
-                  <i className="ti ti-trash" style={{ fontSize: 12 }} />Delete
-                </button>
+                <Button variant="secondary" icon="ti-file-spreadsheet" onClick={() => exportCSV(frame)}>Export CSV</Button>
+                <Button variant="destructive" icon="ti-trash" aria-label="Delete freeze frame" onClick={() => deleteFrame(frame.id)}>Delete</Button>
               </div>
             </>
           )}
         </>
       )}
-    </div>
+    </ScrollPane>
   );
 }
