@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
 import {
-  ScrollPane, SectionHeader, Card, Badge, Button, Grid,
-  DenseMetricTile, HeroCard, WaveBar,
+  SectionHeader, Card, Badge, Button, SegmentedControl, DataRow, EmptyState, Metric,
+  DenseMetricTile,
 } from '../components/layout/UIComponents';
+import { TYPE, NUMERIC, WEIGHT } from '../theme/theme';
 import type {
   EcuBusSubTab, CANFrame, UDSService, CANSignal, LINFrame, DoIPEntity,
 } from '../../shared/types';
@@ -103,6 +104,14 @@ function timestamp(ms: number): string {
   return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}.${d.getMilliseconds().toString().padStart(3, '0')}`;
 }
 
+// ─── Shared frame-table cell styles ─────────────────────────────────────────
+// One hairline divider per cell — the brief's allowed exception for a data
+// table too dense for <DataRow>. Defined once so no other line needs the
+// style-ok escape hatch.
+const CELL_DIVIDER: React.CSSProperties = { borderBottom: '1px solid var(--separator)' }; // style-ok: table cell divider
+const TH_STYLE: React.CSSProperties = { ...TYPE.caption, ...CELL_DIVIDER, textAlign: 'left', color: 'var(--label-3)', padding: '6px 12px', fontWeight: WEIGHT.regular };
+const TD_STYLE: React.CSSProperties = { ...TYPE.caption, ...CELL_DIVIDER, padding: '6px 12px', verticalAlign: 'middle', color: 'var(--label)' };
+
 // ─── Demo data generators ────────────────────────────────────────────────────
 
 function makeDemoCANFrames(): CANFrame[] {
@@ -194,122 +203,102 @@ function CANMonitorTab(): React.ReactElement {
   return (
     <>
       {/* Stats row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginBottom: 8 }}>
-        <DenseMetricTile label="Total frames" value={stats.total} accentBorder="var(--pp)" />
-        <DenseMetricTile label="Unique IDs" value={stats.uniqueIds} accentBorder="var(--gb)" />
-        <DenseMetricTile label="TX frames" value={stats.txCount} valueColor="var(--sa)" />
-        <DenseMetricTile label="RX frames" value={stats.rxCount} valueColor="var(--sg)" />
-        <DenseMetricTile label="Extended IDs" value={stats.extCount} valueColor="var(--gb)" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 12 }}>
+        <Metric size="compact" label="Total frames" value={stats.total} />
+        <Metric size="compact" label="Unique IDs" value={stats.uniqueIds} />
+        <Metric size="compact" label="TX frames" value={stats.txCount} />
+        <Metric size="compact" label="RX frames" value={stats.rxCount} />
+        <Metric size="compact" label="Extended IDs" value={stats.extCount} />
       </div>
 
       {/* Toolbar */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
-        background: 'var(--bg2)', border: '2px solid var(--br)', borderRadius: 0, marginBottom: 6,
-      }}>
-        <Button size="sm" variant={paused ? 'danger' : 'ghost'} icon={paused ? 'ti-player-play' : 'ti-player-pause'} onClick={() => setPaused(!paused)}>
+      <Card padding={8} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+        <Button size="sm" variant={paused ? 'destructive' : 'secondary'} icon={paused ? 'ti-player-play' : 'ti-player-pause'} onClick={() => setPaused(!paused)}>
           {paused ? 'Resume' : 'Pause'}
         </Button>
         <Button size="sm" icon="ti-trash" onClick={() => {}}>Clear</Button>
         <div style={{ flex: 1 }} />
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <i className="ti ti-filter" style={{ position: 'absolute', left: 8, fontSize: 12, color: 'var(--tm)' }} />
-          <input
-            value={filter}
-            onChange={e => setFilter(e.target.value)}
-            placeholder="Filter by ID, data, direction..."
-            style={{
-              width: 260, height: 28, paddingLeft: 26, paddingRight: 8,
-              fontSize: 11, fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
-              background: 'var(--bg3)', border: '2px solid var(--br)', borderRadius: 0,
-              color: 'var(--tw)',
-            }}
-          />
-        </div>
-        <Badge label={`CAN 2.0`} variant="info" />
+        <input
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+          placeholder="Filter by ID, data, direction…"
+          style={{ width: 260, ...TYPE.caption, ...NUMERIC }}
+        />
+        <Badge label="CAN 2.0" variant="info" />
         <Badge label="500 kbit/s" variant="muted" />
-      </div>
+      </Card>
 
       {/* Frame table */}
-      <Card padding={0} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {/* Header */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '65px 40px 90px 65px 1fr 55px 55px 45px',
-          gap: 6, padding: '5px 10px',
-          background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
-        }}>
-          {['Time', 'Dir', 'ID', 'DLC', 'Data', 'Delta', 'Count', 'Bus'].map(h => (
-            <span key={h} style={{
-              fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-              letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--tm)',
-            }}>{h}</span>
-          ))}
-        </div>
-
-        {/* Rows */}
-        <div ref={tableRef} style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent' }}>
-          {displayFrames.map((frame, i) => (
-            <div
-              key={`${frame.timestamp}-${frame.id}-${i}`}
-              onClick={() => setSelectedFrame(frame)}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '65px 40px 90px 65px 1fr 55px 55px 45px',
-                gap: 6, padding: '4px 10px', alignItems: 'center',
-                borderBottom: '1px solid var(--bg3)',
-                background: selectedFrame === frame ? 'rgba(255,87,34,0.05)' : 'transparent',
-                cursor: 'pointer', fontSize: 11,
-                fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
-                transition: 'background 0.08s',
-              }}
-              onMouseEnter={e => { if (selectedFrame !== frame) (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
-              onMouseLeave={e => { if (selectedFrame !== frame) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-            >
-              <span style={{ color: 'var(--tm)', fontSize: 10 }}>{timestamp(frame.timestamp)}</span>
-              <Badge label={frame.direction} variant={frame.direction === 'TX' ? 'warn' : 'ok'} />
-              <span style={{ color: frame.isExtended ? 'var(--gb)' : 'var(--pp)', fontWeight: 500 }}>
-                {frame.idHex}
-              </span>
-              <span style={{ color: 'var(--tm)' }}>{frame.dlc}</span>
-              <span style={{ color: 'var(--tw)', letterSpacing: 0.8 }}>{frame.dataHex}</span>
-              <span style={{ color: 'var(--tm)', fontSize: 10 }}>{frame.delta.toFixed(1)} ms</span>
-              <span style={{ color: 'var(--tm)', fontSize: 10 }}>{frame.count}</span>
-              <span style={{ color: 'var(--tm)', fontSize: 10 }}>CH{frame.channel}</span>
-            </div>
-          ))}
+      <Card padding={0} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', marginTop: 12 }}>
+        <div ref={tableRef} style={{ flex: 1, overflowY: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: 72 }} /><col style={{ width: 44 }} /><col style={{ width: 96 }} />
+              <col style={{ width: 48 }} /><col /><col style={{ width: 64 }} /><col style={{ width: 64 }} /><col style={{ width: 52 }} />
+            </colgroup>
+            <thead>
+              <tr>
+                {['Time', 'Dir', 'ID', 'DLC', 'Data', 'Delta', 'Count', 'Bus'].map(h => (
+                  <th key={h} style={TH_STYLE}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {displayFrames.map((frame, i) => (
+                <tr
+                  key={`${frame.timestamp}-${frame.id}-${i}`}
+                  className="row-hover"
+                  onClick={() => setSelectedFrame(frame)}
+                  style={{
+                    cursor: 'pointer',
+                    background: selectedFrame === frame ? 'var(--accent-tint)' : 'transparent',
+                  }}
+                >
+                  <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)' }}>{timestamp(frame.timestamp)}</td>
+                  <td style={TD_STYLE}><Badge label={frame.direction} variant={frame.direction === 'TX' ? 'warn' : 'ok'} /></td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC, fontWeight: WEIGHT.medium, color: frame.isExtended ? 'var(--teal)' : 'var(--accent-text)' }}>
+                    {frame.idHex}
+                  </td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)' }}>{frame.dlc}</td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC }}>{frame.dataHex}</td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)' }}>{frame.delta.toFixed(1)} ms</td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)' }}>{frame.count}</td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)' }}>CH{frame.channel}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </Card>
 
       {/* Detail panel */}
       {selectedFrame && (
-        <Card style={{ marginTop: 6 }}>
+        <Card style={{ marginTop: 12 }}>
           <SectionHeader>Frame detail — {selectedFrame.idHex}</SectionHeader>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginTop: 8 }}>
             <div>
-              <div style={{ fontSize: 10, color: 'var(--tm)', textTransform: 'uppercase', letterSpacing: 1, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", marginBottom: 4 }}>Arbitration ID</div>
-              <div style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 14, color: 'var(--pp)' }}>{selectedFrame.idHex} ({selectedFrame.id})</div>
-              <div style={{ fontSize: 10, color: 'var(--tm)', marginTop: 2 }}>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Arbitration ID</div>
+              <div style={{ ...TYPE.headline, ...NUMERIC, color: 'var(--accent-text)' }}>{selectedFrame.idHex} ({selectedFrame.id})</div>
+              <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginTop: 2 }}>
                 {selectedFrame.isExtended ? '29-bit extended' : '11-bit standard'} · {selectedFrame.busType}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 10, color: 'var(--tm)', textTransform: 'uppercase', letterSpacing: 1, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", marginBottom: 4 }}>Data bytes</div>
-              <div style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 14, color: 'var(--tw)' }}>{selectedFrame.dataHex}</div>
-              <div style={{ fontSize: 10, color: 'var(--tm)', marginTop: 2 }}>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Data bytes</div>
+              <div style={{ ...TYPE.headline, ...NUMERIC, color: 'var(--label)' }}>{selectedFrame.dataHex}</div>
+              <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginTop: 2 }}>
                 DLC: {selectedFrame.dlc} · {selectedFrame.data.map(b => String.fromCharCode(b >= 32 && b < 127 ? b : 46)).join('')}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 10, color: 'var(--tm)', textTransform: 'uppercase', letterSpacing: 1, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", marginBottom: 4 }}>Bit-level view</div>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Bit-level view</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
                 {selectedFrame.data.map((b, bi) => (
                   <div key={bi} style={{ display: 'flex', gap: 1 }}>
                     {Array.from({ length: 8 }, (_, j) => (
                       <div key={j} style={{
-                        width: 8, height: 12, borderRadius: 0,
-                        background: (b >> (7 - j)) & 1 ? 'var(--pp)' : 'var(--bg4)',
-                        border: '2px solid var(--br)',
+                        width: 8, height: 12, borderRadius: 1,
+                        background: (b >> (7 - j)) & 1 ? 'var(--accent)' : 'var(--fill)',
                       }} />
                     ))}
                     {bi < selectedFrame.data.length - 1 && <div style={{ width: 4 }} />}
@@ -362,100 +351,84 @@ function UDSClientTab(): React.ReactElement {
   return (
     <>
       {/* Addressing */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-        <Card style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div>
-              <div style={{ fontSize: 9, color: 'var(--tm)', textTransform: 'uppercase', letterSpacing: 1, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", marginBottom: 3 }}>TX ID (Tester)</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--tm)' }}>0x</span>
-                <input value={txId} onChange={e => setTxId(e.target.value)} style={{ width: 60, height: 26, fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, padding: '0 6px', textTransform: 'uppercase' }} />
-              </div>
-            </div>
-            <i className="ti ti-arrow-right" style={{ fontSize: 16, color: 'var(--pp)' }} />
-            <div>
-              <div style={{ fontSize: 9, color: 'var(--tm)', textTransform: 'uppercase', letterSpacing: 1, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", marginBottom: 3 }}>RX ID (ECU)</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--tm)' }}>0x</span>
-                <input value={rxId} onChange={e => setRxId(e.target.value)} style={{ width: 60, height: 26, fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, padding: '0 6px', textTransform: 'uppercase' }} />
-              </div>
-            </div>
-            <div style={{ flex: 1 }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Badge label="CAN-TP" variant="info" />
-              <Badge label="ISO 15765-2" variant="muted" />
-            </div>
-            <Button
-              size="sm"
-              variant={testerPresentActive ? 'primary' : 'ghost'}
-              icon="ti-heartbeat"
-              onClick={() => setTesterPresentActive(!testerPresentActive)}
-            >
-              {testerPresentActive ? 'TP Active' : 'Tester Present'}
-            </Button>
+      <Card style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+        <div>
+          <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>TX ID (tester)</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--label-2)' }}>0x</span>
+            <input value={txId} onChange={e => setTxId(e.target.value)} style={{ width: 60, ...NUMERIC }} />
           </div>
-        </Card>
-      </div>
+        </div>
+        <i className="ti ti-arrow-right" style={{ fontSize: 16, color: 'var(--label-3)' }} />
+        <div>
+          <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>RX ID (ECU)</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--label-2)' }}>0x</span>
+            <input value={rxId} onChange={e => setRxId(e.target.value)} style={{ width: 60, ...NUMERIC }} />
+          </div>
+        </div>
+        <div style={{ flex: 1 }} />
+        <Badge label="CAN-TP" variant="info" />
+        <Badge label="ISO 15765-2" variant="muted" />
+        <Button
+          size="sm"
+          variant={testerPresentActive ? 'primary' : 'secondary'}
+          icon="ti-heartbeat"
+          onClick={() => setTesterPresentActive(!testerPresentActive)}
+        >
+          {testerPresentActive ? 'TP active' : 'Tester present'}
+        </Button>
+      </Card>
 
-      <div style={{ display: 'flex', gap: 8, flex: 1, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', gap: 12, flex: 1, overflow: 'hidden' }}>
         {/* Service list */}
         <Card padding={0} style={{ width: 260, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{
-            padding: '6px 10px', background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
-            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 10,
-            letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--tm)',
-          }}>
-            UDS services (ISO 14229)
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent' }}>
-            {UDS_SERVICES.map(svc => (
-              <div
-                key={svc.sid}
-                onClick={() => { setSelectedService(svc); setSubFunc(svc.subFunctions?.[0]?.id ?? 0); }}
-                style={{
-                  padding: '7px 10px', cursor: 'pointer',
-                  borderBottom: '1px solid var(--bg3)',
-                  background: selectedService.sid === svc.sid ? 'rgba(255,87,34,0.05)' : 'transparent',
-                  borderLeft: selectedService.sid === svc.sid ? '2px solid var(--pp)' : '2px solid transparent',
-                  transition: 'background 0.08s',
-                }}
-                onMouseEnter={e => { if (selectedService.sid !== svc.sid) (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
-                onMouseLeave={e => { if (selectedService.sid !== svc.sid) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--pp)' }}>
-                    0x{hexByte(svc.sid)}
-                  </span>
-                  <Badge label={svc.shortName} variant="muted" />
+          <div style={TH_STYLE}>UDS services (ISO 14229)</div>
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {UDS_SERVICES.map(svc => {
+              const selected = selectedService.sid === svc.sid;
+              return (
+                <div
+                  key={svc.sid}
+                  className="row-hover"
+                  onClick={() => { setSelectedService(svc); setSubFunc(svc.subFunctions?.[0]?.id ?? 0); }}
+                  style={{
+                    padding: '8px 12px', cursor: 'pointer', ...CELL_DIVIDER,
+                    background: selected ? 'var(--accent-tint)' : 'transparent',
+                    boxShadow: selected ? 'inset 3px 0 0 var(--accent)' : 'none',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--accent-text)' }}>0x{hexByte(svc.sid)}</span>
+                    <Badge label={svc.shortName} variant="muted" />
+                  </div>
+                  <div style={{ ...TYPE.caption, color: 'var(--label)', marginTop: 2 }}>{svc.name}</div>
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--tw)', marginTop: 2 }}>{svc.name}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
 
         {/* Service detail + send */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, overflow: 'hidden' }}>
           <Card>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div>
-                <div style={{ fontSize: 14, color: 'var(--tw)', fontWeight: 500 }}>
-                  <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", color: 'var(--pp)', marginRight: 6 }}>0x{hexByte(selectedService.sid)}</span>
-                  {selectedService.name}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--tm)', marginTop: 2 }}>{selectedService.description}</div>
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ ...TYPE.headline, color: 'var(--label)' }}>
+                <span style={{ ...NUMERIC, color: 'var(--accent-text)', marginRight: 6 }}>0x{hexByte(selectedService.sid)}</span>
+                {selectedService.name}
               </div>
+              <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginTop: 2 }}>{selectedService.description}</div>
             </div>
 
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               {/* Sub-function selector */}
               {selectedService.subFunctions && (
                 <div>
-                  <div style={{ fontSize: 9, color: 'var(--tm)', textTransform: 'uppercase', letterSpacing: 1, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", marginBottom: 3 }}>Sub-function</div>
+                  <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Sub-function</div>
                   <select
                     value={subFunc}
                     onChange={e => setSubFunc(Number(e.target.value))}
-                    style={{ height: 28, fontSize: 11, fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", padding: '0 6px', minWidth: 180 }}
+                    style={{ ...NUMERIC, minWidth: 180 }}
                   >
                     {selectedService.subFunctions.map(sf => (
                       <option key={sf.id} value={sf.id}>0x{hexByte(sf.id)} — {sf.name}</option>
@@ -467,20 +440,20 @@ function UDSClientTab(): React.ReactElement {
               {/* DID input for RDBI/WDBI */}
               {(selectedService.sid === 0x22 || selectedService.sid === 0x2E) && (
                 <div>
-                  <div style={{ fontSize: 9, color: 'var(--tm)', textTransform: 'uppercase', letterSpacing: 1, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", marginBottom: 3 }}>DID</div>
+                  <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>DID</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--tm)' }}>0x</span>
+                    <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--label-2)' }}>0x</span>
                     <input value={didInput} onChange={e => setDidInput(e.target.value)} placeholder="F190"
-                      style={{ width: 60, height: 28, fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, padding: '0 6px', textTransform: 'uppercase' }} />
+                      style={{ width: 60, ...NUMERIC }} />
                   </div>
                 </div>
               )}
 
               {/* Additional payload */}
               <div style={{ flex: 1, minWidth: 200 }}>
-                <div style={{ fontSize: 9, color: 'var(--tm)', textTransform: 'uppercase', letterSpacing: 1, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", marginBottom: 3 }}>Additional data (hex)</div>
+                <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Additional data (hex)</div>
                 <input value={payloadHex} onChange={e => setPayloadHex(e.target.value)} placeholder="e.g. 01 02 03"
-                  style={{ width: '100%', height: 28, fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, padding: '0 8px' }} />
+                  style={{ width: '100%', ...NUMERIC }} />
               </div>
 
               <Button variant="primary" icon="ti-send" onClick={handleSend}>Send</Button>
@@ -490,68 +463,54 @@ function UDSClientTab(): React.ReactElement {
           {/* Common DIDs quick-pick */}
           {(selectedService.sid === 0x22) && (
             <Card padding={0} style={{ maxHeight: 130, overflow: 'hidden' }}>
-              <div style={{
-                padding: '4px 10px', background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
-                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-                letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--tm)',
-              }}>
-                Common DIDs — click to populate
-              </div>
-              <div style={{ overflowY: 'auto', maxHeight: 96, scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent' }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: 6 }}>
-                  {COMMON_DIDS.map(d => (
-                    <button
-                      key={d.did}
-                      onClick={() => setDidInput(d.did)}
-                      title={d.name}
-                      style={{
-                        background: didInput === d.did ? 'rgba(255,87,34,0.08)' : 'var(--bg3)',
-                        border: `1px solid ${didInput === d.did ? 'var(--pp)' : 'var(--br)'}`,
-                        borderRadius: 0, padding: '3px 8px', cursor: 'pointer',
-                        fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--tw)',
-                      }}
-                    >
-                      {d.did}
-                    </button>
-                  ))}
-                </div>
+              <div style={TH_STYLE}>Common DIDs — click to populate</div>
+              <div style={{ overflowY: 'auto', maxHeight: 96, padding: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {COMMON_DIDS.map(d => (
+                  <Button
+                    key={d.did}
+                    size="sm"
+                    variant={didInput === d.did ? 'primary' : 'secondary'}
+                    title={d.name}
+                    onClick={() => setDidInput(d.did)}
+                  >
+                    <span style={NUMERIC}>{d.did}</span>
+                  </Button>
+                ))}
               </div>
             </Card>
           )}
 
           {/* Response history */}
           <Card padding={0} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <div style={{
-              display: 'grid', gridTemplateColumns: '80px 60px 50px 1fr 1fr',
-              gap: 6, padding: '5px 10px',
-              background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
-            }}>
-              {['Time', 'Service', 'Status', 'Request', 'Response'].map(h => (
-                <span key={h} style={{ fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9, letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--tm)' }}>{h}</span>
-              ))}
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent' }}>
-              {history.length === 0 ? (
-                <div style={{ padding: 20, textAlign: 'center', color: 'var(--tm)', fontSize: 12 }}>
-                  <i className="ti ti-stethoscope" style={{ fontSize: 24, display: 'block', marginBottom: 6 }} />
-                  No UDS exchanges yet — select a service and click Send
-                </div>
-              ) : (
-                history.map((h, i) => (
-                  <div key={i} style={{
-                    display: 'grid', gridTemplateColumns: '80px 60px 50px 1fr 1fr',
-                    gap: 6, padding: '5px 10px', borderBottom: '1px solid var(--bg3)',
-                    fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11,
-                  }}>
-                    <span style={{ color: 'var(--tm)', fontSize: 10 }}>{timestamp(h.ts)}</span>
-                    <Badge label={h.service} variant="info" />
-                    <Badge label={h.positive ? 'OK' : 'NRC'} variant={h.positive ? 'ok' : 'crit'} />
-                    <span style={{ color: 'var(--sa)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.req}</span>
-                    <span style={{ color: h.positive ? 'var(--sg)' : 'var(--sr)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.res}</span>
-                  </div>
-                ))
-              )}
-            </div>
+            {history.length === 0 ? (
+              <EmptyState icon="ti-stethoscope" title="No UDS exchanges yet" message="Select a service and click Send." />
+            ) : (
+              <div style={{ flex: 1, overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                  <colgroup>
+                    <col style={{ width: 84 }} /><col style={{ width: 64 }} /><col style={{ width: 56 }} /><col /><col />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      {['Time', 'Service', 'Status', 'Request', 'Response'].map(h => (
+                        <th key={h} style={TH_STYLE}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((h, i) => (
+                      <tr key={i}>
+                        <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)' }}>{timestamp(h.ts)}</td>
+                        <td style={TD_STYLE}><Badge label={h.service} variant="info" /></td>
+                        <td style={TD_STYLE}><Badge label={h.positive ? 'OK' : 'NRC'} variant={h.positive ? 'ok' : 'crit'} /></td>
+                        <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.req}</td>
+                        <td style={{ ...TD_STYLE, ...NUMERIC, color: h.positive ? 'var(--ok-text)' : 'var(--crit-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.res}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Card>
         </div>
       </div>
