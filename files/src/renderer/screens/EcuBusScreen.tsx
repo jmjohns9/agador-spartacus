@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
 import {
-  SectionHeader, Card, Badge, Button, SegmentedControl, DataRow, EmptyState, Metric,
+  SectionHeader, Card, Badge, Button, SegmentedControl, DataRow, EmptyState, Metric, AlertBanner,
 } from '../components/layout/UIComponents';
 import { TYPE, NUMERIC, WEIGHT } from '../theme/theme';
 import type {
@@ -982,6 +982,16 @@ function NRCReferencePanel(): React.ReactElement {
 
 // ─── Main EcuBusScreen ───────────────────────────────────────────────────────
 
+const SUB_TAB_OPTIONS = SUB_TABS.map(t => ({ value: t.id, label: t.label, icon: t.icon }));
+
+const QUICK_ACTIONS: { label: string; tab: EcuBusSubTab; icon: string }[] = [
+  { label: 'Read VIN', tab: 'uds', icon: 'ti-id' },
+  { label: 'Scan DTCs', tab: 'uds', icon: 'ti-bug' },
+  { label: 'Monitor CAN', tab: 'can', icon: 'ti-route' },
+  { label: 'Tester present', tab: 'uds', icon: 'ti-heartbeat' },
+  { label: 'ECU reset', tab: 'uds', icon: 'ti-refresh' },
+];
+
 export function EcuBusScreen(): React.ReactElement {
   const activeSubTab = useAppStore(s => s.ecubus.activeSubTab);
   const setSubTab = useAppStore(s => s.setEcuBusSubTab);
@@ -992,40 +1002,17 @@ export function EcuBusScreen(): React.ReactElement {
 
       {/* Sub-tab bar */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 2,
-        padding: '4px 8px', background: 'var(--bg2)', borderBottom: '2px solid var(--br)',
-        flexShrink: 0,
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '8px 12px', ...CELL_DIVIDER, flexShrink: 0,
       }}>
-        {SUB_TABS.map(tab => {
-          const isActive = activeSubTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setSubTab(tab.id)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                padding: '5px 12px', borderRadius: 0,
-                border: isActive ? '1px solid var(--pp)' : '1px solid transparent',
-                background: isActive ? 'rgba(255,87,34,0.06)' : 'transparent',
-                color: isActive ? 'var(--pp)' : 'var(--tm)',
-                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
-                fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase',
-                cursor: 'pointer', transition: 'all 0.1s',
-              }}
-              onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'var(--bg3)'; }}
-              onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = isActive ? 'rgba(255,87,34,0.06)' : 'transparent'; }}
-            >
-              <i className={`ti ${tab.icon}`} style={{ fontSize: 14 }} />
-              {tab.label}
-            </button>
-          );
-        })}
-
+        <SegmentedControl
+          ariaLabel="EcuBus tool"
+          options={SUB_TAB_OPTIONS}
+          value={activeSubTab}
+          onChange={setSubTab}
+        />
         <div style={{ flex: 1 }} />
-        <span style={{
-          fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 10,
-          letterSpacing: 1, color: 'var(--tm)', opacity: 0.6,
-        }}>
+        <span style={{ ...TYPE.caption, color: 'var(--label-3)' }}>
           Powered by EcuBus-Pro · Apache 2.0
         </span>
       </div>
@@ -1033,50 +1020,29 @@ export function EcuBusScreen(): React.ReactElement {
       {/* Quick actions bar */}
       {connectionStatus === 'connected' && (
         <div style={{
-          display: 'flex', gap: 6, padding: '6px 10px',
-          background: 'var(--bg3)', borderBottom: '2px solid var(--br)', flexShrink: 0,
+          display: 'flex', gap: 8, padding: '8px 12px', ...CELL_DIVIDER, flexShrink: 0,
           flexWrap: 'wrap', alignItems: 'center',
         }}>
-          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--tm)', marginRight: 4 }}>Quick:</span>
-          {[
-            { label: 'Read VIN', action: () => { setSubTab('uds'); }, icon: 'ti-id' },
-            { label: 'Scan DTCs', action: () => { setSubTab('uds'); }, icon: 'ti-bug' },
-            { label: 'Monitor CAN', action: () => { setSubTab('can'); }, icon: 'ti-route' },
-            { label: 'Tester Present', action: () => { setSubTab('uds'); }, icon: 'ti-heartbeat' },
-            { label: 'ECU Reset', action: () => { setSubTab('uds'); }, icon: 'ti-refresh' },
-          ].map(q => (
-            <button
-              key={q.label}
-              onClick={q.action}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 4,
-                padding: '3px 8px', borderRadius: 0, fontSize: 10, fontWeight: 600,
-                background: 'var(--bg4)', border: '2px solid var(--br)',
-                color: 'var(--pp)', cursor: 'pointer',
-                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--pp)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--br)'; }}
-            >
-              <i className={`ti ${q.icon}`} style={{ fontSize: 12 }} />
+          <span style={{ ...TYPE.caption, color: 'var(--label-3)' }}>Quick:</span>
+          {QUICK_ACTIONS.map(q => (
+            <Button key={q.label} size="sm" variant="secondary" icon={q.icon} onClick={() => setSubTab(q.tab)}>
               {q.label}
-            </button>
+            </Button>
           ))}
         </div>
       )}
 
       {connectionStatus !== 'connected' && (
-        <div style={{
-          padding: '12px 14px', background: 'var(--bg3)', borderBottom: '2px solid var(--br)',
-          fontSize: 12, color: 'var(--tm)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0,
-        }}>
-          <i className="ti ti-info-circle" style={{ fontSize: 16, color: 'var(--sa)' }} />
-          Connect to an adapter first. EcuBus requires a live connection to send CAN/UDS frames.
+        <div style={{ padding: '8px 12px 0', flexShrink: 0 }}>
+          <AlertBanner
+            variant="info"
+            message="Connect to an adapter first. EcuBus requires a live connection to send CAN/UDS frames."
+          />
         </div>
       )}
 
       {/* Content */}
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: 10, gap: 0 }}>
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: 12, gap: 0 }}>
         {activeSubTab === 'can'      && <CANMonitorTab />}
         {activeSubTab === 'uds'      && <UDSClientTab />}
         {activeSubTab === 'transmit' && <TransmitTab />}
