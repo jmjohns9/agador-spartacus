@@ -549,100 +549,84 @@ function TransmitTab(): React.ReactElement {
         <SectionHeader>CAN frame transmitter</SectionHeader>
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginTop: 8, flexWrap: 'wrap' }}>
           <div>
-            <div style={{ fontSize: 9, color: 'var(--tm)', textTransform: 'uppercase', letterSpacing: 1, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", marginBottom: 3 }}>CAN ID</div>
+            <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>CAN ID</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--tm)' }}>0x</span>
-              <input value={frameId} onChange={e => setFrameId(e.target.value)} style={{ width: 70, height: 28, fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, padding: '0 6px', textTransform: 'uppercase' }} />
+              <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--label-2)' }}>0x</span>
+              <input value={frameId} onChange={e => setFrameId(e.target.value)} style={{ width: 70, ...NUMERIC }} />
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 9, color: 'var(--tm)', textTransform: 'uppercase', letterSpacing: 1, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", marginBottom: 3 }}>DLC</div>
-            <select value={dlc} onChange={e => setDlc(Number(e.target.value))} style={{ height: 28, width: 50, fontSize: 11, fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", padding: '0 4px' }}>
+            <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>DLC</div>
+            <select value={dlc} onChange={e => setDlc(Number(e.target.value))} style={{ width: 60, ...NUMERIC }}>
               {[1, 2, 3, 4, 5, 6, 7, 8, ...(isFD ? [12, 16, 20, 24, 32, 48, 64] : [])].map(n => (
                 <option key={n} value={n}>{n}</option>
               ))}
             </select>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--tw)', cursor: 'pointer' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, ...TYPE.body, color: 'var(--label)', cursor: 'pointer' }}>
               <input type="checkbox" checked={isFD} onChange={e => setIsFD(e.target.checked)} />
               CAN-FD
             </label>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--tw)', cursor: 'pointer' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, ...TYPE.body, color: 'var(--label)', cursor: 'pointer' }}>
               <input type="checkbox" checked={isCyclic} onChange={e => setIsCyclic(e.target.checked)} />
               Cyclic
             </label>
             {isCyclic && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <input value={cycleMs} onChange={e => setCycleMs(Number(e.target.value))} type="number" style={{ width: 60, height: 26, fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, padding: '0 4px' }} />
-                <span style={{ fontSize: 10, color: 'var(--tm)' }}>ms</span>
+                <input value={cycleMs} onChange={e => setCycleMs(Number(e.target.value))} type="number" style={{ width: 60, ...NUMERIC }} />
+                <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>ms</span>
               </div>
             )}
           </div>
         </div>
 
         {/* Data byte grid */}
-        <div style={{ marginTop: 10 }}>
-          <div style={{ fontSize: 9, color: 'var(--tm)', textTransform: 'uppercase', letterSpacing: 1, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", marginBottom: 4 }}>Data bytes</div>
+        <div style={{ marginTop: 12 }}>
+          <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Data bytes</div>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {dataBytes.slice(0, dlc).map((b, i) => (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                <span style={{ fontSize: 8, color: 'var(--tm)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif" }}>B{i}</span>
+                <span style={{ ...TYPE.caption, color: 'var(--label-3)' }}>B{i}</span>
                 <input
                   value={b}
                   onChange={e => handleByteChange(i, e.target.value)}
                   maxLength={2}
-                  style={{
-                    width: 32, height: 28, textAlign: 'center',
-                    fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12,
-                    padding: 0, textTransform: 'uppercase',
-                  }}
+                  style={{ width: 32, textAlign: 'center', ...NUMERIC, padding: 0 }}
                 />
               </div>
             ))}
           </div>
         </div>
 
-        <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+        <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
           <Button variant="primary" icon="ti-send" onClick={handleSend}>
             {isCyclic ? 'Start cyclic TX' : 'Send frame'}
           </Button>
-          <Button icon="ti-eraser" onClick={() => setDataBytes(Array(8).fill('00'))}>Zero all</Button>
-          <Button icon="ti-maximize" onClick={() => setDataBytes(Array(8).fill('FF'))}>Fill FF</Button>
+          <Button variant="secondary" icon="ti-eraser" onClick={() => setDataBytes(Array(8).fill('00'))}>Zero all</Button>
+          <Button variant="secondary" icon="ti-maximize" onClick={() => setDataBytes(Array(8).fill('FF'))}>Fill FF</Button>
         </div>
       </Card>
 
       {/* Sent log */}
-      <Card padding={0} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', marginTop: 8 }}>
-        <div style={{
-          padding: '5px 10px', background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
-          fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-          letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--tm)',
-        }}>
-          TX log · {sentLog.length} frames sent
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent' }}>
-          {sentLog.length === 0 ? (
-            <div style={{ padding: 20, textAlign: 'center', color: 'var(--tm)', fontSize: 12 }}>
-              <i className="ti ti-send" style={{ fontSize: 24, display: 'block', marginBottom: 6 }} />
-              No frames sent yet
-            </div>
-          ) : (
-            sentLog.map((entry, i) => (
-              <div key={i} style={{
-                display: 'flex', gap: 12, padding: '5px 10px', borderBottom: '1px solid var(--bg3)',
-                fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, alignItems: 'center',
-              }}>
-                <span style={{ color: 'var(--tm)', fontSize: 10, width: 70 }}>{timestamp(entry.ts)}</span>
+      <Card padding={0} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', marginTop: 12 }}>
+        <div style={TH_STYLE}>TX log · {sentLog.length} frames sent</div>
+        {sentLog.length === 0 ? (
+          <EmptyState icon="ti-send" title="No frames sent yet" />
+        ) : (
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {sentLog.map((entry, i) => (
+              <div key={i} style={{ display: 'flex', gap: 12, padding: '6px 12px', alignItems: 'center', ...CELL_DIVIDER }}>
+                <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)', width: 70 }}>{timestamp(entry.ts)}</span>
                 <Badge label="TX" variant="warn" />
-                <span style={{ color: 'var(--pp)' }}>{entry.id}</span>
-                <span style={{ color: 'var(--tw)', letterSpacing: 0.8 }}>{entry.data}</span>
+                <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--accent-text)' }}>{entry.id}</span>
+                <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label)' }}>{entry.data}</span>
               </div>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </Card>
     </>
   );
@@ -656,67 +640,61 @@ function SignalsTab(): React.ReactElement {
   return (
     <>
       <SectionHeader>CAN signal decoder (DBC)</SectionHeader>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-        <Button size="sm" icon="ti-file-import">Load DBC</Button>
-        <Button size="sm" icon="ti-plus">Add signal</Button>
+      <div style={{ display: 'flex', gap: 8, margin: '8px 0 12px' }}>
+        <Button size="sm" variant="secondary" icon="ti-file-import">Load DBC</Button>
+        <Button size="sm" variant="secondary" icon="ti-plus">Add signal</Button>
         <div style={{ flex: 1 }} />
         <Badge label="8 signals" variant="info" />
         <Badge label="4 messages" variant="muted" />
       </div>
 
       <Card padding={0} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '130px 90px 130px 70px 70px 60px 50px 100px 60px',
-          gap: 6, padding: '5px 10px',
-          background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
-        }}>
-          {['Signal', 'Message ID', 'Message', 'Start bit', 'Length', 'Factor', 'Unit', 'Value', 'Raw'].map(h => (
-            <span key={h} style={{ fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9, letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--tm)' }}>{h}</span>
-          ))}
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent' }}>
-          {signals.map((sig, i) => (
-            <div
-              key={sig.name}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '130px 90px 130px 70px 70px 60px 50px 100px 60px',
-                gap: 6, padding: '6px 10px', alignItems: 'center',
-                borderBottom: '1px solid var(--bg3)',
-                fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11,
-                transition: 'background 0.08s',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-            >
-              <span style={{ color: 'var(--tw)', fontWeight: 500, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif" }}>{sig.name}</span>
-              <span style={{ color: 'var(--pp)' }}>0x{sig.messageId.toString(16).toUpperCase().padStart(3, '0')}</span>
-              <span style={{ color: 'var(--tm)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 10 }}>{sig.messageName}</span>
-              <span style={{ color: 'var(--tm)' }}>{sig.startBit}</span>
-              <span style={{ color: 'var(--tm)' }}>{sig.length} bit</span>
-              <span style={{ color: 'var(--tm)' }}>{sig.factor}</span>
-              <span style={{ color: 'var(--tm)' }}>{sig.unit}</span>
-              <span style={{ color: 'var(--sg)', fontWeight: 500, fontSize: 13 }}>{sig.value}</span>
-              <span style={{ color: 'var(--tm)', fontSize: 10 }}>{sig.rawValue}</span>
-            </div>
-          ))}
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: 130 }} /><col style={{ width: 90 }} /><col style={{ width: 130 }} />
+              <col style={{ width: 70 }} /><col style={{ width: 70 }} /><col style={{ width: 60 }} />
+              <col style={{ width: 50 }} /><col style={{ width: 100 }} /><col style={{ width: 70 }} />
+            </colgroup>
+            <thead>
+              <tr>
+                {['Signal', 'Message ID', 'Message', 'Start bit', 'Length', 'Factor', 'Unit', 'Value', 'Raw'].map(h => (
+                  <th key={h} style={TH_STYLE}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {signals.map(sig => (
+                <tr key={sig.name} className="row-hover">
+                  <td style={{ ...TD_STYLE, fontWeight: WEIGHT.medium }}>{sig.name}</td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--accent-text)' }}>0x{sig.messageId.toString(16).toUpperCase().padStart(3, '0')}</td>
+                  <td style={{ ...TD_STYLE, color: 'var(--label-2)' }}>{sig.messageName}</td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)' }}>{sig.startBit}</td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)' }}>{sig.length} bit</td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)' }}>{sig.factor}</td>
+                  <td style={{ ...TD_STYLE, color: 'var(--label-2)' }}>{sig.unit}</td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC, fontWeight: WEIGHT.semibold, color: 'var(--label)' }}>{sig.value}</td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)' }}>{sig.rawValue}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </Card>
 
       {/* Signal bar chart visualization */}
-      <Card style={{ marginTop: 8 }}>
+      <Card style={{ marginTop: 12 }}>
         <SectionHeader>Signal bar graph</SectionHeader>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
           {signals.map(sig => {
             const pct = ((sig.value - sig.min) / (sig.max - sig.min)) * 100;
             return (
               <div key={sig.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 110, fontSize: 11, color: 'var(--tw)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", textAlign: 'right' }}>{sig.name}</span>
-                <div style={{ flex: 1, height: 14, background: 'var(--bg4)', borderRadius: 0, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: 'var(--pp)', borderRadius: 0, transition: 'width 0.3s' }} />
+                <span style={{ width: 110, ...TYPE.caption, color: 'var(--label)', textAlign: 'right' }}>{sig.name}</span>
+                <div style={{ flex: 1, height: 14, background: 'var(--fill)', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: 'var(--accent)', transition: 'width 0.3s' }} />
                 </div>
-                <span style={{ width: 70, fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--sg)', textAlign: 'right' }}>
+                <span style={{ width: 70, ...TYPE.caption, ...NUMERIC, color: 'var(--label)', textAlign: 'right' }}>
                   {sig.value} {sig.unit}
                 </span>
               </div>
