@@ -2,7 +2,6 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
 import {
   SectionHeader, Card, Badge, Button, SegmentedControl, DataRow, EmptyState, Metric,
-  DenseMetricTile,
 } from '../components/layout/UIComponents';
 import { TYPE, NUMERIC, WEIGHT } from '../theme/theme';
 import type {
@@ -801,58 +800,51 @@ function LINTab(): React.ReactElement {
 
   return (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 8 }}>
-        <DenseMetricTile label="LIN frames" value={frames.length} accentBorder="var(--gb)" />
-        <DenseMetricTile label="Master frames" value={frames.filter(f => f.direction === 'master').length} valueColor="var(--pp)" />
-        <DenseMetricTile label="Slave responses" value={frames.filter(f => f.direction === 'slave').length} valueColor="var(--sg)" />
-        <DenseMetricTile label="Errors" value={frames.filter(f => f.error).length} valueColor="var(--sr)" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
+        <Metric size="compact" label="LIN frames" value={frames.length} />
+        <Metric size="compact" label="Master frames" value={frames.filter(f => f.direction === 'master').length} />
+        <Metric size="compact" label="Slave responses" value={frames.filter(f => f.direction === 'slave').length} />
+        <Metric size="compact" label="Errors" value={frames.filter(f => f.error).length} status={frames.some(f => f.error) ? 'crit' : 'neutral'} />
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-        <Button size="sm" icon="ti-file-import">Load LDF</Button>
-        <Button size="sm" icon="ti-file-export">Export LDF</Button>
-        <Button size="sm" icon="ti-test-pipe">Conformance test</Button>
+      <div style={{ display: 'flex', gap: 8, margin: '12px 0' }}>
+        <Button size="sm" variant="secondary" icon="ti-file-import">Load LDF</Button>
+        <Button size="sm" variant="secondary" icon="ti-file-export">Export LDF</Button>
+        <Button size="sm" variant="secondary" icon="ti-test-pipe">Conformance test</Button>
         <div style={{ flex: 1 }} />
         <Badge label="LIN 2.1" variant="info" />
         <Badge label="19.2 kbit/s" variant="muted" />
       </div>
 
       <Card padding={0} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '75px 60px 40px 1fr 80px 70px',
-          gap: 6, padding: '5px 10px',
-          background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
-        }}>
-          {['Time', 'ID', 'DLC', 'Data', 'Direction', 'Checksum'].map(h => (
-            <span key={h} style={{ fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9, letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--tm)' }}>{h}</span>
-          ))}
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent' }}>
-          {frames.map((frame, i) => (
-            <div
-              key={i}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '75px 60px 40px 1fr 80px 70px',
-                gap: 6, padding: '5px 10px', alignItems: 'center',
-                borderBottom: '1px solid var(--bg3)',
-                fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11,
-                transition: 'background 0.08s',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-            >
-              <span style={{ color: 'var(--tm)', fontSize: 10 }}>{timestamp(frame.timestamp)}</span>
-              <span style={{ color: 'var(--pp)', fontWeight: 500 }}>{frame.idHex}</span>
-              <span style={{ color: 'var(--tm)' }}>{frame.dlc}</span>
-              <span style={{ color: 'var(--tw)', letterSpacing: 0.8 }}>{frame.dataHex}</span>
-              <Badge label={frame.direction} variant={frame.direction === 'master' ? 'warn' : 'ok'} />
-              <span style={{ color: 'var(--tm)', fontSize: 10 }}>
-                0x{hexByte(frame.checksum)} ({frame.checksumType})
-              </span>
-            </div>
-          ))}
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: 84 }} /><col style={{ width: 64 }} /><col style={{ width: 44 }} />
+              <col /><col style={{ width: 84 }} /><col style={{ width: 110 }} />
+            </colgroup>
+            <thead>
+              <tr>
+                {['Time', 'ID', 'DLC', 'Data', 'Direction', 'Checksum'].map(h => (
+                  <th key={h} style={TH_STYLE}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {frames.map((frame, i) => (
+                <tr key={i} className="row-hover">
+                  <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)' }}>{timestamp(frame.timestamp)}</td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC, fontWeight: WEIGHT.medium, color: 'var(--accent-text)' }}>{frame.idHex}</td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)' }}>{frame.dlc}</td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC }}>{frame.dataHex}</td>
+                  <td style={TD_STYLE}><Badge label={frame.direction} variant={frame.direction === 'master' ? 'warn' : 'ok'} /></td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)' }}>
+                    0x{hexByte(frame.checksum)} ({frame.checksumType})
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </Card>
     </>
@@ -867,13 +859,13 @@ function DoIPTab(): React.ReactElement {
 
   return (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 8 }}>
-        <DenseMetricTile label="DoIP entities" value={entities.length} accentBorder="var(--gb)" />
-        <DenseMetricTile label="Online" value={entities.filter(e => e.status === 'online').length} valueColor="var(--sg)" />
-        <DenseMetricTile label="Gateways" value={entities.filter(e => e.entityType === 'gateway').length} valueColor="var(--pp)" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
+        <Metric size="compact" label="DoIP entities" value={entities.length} />
+        <Metric size="compact" label="Online" value={entities.filter(e => e.status === 'online').length} />
+        <Metric size="compact" label="Gateways" value={entities.filter(e => e.entityType === 'gateway').length} />
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+      <div style={{ display: 'flex', gap: 8, margin: '12px 0' }}>
         <Button size="sm" variant="primary" icon="ti-radar">Vehicle discovery</Button>
         <div style={{ flex: 1 }} />
         <Badge label="ISO 13400" variant="info" />
@@ -881,68 +873,64 @@ function DoIPTab(): React.ReactElement {
       </div>
 
       <Card padding={0} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '120px 60px 90px 130px 80px 70px',
-          gap: 6, padding: '5px 10px',
-          background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
-        }}>
-          {['IP Address', 'Port', 'Logical Addr', 'Entity ID', 'Type', 'Status'].map(h => (
-            <span key={h} style={{ fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9, letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--tm)' }}>{h}</span>
-          ))}
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent' }}>
-          {entities.map((entity, i) => (
-            <div
-              key={i}
-              onClick={() => setSelectedEntity(entity)}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '120px 60px 90px 130px 80px 70px',
-                gap: 6, padding: '6px 10px', alignItems: 'center',
-                borderBottom: '1px solid var(--bg3)',
-                fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11,
-                background: selectedEntity === entity ? 'rgba(255,87,34,0.05)' : 'transparent',
-                cursor: 'pointer', transition: 'background 0.08s',
-              }}
-              onMouseEnter={e => { if (selectedEntity !== entity) (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
-              onMouseLeave={e => { if (selectedEntity !== entity) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-            >
-              <span style={{ color: 'var(--tw)' }}>{entity.ip}</span>
-              <span style={{ color: 'var(--tm)' }}>{entity.port}</span>
-              <span style={{ color: 'var(--pp)' }}>0x{entity.logicalAddress.toString(16).toUpperCase().padStart(4, '0')}</span>
-              <span style={{ color: 'var(--tm)', fontSize: 10 }}>{entity.eid}</span>
-              <Badge label={entity.entityType} variant={entity.entityType === 'gateway' ? 'warn' : 'muted'} />
-              <Badge label={entity.status} variant={entity.status === 'online' ? 'ok' : entity.status === 'busy' ? 'warn' : 'crit'} />
-            </div>
-          ))}
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: 120 }} /><col style={{ width: 60 }} /><col style={{ width: 90 }} />
+              <col /><col style={{ width: 84 }} /><col style={{ width: 70 }} />
+            </colgroup>
+            <thead>
+              <tr>
+                {['IP address', 'Port', 'Logical addr', 'Entity ID', 'Type', 'Status'].map(h => (
+                  <th key={h} style={TH_STYLE}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {entities.map((entity, i) => (
+                <tr
+                  key={i}
+                  className="row-hover"
+                  onClick={() => setSelectedEntity(entity)}
+                  style={{ cursor: 'pointer', background: selectedEntity === entity ? 'var(--accent-tint)' : 'transparent' }}
+                >
+                  <td style={{ ...TD_STYLE, ...NUMERIC }}>{entity.ip}</td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)' }}>{entity.port}</td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--accent-text)' }}>0x{entity.logicalAddress.toString(16).toUpperCase().padStart(4, '0')}</td>
+                  <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)' }}>{entity.eid}</td>
+                  <td style={TD_STYLE}><Badge label={entity.entityType} variant={entity.entityType === 'gateway' ? 'warn' : 'muted'} /></td>
+                  <td style={TD_STYLE}><Badge label={entity.status} variant={entity.status === 'online' ? 'ok' : entity.status === 'busy' ? 'warn' : 'crit'} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </Card>
 
       {selectedEntity && (
-        <Card style={{ marginTop: 8 }}>
+        <Card style={{ marginTop: 12 }}>
           <SectionHeader>Entity detail — {selectedEntity.ip}</SectionHeader>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 8 }}>
             <div>
-              <div style={{ fontSize: 10, color: 'var(--tm)', textTransform: 'uppercase', letterSpacing: 1, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", marginBottom: 3 }}>Network</div>
-              <div style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--tw)' }}>{selectedEntity.ip}:{selectedEntity.port}</div>
-              <div style={{ fontSize: 10, color: 'var(--tm)', marginTop: 2 }}>Logical: 0x{selectedEntity.logicalAddress.toString(16).toUpperCase().padStart(4, '0')}</div>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Network</div>
+              <div style={{ ...TYPE.body, ...NUMERIC, color: 'var(--label)' }}>{selectedEntity.ip}:{selectedEntity.port}</div>
+              <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginTop: 2 }}>Logical: 0x{selectedEntity.logicalAddress.toString(16).toUpperCase().padStart(4, '0')}</div>
             </div>
             <div>
-              <div style={{ fontSize: 10, color: 'var(--tm)', textTransform: 'uppercase', letterSpacing: 1, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", marginBottom: 3 }}>Identification</div>
-              <div style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--tw)' }}>EID: {selectedEntity.eid}</div>
-              <div style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--tm)', marginTop: 2 }}>GID: {selectedEntity.gid}</div>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Identification</div>
+              <div style={{ ...TYPE.body, ...NUMERIC, color: 'var(--label)' }}>EID: {selectedEntity.eid}</div>
+              <div style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)', marginTop: 2 }}>GID: {selectedEntity.gid}</div>
             </div>
             <div>
-              <div style={{ fontSize: 10, color: 'var(--tm)', textTransform: 'uppercase', letterSpacing: 1, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", marginBottom: 3 }}>Vehicle</div>
-              <div style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: selectedEntity.vin ? 'var(--tw)' : 'var(--tm)' }}>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Vehicle</div>
+              <div style={{ ...TYPE.body, ...NUMERIC, color: selectedEntity.vin ? 'var(--label)' : 'var(--label-3)' }}>
                 {selectedEntity.vin || '—'}
               </div>
             </div>
           </div>
-          <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+          <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
             <Button size="sm" variant="primary" icon="ti-plug-connected">Connect</Button>
-            <Button size="sm" icon="ti-stethoscope">UDS via DoIP</Button>
+            <Button size="sm" variant="secondary" icon="ti-stethoscope">UDS via DoIP</Button>
           </div>
         </Card>
       )}
@@ -951,30 +939,16 @@ function DoIPTab(): React.ReactElement {
 }
 
 // ─── Hardware adapters panel ─────────────────────────────────────────────────
+// Not currently rendered anywhere in EcuBusScreen — see code-review-notes.md.
 
 function HardwarePanel(): React.ReactElement {
   return (
     <Card padding={0}>
-      <div style={{
-        padding: '5px 10px', background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
-        fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-        letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--tm)',
-      }}>
-        Supported hardware adapters
-      </div>
-      {HARDWARE_ADAPTERS.map((hw, i) => (
-        <div
-          key={hw.name}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '6px 10px', borderBottom: i < HARDWARE_ADAPTERS.length - 1 ? '1px solid var(--bg3)' : 'none',
-            transition: 'background 0.08s',
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-        >
+      <div style={TH_STYLE}>Supported hardware adapters</div>
+      {HARDWARE_ADAPTERS.map(hw => (
+        <div key={hw.name} className="row-hover" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', ...CELL_DIVIDER }}>
           <div>
-            <div style={{ fontSize: 12, color: 'var(--tw)' }}>{hw.name}</div>
+            <div style={{ ...TYPE.body, color: 'var(--label)' }}>{hw.name}</div>
             <div style={{ display: 'flex', gap: 4, marginTop: 3 }}>
               {hw.protocols.map(p => <Badge key={p} label={p} variant="muted" />)}
             </div>
@@ -987,27 +961,19 @@ function HardwarePanel(): React.ReactElement {
 }
 
 // ─── NRC reference panel ─────────────────────────────────────────────────────
+// Not currently rendered anywhere in EcuBusScreen — see code-review-notes.md.
 
 function NRCReferencePanel(): React.ReactElement {
   return (
     <Card padding={0}>
-      <div style={{
-        padding: '5px 10px', background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
-        fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-        letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--tm)',
-      }}>
-        UDS negative response codes (NRC)
-      </div>
-      <div style={{ maxHeight: 200, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent' }}>
+      <div style={TH_STYLE}>UDS negative response codes (NRC)</div>
+      <div style={{ maxHeight: 200, overflowY: 'auto' }}>
         {Object.entries(NRC_CODES).map(([code, name]) => (
-          <div key={code} style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '4px 10px', borderBottom: '1px solid var(--bg3)',
-            fontSize: 10, fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
-          }}>
-            <span style={{ color: 'var(--sr)' }}>0x{parseInt(code).toString(16).toUpperCase().padStart(2, '0')}</span>
-            <span style={{ color: 'var(--tm)', fontSize: 10, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif" }}>{name}</span>
-          </div>
+          <DataRow
+            key={code}
+            name={name}
+            value={`0x${parseInt(code).toString(16).toUpperCase().padStart(2, '0')}`}
+          />
         ))}
       </div>
     </Card>
