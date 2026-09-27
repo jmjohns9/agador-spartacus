@@ -1,8 +1,9 @@
 import React from 'react';
 import { useAppStore } from '../store/appStore';
 import {
-  ScrollPane, SectionHeader, Card, Badge, AlertBanner, WaveBar, Button,
+  ScrollPane, SectionHeader, Card, Badge, AlertBanner, Button, Divider, EmptyState,
 } from '../components/layout/UIComponents';
+import { TYPE, NUMERIC } from '../theme/theme';
 import { ModuleStatus } from '../../shared/types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -15,19 +16,11 @@ const STATUS_VARIANT: Record<ModuleStatus, 'ok' | 'crit' | 'warn' | 'info' | 'mu
   unknown:  'muted',
 };
 
-const STATUS_COLOR: Record<ModuleStatus, string> = {
-  alive:    'var(--sg)',
-  sleeping: 'var(--gb)',
-  rogue:    'var(--sr)',
-  suspect:  'var(--sa)',
-  unknown:  'var(--tm)',
-};
-
 const STATUS_LABEL: Record<ModuleStatus, string> = {
-  alive:    'Alive — responding',
-  sleeping: 'Sleeping — normal',
-  rogue:    'ROGUE — awake after engine-off',
-  suspect:  'Suspect — delayed sleep',
+  alive:    'Alive',
+  sleeping: 'Sleeping',
+  rogue:    'Rogue',
+  suspect:  'Suspect',
   unknown:  'Unknown',
 };
 
@@ -55,17 +48,14 @@ export function ModulesScreen(): React.ReactElement {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
-      {/* Toolbar — Dash0-style dense header */}
+      {/* ── Toolbar ──────────────────────────────────────────────────────── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: '7px 10px', background: 'var(--bg2)', borderBottom: '2px solid var(--br)',
+        padding: '8px 12px', background: 'var(--grouped)',
+        boxShadow: 'inset 0 -1px 0 var(--separator)',
         flexShrink: 0,
       }}>
-        <span style={{
-          fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 10,
-          letterSpacing: 1.2, textTransform: 'uppercase',
-          color: 'var(--tm)', flex: 1,
-        }}>
+        <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)', flex: 1 }}>
           {modules.length} modules known · {aliveModules.length} alive · {sleepingModules.length} sleeping · {rogueModules.length} rogue
         </span>
         <Button
@@ -84,7 +74,7 @@ export function ModulesScreen(): React.ReactElement {
         {rogueModules.map(m => (
           <AlertBanner
             key={m.address}
-            message={`ROGUE MODULE: ${m.name} (${m.address}) has been awake ${m.minutesAwakePostEngineOff.toFixed(0)} min after engine-off — parasitic draw suspect`}
+            message={`Rogue module: ${m.name} (${m.address}) has been awake ${m.minutesAwakePostEngineOff.toFixed(0)} min after engine-off — parasitic draw suspect`}
             variant="crit"
           />
         ))}
@@ -100,62 +90,56 @@ export function ModulesScreen(): React.ReactElement {
         <SectionHeader>{platform.name} — module status</SectionHeader>
         {modules.length === 0 ? (
           <Card>
-            <div style={{ padding: '20px 12px', textAlign: 'center' }}>
-              <i className="ti ti-cpu" style={{ fontSize: 28, color: 'var(--tm)', display: 'block', marginBottom: 8 }} />
-              <div style={{ fontSize: 13, color: 'var(--tw)', marginBottom: 4 }}>No module data</div>
-              <div style={{ fontSize: 12, color: 'var(--tm)' }}>
-                {platform.modules.length > 0
-                  ? 'Connect the adapter and click Scan modules to poll the bus.'
-                  : 'No known module map for this vehicle — modules will appear as they respond on the bus after connecting.'}
-              </div>
-            </div>
+            <EmptyState
+              icon="ti-cpu-off"
+              title="No module data"
+              message={platform.modules.length > 0
+                ? 'Connect the adapter and click Scan modules to poll the bus.'
+                : 'No known module map for this vehicle — modules will appear as they respond on the bus after connecting.'}
+            />
           </Card>
         ) : (
           <Card padding={0}>
-            {/* Header row — Dash0-style dense column labels */}
+            {/* Header row */}
             <div style={{
-              display: 'grid', gridTemplateColumns: '50px 1fr 80px 80px 90px 130px',
+              display: 'grid', gridTemplateColumns: '50px 1fr 80px 80px 90px 90px',
               gap: 8, padding: '6px 12px',
-              background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
+              background: 'var(--fill)',
             }}>
               {['Addr', 'Module', 'Latency', 'Awake', 'Bus', 'Status'].map(h => (
-                <span key={h} style={{
-                  fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-                  letterSpacing: 1.2, textTransform: 'uppercase',
-                  color: 'var(--tm)',
-                }}>{h}</span>
+                <span key={h} style={{ ...TYPE.caption, color: 'var(--label-3)' }}>{h}</span>
               ))}
             </div>
-            {modules.map((mod, i) => {
-              const color = STATUS_COLOR[mod.status];
-              return (
+            <Divider />
+            {modules.map((mod, i) => (
+              <React.Fragment key={mod.address}>
                 <div
-                  key={mod.address}
+                  className="row-hover"
                   style={{
-                    display: 'grid', gridTemplateColumns: '50px 1fr 80px 80px 90px 130px',
+                    display: 'grid', gridTemplateColumns: '50px 1fr 80px 80px 90px 90px',
                     gap: 8, padding: '10px 12px', alignItems: 'center',
-                    borderBottom: i < modules.length - 1 ? '1px solid var(--bg3)' : 'none',
-                    background: mod.status === 'rogue' ? 'rgba(255,36,64,0.04)' : 'transparent',
-                    transition: 'background 0.1s',
+                    background: mod.status === 'rogue' ? 'var(--crit-tint)' : 'transparent',
                   }}
-                  onMouseEnter={e => { if (mod.status !== 'rogue') (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = mod.status === 'rogue' ? 'rgba(255,36,64,0.04)' : 'transparent'; }}
                 >
-                  <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color }}>
+                  <span style={{ ...TYPE.caption, ...NUMERIC, color: mod.status === 'rogue' ? 'var(--crit-text)' : 'var(--label-3)' }}>
                     {mod.address}
                   </span>
-                  <span style={{ fontSize: 12, color: 'var(--tw)' }}>{mod.name}</span>
-                  <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: mod.latencyMs > 50 ? 'var(--sa)' : 'var(--tm)' }}>
+                  <span style={{ ...TYPE.body, color: 'var(--label)' }}>{mod.name}</span>
+                  <span style={{ ...TYPE.caption, ...NUMERIC, color: mod.latencyMs > 50 ? 'var(--warn-text)' : 'var(--label-2)' }}>
                     {mod.latencyMs > 0 ? `${mod.latencyMs} ms` : '—'}
                   </span>
-                  <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: mod.minutesAwakePostEngineOff > 15 ? 'var(--sr)' : 'var(--tm)' }}>
+                  <span style={{ ...TYPE.caption, ...NUMERIC, color: mod.minutesAwakePostEngineOff > 15 ? 'var(--crit-text)' : 'var(--label-2)' }}>
                     {mod.minutesAwakePostEngineOff > 0 ? `${mod.minutesAwakePostEngineOff.toFixed(0)}m` : '—'}
                   </span>
-                  <WaveBar color={color} active={mod.status === 'alive' || mod.status === 'rogue'} />
-                  <Badge label={mod.status} variant={STATUS_VARIANT[mod.status]} />
+                  <Badge
+                    label={mod.status === 'rogue' ? 'Rogue' : mod.status === 'alive' ? 'Awake' : 'Asleep'}
+                    variant={mod.status === 'rogue' ? 'crit' : mod.status === 'alive' ? 'ok' : 'muted'}
+                  />
+                  <Badge label={STATUS_LABEL[mod.status]} variant={STATUS_VARIANT[mod.status]} />
                 </div>
-              );
-            })}
+                {i < modules.length - 1 && <Divider />}
+              </React.Fragment>
+            ))}
           </Card>
         )}
 
@@ -173,24 +157,20 @@ export function ModulesScreen(): React.ReactElement {
                 { addr: '0xA0', name: 'HVAC Control Module',                          parasitic: true,  note: 'Blend door actuator can draw ~0.1 A if module stays awake.' },
                 { addr: '0xC0', name: 'Radio / Head Unit',                            parasitic: true,  note: 'Aftermarket radios a major draw source (0.2–1.5 A). Check memory wire.' },
               ].map(({ addr, name, parasitic, note }, i, arr) => (
-                <div
-                  key={addr}
-                  style={{
+                <React.Fragment key={addr}>
+                  <div style={{
                     display: 'grid', gridTemplateColumns: '50px 1fr auto', gap: 10,
-                    padding: '9px 12px', borderBottom: i < arr.length - 1 ? '1px solid var(--bg3)' : 'none',
-                    alignItems: 'flex-start',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-                >
-                  <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--tm)', paddingTop: 1 }}>{addr}</span>
-                  <div>
-                    <div style={{ fontSize: 12, color: 'var(--tw)', marginBottom: 3 }}>{name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--tm)', lineHeight: 1.5 }}>{note}</div>
+                    padding: '9px 12px', alignItems: 'flex-start',
+                  }}>
+                    <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)', paddingTop: 1 }}>{addr}</span>
+                    <div>
+                      <div style={{ ...TYPE.body, color: 'var(--label)', marginBottom: 3 }}>{name}</div>
+                      <div style={{ ...TYPE.caption, color: 'var(--label-2)' }}>{note}</div>
+                    </div>
+                    {parasitic && <Badge label="Draw risk" variant="warn" />}
                   </div>
-                  {parasitic && <Badge label="Draw risk" variant="warn" />}
-                </div>
+                  {i < arr.length - 1 && <Divider />}
+                </React.Fragment>
               ))}
             </Card>
           </>
