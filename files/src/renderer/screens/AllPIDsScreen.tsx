@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { useAppStore } from '../store/appStore';
 import { PID_CATALOG } from '../../core/pidCatalog';
 import { PIDCategory } from '../../shared/types';
-import { ScrollPane, SectionHeader, Card, Badge, Button } from '../components/layout/UIComponents';
+import { ScrollPane, SectionHeader, Card, Badge, Button, DataRow, EmptyState } from '../components/layout/UIComponents';
+import { TYPE, NUMERIC, WEIGHT } from '../theme/theme';
 
 // ─── Category metadata ────────────────────────────────────────────────────────
 
@@ -23,18 +24,6 @@ const CATEGORY_ORDER: PIDCategory[] = [
   'oxygen_sensors', 'transmission', 'emissions', 'body_network', 'gm_enhanced',
 ];
 
-const CATEGORY_COLORS: Record<PIDCategory, string> = {
-  engine:          'var(--pp)',
-  fuel:            'var(--sa)',
-  temperature:     'var(--sr)',
-  electrical:      'var(--gb)',
-  oxygen_sensors:  'var(--sg)',
-  transmission:    'var(--pp)',
-  emissions:       'var(--tm)',
-  body_network:    'var(--gb)',
-  gm_enhanced:     'var(--sa)',
-};
-
 // ─── PIDRow ───────────────────────────────────────────────────────────────────
 
 function PIDRow({ pid, liveValue, onExpand, expanded }: {
@@ -43,76 +32,35 @@ function PIDRow({ pid, liveValue, onExpand, expanded }: {
   onExpand: () => void;
   expanded: boolean;
 }): React.ReactElement {
-  const hasLive  = liveValue !== undefined;
-  const valStr   = hasLive ? pid.format(liveValue as any) : '—';
-  const catColor = CATEGORY_COLORS[pid.category];
+  const hasLive = liveValue !== undefined;
+  const valStr  = hasLive ? pid.format(liveValue as any) : '—';
 
   return (
-    <div style={{ borderBottom: '1px solid var(--bg3)' }}>
-      <div
+    <div>
+      <DataRow
+        pid={pid.pid}
+        name={pid.shortName}
+        subtext={`${pid.name} · ${pid.unit}`}
+        value={valStr}
+        badge={
+          <>
+            <Badge label={hasLive ? 'Live' : 'No data'} variant={hasLive ? 'ok' : 'muted'} />
+            <i className={`ti ti-chevron-${expanded ? 'up' : 'down'}`} style={{ fontSize: 13, color: 'var(--label-3)' }} aria-hidden />
+          </>
+        }
         onClick={onExpand}
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '52px 90px 1fr 90px 120px 30px',
-          alignItems: 'center', gap: 6,
-          padding: '7px 12px', cursor: 'pointer',
-          background: expanded ? 'var(--bg3)' : 'transparent',
-        }}
-        onMouseEnter={e => { if (!expanded) (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
-        onMouseLeave={e => { if (!expanded) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-      >
-        {/* PID code */}
-        <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: catColor }}>
-          {pid.pid}
-        </span>
-
-        {/* Category badge */}
-        <span style={{
-          fontSize: 9, color: catColor,
-          fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
-          letterSpacing: 1.0, textTransform: 'uppercase',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          {CATEGORY_LABELS[pid.category]}
-        </span>
-
-        {/* Name */}
-        <span style={{ fontSize: 12, color: 'var(--tw)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {pid.shortName}
-        </span>
-
-        {/* Unit */}
-        <span style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace" }}>
-          {pid.unit}
-        </span>
-
-        {/* Live value */}
-        <span style={{
-          fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 13,
-          color: hasLive ? 'var(--tw)' : 'var(--bs)',
-          textAlign: 'right',
-        }}>
-          {valStr}
-        </span>
-
-        <i className={`ti ti-chevron-${expanded ? 'up' : 'down'}`} style={{ fontSize: 12, color: 'var(--tm)', textAlign: 'right' }} />
-      </div>
+      />
 
       {/* Expanded detail */}
       {expanded && (
-        <div style={{
-          background: 'var(--bg2)', borderTop: '2px solid var(--br)',
-          padding: '12px 16px', display: 'grid', gridTemplateColumns: '1fr 220px', gap: 20,
-          border: '2px solid var(--br)', borderRadius: 0, margin: '0 8px 8px',
-        }}>
+        <div style={{ background: 'var(--fill)', padding: '12px 16px', display: 'grid', gridTemplateColumns: '1fr 220px', gap: 20 }}>
           <div>
-            <div style={{ fontSize: 12, color: 'var(--tw)', fontWeight: 500, marginBottom: 6 }}>{pid.name}</div>
-            <div style={{ fontSize: 11, color: 'var(--tm)', lineHeight: 1.6, marginBottom: 10 }}>{pid.description}</div>
+            <div style={{ ...TYPE.body, fontWeight: WEIGHT.medium, color: 'var(--label)', marginBottom: 6 }}>{pid.name}</div>
+            <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginBottom: 10 }}>{pid.description}</div>
             {pid.formula && (
               <div style={{
-                fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--pp)',
-                background: 'var(--bg3)', padding: '5px 8px', borderRadius: 0,
-                border: '2px solid var(--br)', display: 'inline-block',
+                ...TYPE.caption, ...NUMERIC, color: 'var(--accent-text)',
+                background: 'var(--fill-strong)', padding: '5px 8px', borderRadius: 6, display: 'inline-block',
               }}>
                 {pid.formula}
               </div>
@@ -120,35 +68,23 @@ function PIDRow({ pid, liveValue, onExpand, expanded }: {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div>
-              <div style={{
-                fontSize: 9, color: 'var(--tm)',
-                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
-                letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 3,
-              }}>Range</div>
-              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--tw)' }}>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Range</div>
+              <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--label)' }}>
                 {pid.min} – {pid.max} {pid.unit}
               </span>
             </div>
             {pid.warnHigh !== undefined && (
               <div>
-                <div style={{
-                  fontSize: 9, color: 'var(--tm)',
-                  fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
-                  letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 3,
-                }}>Warning threshold</div>
-                <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--sa)' }}>
+                <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Warning threshold</div>
+                <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--warn-text)' }}>
                   {pid.warnHigh !== undefined && `High: ${pid.warnHigh}`}
                   {pid.warnLow  !== undefined && ` · Low: ${pid.warnLow}`}
                 </span>
               </div>
             )}
             <div>
-              <div style={{
-                fontSize: 9, color: 'var(--tm)',
-                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
-                letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 3,
-              }}>Live value</div>
-              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 20, fontWeight: 600, color: hasLive ? catColor : 'var(--bs)' }}>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Live value</div>
+              <span style={{ ...TYPE.title3, ...NUMERIC, color: hasLive ? 'var(--label)' : 'var(--label-3)' }}>
                 {valStr}
               </span>
             </div>
@@ -202,7 +138,8 @@ export function AllPIDsScreen(): React.ReactElement {
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-        padding: '7px 10px', background: 'var(--bg2)', borderBottom: '2px solid var(--br)',
+        padding: '8px 12px', background: 'var(--grouped)',
+        boxShadow: 'inset 0 -1px 0 var(--separator)',
         flexShrink: 0,
       }}>
         <input
@@ -210,22 +147,13 @@ export function AllPIDsScreen(): React.ReactElement {
           placeholder="Search PID, name, or unit…"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{
-            padding: '4px 8px', fontSize: 11, width: 220, height: 28,
-            background: 'var(--bg3)', border: '2px solid var(--br)', borderRadius: 0,
-            color: 'var(--tw)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
-          }}
+          style={{ width: 220, height: 28 }}
         />
 
         <select
           value={filterCategory}
           onChange={e => setFilterCategory(e.target.value as PIDCategory | 'ALL')}
-          style={{
-            padding: '4px 6px', fontSize: 11, height: 28,
-            background: 'var(--bg3)', border: '2px solid var(--br)', borderRadius: 0,
-            color: 'var(--tw)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
-            letterSpacing: 0.4, textTransform: 'uppercase',
-          }}
+          style={{ height: 28 }}
         >
           <option value="ALL">All categories</option>
           {CATEGORY_ORDER.map(c => (
@@ -233,19 +161,18 @@ export function AllPIDsScreen(): React.ReactElement {
           ))}
         </select>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--tm)', cursor: 'pointer', userSelect: 'none' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, ...TYPE.body, color: 'var(--label-2)', cursor: 'pointer', userSelect: 'none' }}>
           <input
             type="checkbox"
             checked={showLiveOnly}
             onChange={e => setShowLiveOnly(e.target.checked)}
-            style={{ accentColor: 'var(--pp)' }}
           />
           Live data only
         </label>
 
         <div style={{ flex: 1 }} />
 
-        <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--tm)' }}>
+        <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)' }}>
           {liveCount} live · {filtered.length} shown · {PID_CATALOG.length} total
         </span>
 
@@ -260,65 +187,33 @@ export function AllPIDsScreen(): React.ReactElement {
         ) : null}
       </div>
 
-      {/* ── Column headers ───────────────────────────────────────────────── */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: '52px 90px 1fr 90px 120px 30px',
-        gap: 6, padding: '5px 12px',
-        background: 'var(--bg3)', borderBottom: '2px solid var(--br)',
-        flexShrink: 0,
-      }}>
-        {['PID', 'Category', 'Parameter', 'Unit', 'Live value', ''].map(h => (
-          <span key={h} style={{
-            fontSize: 9, color: 'var(--tm)',
-            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
-            letterSpacing: 1.2, textTransform: 'uppercase',
-          }}>
-            {h}
-          </span>
-        ))}
-      </div>
-
       {/* ── PID list ─────────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent' }}>
+      <ScrollPane>
         {filtered.length === 0 ? (
-          <div style={{ padding: '30px 20px', textAlign: 'center', fontSize: 12, color: 'var(--tm)' }}>
-            No PIDs match the current filter
-          </div>
+          <Card>
+            <EmptyState icon="ti-filter-off" title="No matching PIDs" message="No PIDs match the current filter — clear it to see the full catalog." />
+          </Card>
         ) : (
           CATEGORY_ORDER.filter(cat => grouped[cat]?.length).map(cat => (
             <div key={cat}>
-              {/* Category subheader */}
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '6px 12px', background: 'var(--bg2)', borderBottom: '2px solid var(--br)',
-                position: 'sticky', top: 0, zIndex: 2,
-              }}>
-                <div style={{ width: 3, height: 12, background: CATEGORY_COLORS[cat], borderRadius: 0, flexShrink: 0 }} />
-                <span style={{
-                  fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
-                  fontSize: 10, letterSpacing: 1.5, color: CATEGORY_COLORS[cat],
-                  textTransform: 'uppercase',
-                }}>
-                  {CATEGORY_LABELS[cat]}
-                </span>
-                <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--tm)', marginLeft: 4 }}>
-                  {grouped[cat]?.length} PIDs · {grouped[cat]?.filter(p => liveData[p.pid]).length} live
-                </span>
-              </div>
-
-              {grouped[cat]!.map(pid => (
-                <PIDRow
-                  key={pid.pid}
-                  pid={pid}
-                  liveValue={liveData[pid.pid]?.value}
-                  expanded={expandedPID === pid.pid}
-                  onExpand={() => setExpandedPID(expandedPID === pid.pid ? null : pid.pid)}
-                />
-              ))}
+              <SectionHeader>
+                {`${CATEGORY_LABELS[cat]} — ${grouped[cat]?.length} PID${grouped[cat]!.length > 1 ? 's' : ''} · ${grouped[cat]?.filter(p => liveData[p.pid]).length} live`}
+              </SectionHeader>
+              <Card padding={0}>
+                {grouped[cat]!.map(pid => (
+                  <PIDRow
+                    key={pid.pid}
+                    pid={pid}
+                    liveValue={liveData[pid.pid]?.value}
+                    expanded={expandedPID === pid.pid}
+                    onExpand={() => setExpandedPID(expandedPID === pid.pid ? null : pid.pid)}
+                  />
+                ))}
+              </Card>
             </div>
           ))
         )}
-      </div>
+      </ScrollPane>
     </div>
   );
 }
