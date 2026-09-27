@@ -12,7 +12,7 @@ export function Card({ children, padding = 16, style }: CardProps): React.ReactE
   return (
     <div style={{
       background: 'var(--grouped)', border: '1px solid var(--separator)',
-      borderRadius: RADIUS.card, padding, overflow: 'hidden', ...style,
+      borderRadius: RADIUS.card, padding, overflow: 'hidden', flexShrink: 0, ...style,
     }}>
       {children}
     </div>

@@ -47,7 +47,7 @@ export function Metric({
   const s = SIZE[size];
   return (
     <div className="metric" style={{
-      position: 'relative', overflow: 'hidden',
+      position: 'relative', overflow: 'hidden', flexShrink: 0,
       display: 'flex', flexDirection: 'column', gap: s.gap,
       padding: s.pad, height: '100%',
       background: 'var(--grouped)', border: '1px solid var(--separator)', borderRadius: RADIUS.card,
