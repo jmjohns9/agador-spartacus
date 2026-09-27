@@ -194,7 +194,7 @@ export function LogsScreen(): React.ReactElement {
       {/* Column headers */}
       <div style={{
         display: 'grid', gridTemplateColumns: '130px 60px 1fr',
-        gap: 8, padding: '6px 12px',
+        gap: 8, padding: '4px 12px',
         background: 'var(--fill)', boxShadow: 'inset 0 -1px 0 var(--separator)',
         flexShrink: 0,
       }}>
@@ -209,7 +209,7 @@ export function LogsScreen(): React.ReactElement {
         style={{ flex: 1, overflowY: 'auto' }}
       >
         {filtered.length === 0 ? (
-          <div style={{ padding: '30px 20px', textAlign: 'center', ...TYPE.body, color: 'var(--label-2)' }}>
+          <div style={{ padding: '32px 20px', textAlign: 'center', ...TYPE.body, color: 'var(--label-2)' }}>
             {log.length === 0 ? 'No log entries — connect the adapter to start recording.' : 'No entries match the current filter.'}
           </div>
         ) : (

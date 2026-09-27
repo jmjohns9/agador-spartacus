@@ -80,7 +80,7 @@ export function FreezeFrameScreen(): React.ReactElement {
                   onClick={() => setSelected(f.id)}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setSelected(f.id); }}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer',
                     background: f.id === selected ? 'var(--accent-tint)' : 'transparent',
                     boxShadow: f.id === selected ? 'inset 2px 0 0 var(--accent)' : 'none',
                   }}
@@ -115,7 +115,7 @@ export function FreezeFrameScreen(): React.ReactElement {
                   </>
                 )}
                 {/* Column headers */}
-                <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '6px 12px', background: 'var(--fill)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '4px 12px', background: 'var(--fill)' }}>
                   <span style={{ ...TYPE.caption, color: 'var(--label-3)' }}>Parameter</span>
                   <span style={{ ...TYPE.caption, color: 'var(--teal)', textAlign: 'right' }}>At fault</span>
                   <span style={{ ...TYPE.caption, color: 'var(--accent-text)', textAlign: 'right' }}>Live now</span>
@@ -130,7 +130,7 @@ export function FreezeFrameScreen(): React.ReactElement {
                   const delta = !isNaN(fn) && !isNaN(ln) ? ln - fn : NaN;
                   return (
                     <React.Fragment key={pid}>
-                      <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '6px 12px', alignItems: 'center' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '4px 12px', alignItems: 'center' }}>
                         <span style={{ ...TYPE.body, color: 'var(--label-2)' }}>{PID_LABELS[pid] ?? pid}</span>
                         <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--teal)', textAlign: 'right' }}>{fv !== undefined ? String(fv) : '—'}</span>
                         <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--accent-text)', textAlign: 'right' }}>{lv !== undefined ? String(lv) : '—'}</span>

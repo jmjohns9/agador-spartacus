@@ -75,7 +75,7 @@ export function Tooltip({ content }: { content: React.ReactNode }): React.ReactE
       {visible && (
         <div role="tooltip" style={{
           position: 'absolute', ...pos, zIndex: 200, width: 260, pointerEvents: 'none',
-          padding: '10px 12px', borderRadius: 8,
+          padding: '8px 12px', borderRadius: 8,
           background: 'var(--elevated)', border: '0.5px solid var(--separator)',
           boxShadow: '0 8px 24px var(--shadow)', backdropFilter: 'blur(20px)',
           ...TYPE.caption, color: 'var(--label)',

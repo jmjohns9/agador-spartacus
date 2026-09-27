@@ -129,7 +129,7 @@ export function PcmScreen(): React.ReactElement {
           <React.Fragment key={group}>
             <SectionHeader>{GROUP_LABEL[group]}</SectionHeader>
             <Card padding={0}>
-              <p style={{ margin: 0, padding: '10px 12px 4px', ...TYPE.caption, color: 'var(--label-2)' }}>
+              <p style={{ margin: 0, padding: '8px 12px 4px', ...TYPE.caption, color: 'var(--label-2)' }}>
                 {GROUP_HINT[group]}
               </p>
               {fields.map(f => <FieldRow key={f.key} field={f} />)}

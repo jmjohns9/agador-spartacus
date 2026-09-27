@@ -192,7 +192,7 @@ export function DataLoggerScreen(): React.ReactElement {
 
       {/* ── PID selector ──────────────────────────────────────────────── */}
       <SectionHeader>PIDs to record</SectionHeader>
-      <Card style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      <Card style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {KEY_PIDS.map(pid => (
           <Button
             key={pid}

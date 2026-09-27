@@ -55,8 +55,8 @@ function PIDRow({ pid, liveValue, onExpand, expanded }: {
       {expanded && (
         <div style={{ background: 'var(--fill)', padding: '12px 16px', display: 'grid', gridTemplateColumns: '1fr 220px', gap: 20 }}>
           <div>
-            <div style={{ ...TYPE.body, fontWeight: WEIGHT.medium, color: 'var(--label)', marginBottom: 6 }}>{pid.name}</div>
-            <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginBottom: 10 }}>{pid.description}</div>
+            <div style={{ ...TYPE.body, fontWeight: WEIGHT.medium, color: 'var(--label)', marginBottom: 4 }}>{pid.name}</div>
+            <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginBottom: 8 }}>{pid.description}</div>
             {pid.formula && (
               <div style={{
                 ...TYPE.caption, ...NUMERIC, color: 'var(--accent-text)',
@@ -68,14 +68,14 @@ function PIDRow({ pid, liveValue, onExpand, expanded }: {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div>
-              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Range</div>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Range</div>
               <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--label)' }}>
                 {pid.min} – {pid.max} {pid.unit}
               </span>
             </div>
             {pid.warnHigh !== undefined && (
               <div>
-                <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Warning threshold</div>
+                <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Warning threshold</div>
                 <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--warn-text)' }}>
                   {pid.warnHigh !== undefined && `High: ${pid.warnHigh}`}
                   {pid.warnLow  !== undefined && ` · Low: ${pid.warnLow}`}
@@ -83,7 +83,7 @@ function PIDRow({ pid, liveValue, onExpand, expanded }: {
               </div>
             )}
             <div>
-              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Live value</div>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Live value</div>
               <span style={{ ...TYPE.title3, ...NUMERIC, color: hasLive ? 'var(--label)' : 'var(--label-3)' }}>
                 {valStr}
               </span>

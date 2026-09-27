@@ -51,7 +51,7 @@ function VoltageOverlay({ live, snap }: { live: number[]; snap: number[] }): Rea
   const snapColor = lastSnap < 12.0 ? 'var(--crit)' : lastSnap < 12.4 ? 'var(--warn)' : 'var(--teal)';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <svg width="100%" viewBox={`-40 -8 ${W + 80} ${H + 20}`} style={{ overflow: 'visible' }}>
         {[{ v: 12.6, s: 'ok' as Status }, { v: 12.4, s: 'warn' as Status }, { v: 12.0, s: 'crit' as Status }].map(({ v, s }) => (
           <g key={v}>
@@ -90,7 +90,7 @@ function PIDTable({ snap, live }: {
   const cols = '1.3fr 90px 90px 90px';
   return (
     <Card padding={0}>
-      <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '6px 12px', background: 'var(--fill)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '4px 12px', background: 'var(--fill)' }}>
         {['Parameter', 'Snapshot', 'Live', 'Δ'].map((h, i) => (
           <span key={h} style={{ ...TYPE.caption, color: 'var(--label-3)', textAlign: i === 0 ? 'left' : 'right' }}>{h}</span>
         ))}
@@ -104,7 +104,7 @@ function PIDTable({ snap, live }: {
         const delta = !isNaN(sn) && !isNaN(ln) ? ln - sn : NaN;
         return (
           <React.Fragment key={pid}>
-            <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '6px 12px', alignItems: 'center' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '4px 12px', alignItems: 'center' }}>
               <span style={{ ...TYPE.body, color: 'var(--label-2)' }}>{label}</span>
               <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--teal)', textAlign: 'right' }}>{fmtVal(sv, decimals, unit)}</span>
               <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--accent-text)', textAlign: 'right' }}>{fmtVal(lv, decimals, unit)}</span>
@@ -131,7 +131,7 @@ function DTCDiff({ snap, live }: {
   const unchanged = live.filter(d =>  snapCodes.has(d.code));
 
   const dtcRow = (code: string, desc: string, mod: string, status: Status, icon: string) => (
-    <div key={code} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px' }}>
+    <div key={code} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px' }}>
       <i className={`ti ${icon}`} style={{ color: STATUS_TEXT[status], fontSize: 14, flexShrink: 0 }} aria-hidden />
       <span style={{ ...TYPE.caption, ...NUMERIC, color: STATUS_TEXT[status], flexShrink: 0, minWidth: 60 }}>{code}</span>
       <span style={{ ...TYPE.caption, color: 'var(--label-2)', flex: 1 }}>{desc}</span>
@@ -142,7 +142,7 @@ function DTCDiff({ snap, live }: {
   const section = (label: string, items: Array<{ code: string; description: string; module: string }>, status: Status, icon: string) =>
     items.length === 0 ? null : (
       <div key={label}>
-        <div style={{ padding: '6px 12px', ...TYPE.caption, fontWeight: WEIGHT.semibold, color: STATUS_TEXT[status], background: 'var(--fill)' }}>
+        <div style={{ padding: '4px 12px', ...TYPE.caption, fontWeight: WEIGHT.semibold, color: STATUS_TEXT[status], background: 'var(--fill)' }}>
           {label} ({items.length})
         </div>
         {items.map(d => dtcRow(d.code, d.description, d.module, status, icon))}
@@ -277,7 +277,7 @@ export function CompareScreen(): React.ReactElement {
                   onClick={() => setSelectedId(s.id)}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setSelectedId(s.id); }}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer',
                     background: s.id === selectedId ? 'var(--accent-tint)' : 'transparent',
                     boxShadow: s.id === selectedId ? 'inset 2px 0 0 var(--accent)' : 'none',
                   }}
@@ -304,7 +304,7 @@ export function CompareScreen(): React.ReactElement {
               {/* Session header cards */}
               <Grid cols={2} gap={12}>
                 <Card style={{ boxShadow: 'inset 2px 0 0 var(--teal)' }}>
-                  <div style={{ ...TYPE.caption, fontWeight: WEIGHT.semibold, color: 'var(--teal)', marginBottom: 6 }}>
+                  <div style={{ ...TYPE.caption, fontWeight: WEIGHT.semibold, color: 'var(--teal)', marginBottom: 4 }}>
                     Snapshot · {selected.name}
                   </div>
                   <div style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)', lineHeight: '18px' }}>
@@ -314,7 +314,7 @@ export function CompareScreen(): React.ReactElement {
                   </div>
                 </Card>
                 <Card style={{ boxShadow: 'inset 2px 0 0 var(--accent)' }}>
-                  <div style={{ ...TYPE.caption, fontWeight: WEIGHT.semibold, color: 'var(--accent-text)', marginBottom: 6 }}>
+                  <div style={{ ...TYPE.caption, fontWeight: WEIGHT.semibold, color: 'var(--accent-text)', marginBottom: 4 }}>
                     Live · {vehicleDisplayName(vehicle)}
                   </div>
                   <div style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)', lineHeight: '18px' }}>

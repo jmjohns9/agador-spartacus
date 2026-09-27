@@ -299,7 +299,7 @@ export function AssistantScreen(): React.ReactElement {
 
       {/* ── Top bar: identity + 2 toggles + overflow ─────────────────── */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px',
+        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
         boxShadow: 'inset 0 -1px 0 var(--separator)', flexShrink: 0,
         background: 'var(--grouped)',
       }}>
@@ -367,7 +367,7 @@ export function AssistantScreen(): React.ReactElement {
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
                     background: 'transparent', borderRadius: RADIUS.control,
-                    padding: '6px 8px', color: 'var(--label)', ...TYPE.body,
+                    padding: '4px 8px', color: 'var(--label)', ...TYPE.body,
                   }}
                 >
                   <i className={`ti ${config.model === m.id ? 'ti-circle-check-filled' : 'ti-circle'}`}
@@ -384,7 +384,7 @@ export function AssistantScreen(): React.ReactElement {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
                   background: 'transparent', borderRadius: RADIUS.control,
-                  padding: '6px 8px', color: messages.length ? 'var(--label)' : 'var(--label-3)', ...TYPE.body,
+                  padding: '4px 8px', color: messages.length ? 'var(--label)' : 'var(--label-3)', ...TYPE.body,
                   opacity: messages.length ? 1 : 0.5,
                 }}
               >
@@ -399,7 +399,7 @@ export function AssistantScreen(): React.ReactElement {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
                   background: 'transparent', borderRadius: RADIUS.control,
-                  padding: '6px 8px', color: messages.length ? 'var(--crit-text)' : 'var(--label-3)', ...TYPE.body,
+                  padding: '4px 8px', color: messages.length ? 'var(--crit-text)' : 'var(--label-3)', ...TYPE.body,
                   opacity: messages.length ? 1 : 0.5,
                 }}
               >
@@ -414,15 +414,15 @@ export function AssistantScreen(): React.ReactElement {
       {/* ── Snapshot preview ─────────────────────────────────────────── */}
       {showSnapshot && (
         <div style={{
-          padding: '10px 14px', boxShadow: 'inset 0 -1px 0 var(--separator)',
+          padding: '8px 12px', boxShadow: 'inset 0 -1px 0 var(--separator)',
           background: 'var(--grouped)', flexShrink: 0,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, ...TYPE.caption, color: 'var(--label-2)', marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, ...TYPE.caption, color: 'var(--label-2)', marginBottom: 4 }}>
             <i className="ti ti-eye" style={{ fontSize: 12 }} aria-hidden />
             What Claude sees with every question
           </div>
           <pre className="selectable" style={{
-            margin: 0, padding: '8px 10px',
+            margin: 0, padding: 8,
             background: 'var(--fill)', borderRadius: RADIUS.control,
             ...TYPE.caption, ...NUMERIC, color: 'var(--label)',
             whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 180, overflowY: 'auto',
@@ -433,7 +433,7 @@ export function AssistantScreen(): React.ReactElement {
       {/* ── Setup panel ──────────────────────────────────────────────── */}
       {showSetup && (
         <div style={{
-          padding: '12px 14px', boxShadow: 'inset 0 -1px 0 var(--separator)',
+          padding: 12, boxShadow: 'inset 0 -1px 0 var(--separator)',
           background: 'var(--grouped)', flexShrink: 0,
         }}>
           <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginBottom: 8, lineHeight: '18px' }}>
@@ -470,7 +470,7 @@ export function AssistantScreen(): React.ReactElement {
           </Button>
           {showAdvanced && config && (
             <div style={{ marginTop: 8 }}>
-              <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginBottom: 6, lineHeight: '16px' }}>
+              <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginBottom: 4, lineHeight: '16px' }}>
                 Override the assistant's built-in instructions. Leave blank to use the default
                 ({config.defaultSystemPrompt.length} chars). The session snapshot is appended automatically.
               </div>
@@ -482,7 +482,7 @@ export function AssistantScreen(): React.ReactElement {
                 aria-label="Custom system prompt"
                 style={{ width: '100%', boxSizing: 'border-box', ...TYPE.caption }}
               />
-              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                 <Button variant="primary" size="sm" onClick={saveCustomPrompt}>Save prompt</Button>
                 <Button variant="secondary" size="sm" onClick={() => setPromptDraft('')}>Reset to default</Button>
               </div>
@@ -493,8 +493,8 @@ export function AssistantScreen(): React.ReactElement {
 
       {/* ── Conversation ─────────────────────────────────────────────── */}
       <div ref={scrollRef} style={{
-        flex: 1, overflowY: 'auto', padding: '14px',
-        display: 'flex', flexDirection: 'column', gap: 10,
+        flex: 1, overflowY: 'auto', padding: 12,
+        display: 'flex', flexDirection: 'column', gap: 8,
       }}>
         {messages.length === 0 && !busy && (
           <div style={{ margin: 'auto', maxWidth: 460 }}>
@@ -513,7 +513,7 @@ export function AssistantScreen(): React.ReactElement {
           return (
             <div key={i} style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
               <div className="selectable" style={{
-                maxWidth: '80%', padding: '10px 13px', borderRadius: 12, ...TYPE.body, lineHeight: '20px',
+                maxWidth: '80%', padding: '8px 12px', borderRadius: 12, ...TYPE.body, lineHeight: '20px',
                 whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                 background: isUser ? 'var(--accent)' : isError ? 'var(--crit-tint)' : 'var(--grouped)',
                 boxShadow: isUser ? 'none' : isError ? 'inset 0 0 0 1px var(--crit)' : 'inset 0 0 0 1px var(--separator)',
@@ -521,7 +521,7 @@ export function AssistantScreen(): React.ReactElement {
               }}>
                 {m.role === 'assistant' && (
                   <div style={{
-                    display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5,
+                    display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4,
                     ...TYPE.caption, fontWeight: WEIGHT.semibold, color: 'var(--accent-text)',
                   }}>
                     <span>
@@ -542,7 +542,7 @@ export function AssistantScreen(): React.ReactElement {
                 )}
                 {m.content}
                 {(m.role === 'assistant' || m.role === 'error') && (
-                  <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     <MsgAction icon="ti-copy" label="Copy" onClick={() => copy(m.content)} />
                     {isLastAssistant && (
                       <MsgAction icon="ti-refresh" label="Regenerate" onClick={regenerate} />
@@ -558,12 +558,12 @@ export function AssistantScreen(): React.ReactElement {
         {busy && (
           <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
             <div aria-live="polite" className="selectable" style={{
-              maxWidth: '80%', padding: '10px 13px', borderRadius: 12, ...TYPE.body, lineHeight: '20px',
+              maxWidth: '80%', padding: '8px 12px', borderRadius: 12, ...TYPE.body, lineHeight: '20px',
               whiteSpace: 'pre-wrap', wordBreak: 'break-word',
               background: 'var(--grouped)', boxShadow: 'inset 0 0 0 1px var(--accent)', color: 'var(--label)',
             }}>
               <div style={{
-                display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5,
+                display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4,
                 ...TYPE.caption, fontWeight: WEIGHT.semibold, color: 'var(--accent-text)',
               }}>
                 <i className="ti ti-loader" style={{ fontSize: 12, animation: 'spin 1s linear infinite' }} aria-hidden />
@@ -576,7 +576,7 @@ export function AssistantScreen(): React.ReactElement {
       </div>
 
       {/* ── Quick actions ────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '8px 14px 0', flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '8px 12px 0', flexShrink: 0 }}>
         {QUICK_ACTIONS.map(q => (
           <Button
             key={q.label}
@@ -594,11 +594,11 @@ export function AssistantScreen(): React.ReactElement {
 
       {/* ── Slash command hints ──────────────────────────────────────── */}
       {slashHints.length > 0 && (
-        <div style={{ padding: '6px 14px 0', flexShrink: 0 }}>
+        <div style={{ padding: '4px 12px 0', flexShrink: 0 }}>
           <div style={{
             background: 'var(--elevated)', borderRadius: RADIUS.card,
             boxShadow: 'inset 0 0 0 0.5px var(--separator), 0 8px 24px var(--shadow)',
-            padding: 6, maxHeight: 160, overflowY: 'auto',
+            padding: 8, maxHeight: 160, overflowY: 'auto',
           }}>
             {slashHints.map(c => (
               <button
@@ -607,7 +607,7 @@ export function AssistantScreen(): React.ReactElement {
                 onClick={() => { setInput(c.cmd); }}
                 style={{
                   width: '100%', textAlign: 'left', background: 'transparent',
-                  padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 8,
                   borderRadius: RADIUS.control,
                 }}
               >
@@ -621,7 +621,7 @@ export function AssistantScreen(): React.ReactElement {
 
       {/* ── Input ────────────────────────────────────────────────────── */}
       <div style={{
-        display: 'flex', gap: 8, padding: '10px 14px 12px',
+        display: 'flex', gap: 8, padding: '8px 12px 12px',
         boxShadow: 'inset 0 1px 0 var(--separator)', flexShrink: 0, marginTop: 8,
         background: 'var(--grouped)',
       }}>
@@ -656,7 +656,7 @@ export function AssistantScreen(): React.ReactElement {
           position: 'absolute', bottom: 70, left: '50%', transform: 'translateX(-50%)',
           background: 'var(--elevated)', color: 'var(--accent-text)',
           boxShadow: 'inset 0 0 0 1px var(--accent), 0 8px 24px var(--shadow)',
-          borderRadius: RADIUS.control, padding: '5px 12px', ...TYPE.caption, fontWeight: WEIGHT.semibold,
+          borderRadius: RADIUS.control, padding: '4px 12px', ...TYPE.caption, fontWeight: WEIGHT.semibold,
         }}>
           {copyToast}
         </div>

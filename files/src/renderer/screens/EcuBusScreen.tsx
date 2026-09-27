@@ -356,7 +356,7 @@ function UDSClientTab(): React.ReactElement {
       {/* Addressing */}
       <Card style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
         <div>
-          <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>TX ID (tester)</div>
+          <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>TX ID (tester)</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--label-2)' }}>0x</span>
             <input value={txId} onChange={e => setTxId(e.target.value)} style={{ width: 60, ...NUMERIC }} />
@@ -364,7 +364,7 @@ function UDSClientTab(): React.ReactElement {
         </div>
         <i className="ti ti-arrow-right" style={{ fontSize: 16, color: 'var(--label-3)' }} />
         <div>
-          <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>RX ID (ECU)</div>
+          <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>RX ID (ECU)</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--label-2)' }}>0x</span>
             <input value={rxId} onChange={e => setRxId(e.target.value)} style={{ width: 60, ...NUMERIC }} />
@@ -430,7 +430,7 @@ function UDSClientTab(): React.ReactElement {
               {/* Sub-function selector */}
               {selectedService.subFunctions && (
                 <div>
-                  <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Sub-function</div>
+                  <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Sub-function</div>
                   <select
                     value={subFunc}
                     onChange={e => setSubFunc(Number(e.target.value))}
@@ -446,7 +446,7 @@ function UDSClientTab(): React.ReactElement {
               {/* DID input for RDBI/WDBI */}
               {(selectedService.sid === 0x22 || selectedService.sid === 0x2E) && (
                 <div>
-                  <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>DID</div>
+                  <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>DID</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--label-2)' }}>0x</span>
                     <input value={didInput} onChange={e => setDidInput(e.target.value)} placeholder="F190"
@@ -457,7 +457,7 @@ function UDSClientTab(): React.ReactElement {
 
               {/* Additional payload */}
               <div style={{ flex: 1, minWidth: 200 }}>
-                <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Additional data (hex)</div>
+                <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Additional data (hex)</div>
                 <input value={payloadHex} onChange={e => setPayloadHex(e.target.value)} placeholder="e.g. 01 02 03"
                   style={{ width: '100%', ...NUMERIC }} />
               </div>
@@ -556,14 +556,14 @@ function TransmitTab(): React.ReactElement {
         <SectionHeader>CAN frame transmitter</SectionHeader>
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginTop: 8, flexWrap: 'wrap' }}>
           <div>
-            <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>CAN ID</div>
+            <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>CAN ID</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--label-2)' }}>0x</span>
               <input value={frameId} onChange={e => setFrameId(e.target.value)} style={{ width: 70, ...NUMERIC }} />
             </div>
           </div>
           <div>
-            <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>DLC</div>
+            <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>DLC</div>
             <select value={dlc} onChange={e => setDlc(Number(e.target.value))} style={{ width: 60, ...NUMERIC }}>
               {[1, 2, 3, 4, 5, 6, 7, 8, ...(isFD ? [12, 16, 20, 24, 32, 48, 64] : [])].map(n => (
                 <option key={n} value={n}>{n}</option>
@@ -745,7 +745,7 @@ function ScriptTab(): React.ReactElement {
                 {script?.name ?? 'untitled.ts'}
               </span>
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
               <Button size="sm" variant="primary" icon="ti-player-play" onClick={() => updateScript(script.id, { status: 'running', output: [...script.output, `[${new Date().toLocaleTimeString()}] Script started...`, `[${new Date().toLocaleTimeString()}] VIN: 1GCEK19T04E123456`, `[${new Date().toLocaleTimeString()}] Script completed.`], lastRun: Date.now() })}>
                 Run
               </Button>
@@ -775,7 +775,7 @@ function ScriptTab(): React.ReactElement {
           </div>
           <Divider />
           <div style={{
-            flex: 1, overflowY: 'auto', padding: 10,
+            flex: 1, overflowY: 'auto', padding: 8,
             ...NUMERIC, ...TYPE.caption,
             color: 'var(--ok-text)', lineHeight: 1.8,
           }}>
@@ -925,17 +925,17 @@ function DoIPTab(): React.ReactElement {
           <SectionHeader>Entity detail — {selectedEntity.ip}</SectionHeader>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 8 }}>
             <div>
-              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Network</div>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Network</div>
               <div style={{ ...TYPE.body, ...NUMERIC, color: 'var(--label)' }}>{selectedEntity.ip}:{selectedEntity.port}</div>
               <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginTop: 2 }}>Logical: 0x{selectedEntity.logicalAddress.toString(16).toUpperCase().padStart(4, '0')}</div>
             </div>
             <div>
-              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Identification</div>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Identification</div>
               <div style={{ ...TYPE.body, ...NUMERIC, color: 'var(--label)' }}>EID: {selectedEntity.eid}</div>
               <div style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)', marginTop: 2 }}>GID: {selectedEntity.gid}</div>
             </div>
             <div>
-              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 3 }}>Vehicle</div>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Vehicle</div>
               <div style={{ ...TYPE.body, ...NUMERIC, color: selectedEntity.vin ? 'var(--label)' : 'var(--label-3)' }}>
                 {selectedEntity.vin || '—'}
               </div>
@@ -964,7 +964,7 @@ function HardwarePanel(): React.ReactElement {
           <div className="row-hover" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px' }}>
             <div>
               <div style={{ ...TYPE.body, color: 'var(--label)' }}>{hw.name}</div>
-              <div style={{ display: 'flex', gap: 4, marginTop: 3 }}>
+              <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
                 {hw.protocols.map(p => <Badge key={p} label={p} variant="muted" />)}
               </div>
             </div>

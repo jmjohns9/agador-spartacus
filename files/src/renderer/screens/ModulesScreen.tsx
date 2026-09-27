@@ -103,7 +103,7 @@ export function ModulesScreen(): React.ReactElement {
             {/* Header row */}
             <div style={{
               display: 'grid', gridTemplateColumns: '50px 1fr 80px 80px 90px 90px',
-              gap: 8, padding: '6px 12px',
+              gap: 8, padding: '4px 12px',
               background: 'var(--fill)',
             }}>
               {['Addr', 'Module', 'Latency', 'Awake', 'Bus', 'Status'].map(h => (
@@ -117,7 +117,7 @@ export function ModulesScreen(): React.ReactElement {
                   className="row-hover"
                   style={{
                     display: 'grid', gridTemplateColumns: '50px 1fr 80px 80px 90px 90px',
-                    gap: 8, padding: '10px 12px', alignItems: 'center',
+                    gap: 8, padding: '8px 12px', alignItems: 'center',
                     background: mod.status === 'rogue' ? 'var(--crit-tint)' : 'transparent',
                   }}
                 >
@@ -159,12 +159,12 @@ export function ModulesScreen(): React.ReactElement {
               ].map(({ addr, name, parasitic, note }, i, arr) => (
                 <React.Fragment key={addr}>
                   <div style={{
-                    display: 'grid', gridTemplateColumns: '50px 1fr auto', gap: 10,
-                    padding: '9px 12px', alignItems: 'flex-start',
+                    display: 'grid', gridTemplateColumns: '50px 1fr auto', gap: 8,
+                    padding: '8px 12px', alignItems: 'flex-start',
                   }}>
                     <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)', paddingTop: 1 }}>{addr}</span>
                     <div>
-                      <div style={{ ...TYPE.body, color: 'var(--label)', marginBottom: 3 }}>{name}</div>
+                      <div style={{ ...TYPE.body, color: 'var(--label)', marginBottom: 4 }}>{name}</div>
                       <div style={{ ...TYPE.caption, color: 'var(--label-2)' }}>{note}</div>
                     </div>
                     {parasitic && <Badge label="Draw risk" variant="warn" />}
