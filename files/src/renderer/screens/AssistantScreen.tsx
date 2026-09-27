@@ -439,7 +439,7 @@ export function AssistantScreen(): React.ReactElement {
           <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginBottom: 8, lineHeight: '18px' }}>
             Paste your Claude API key (starts with{' '}
             <span style={{ ...NUMERIC, padding: '2px 6px', borderRadius: 4, background: 'var(--fill)', color: 'var(--accent-text)' }}>sk-ant-</span>).
-            Get one at <span style={{ ...NUMERIC, color: 'var(--accent-text)' }}>console.anthropic.com</span> → API Keys.
+            Get one at <span style={{ color: 'var(--accent-text)' }}>console.anthropic.com</span> → API Keys.
             The key is stored locally on this Mac only{config?.hasKey ? ` — current key ends in ${config.keyHint}` : ''}.
             {config?.hasKey && <> Current model: <strong style={{ color: 'var(--label)' }}>{currentModelLabel}</strong> (change via the ⋯ menu).</>}
           </div>

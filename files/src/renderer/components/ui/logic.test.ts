@@ -1,14 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { statusFromLegacyColor, clampPercent, isMissing, nextIndex } from './logic';
-
-test('legacy colours map to status; greens and neutrals become neutral', () => {
-  assert.equal(statusFromLegacyColor('var(--sr)'), 'crit');
-  assert.equal(statusFromLegacyColor('var(--sa)'), 'warn');
-  for (const c of ['var(--sg)', 'var(--gb)', 'var(--pp)', 'var(--tw)', 'var(--tm)', '#9B8AFF', undefined]) {
-    assert.equal(statusFromLegacyColor(c), 'neutral');
-  }
-});
+import { clampPercent, isMissing, nextIndex } from './logic';
 
 test('clampPercent bounds and rejects NaN', () => {
   assert.equal(clampPercent(-5), 0);

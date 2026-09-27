@@ -62,17 +62,3 @@ export const GLOBAL_CSS = `
     *, *::before, *::after { animation: none !important; transition: none !important; }
   }
 `;
-
-/** Class names and keyframes still referenced by unswept screens. Removed in Task 13. */
-export const LEGACY_CSS = `
-  @keyframes blink    { 0%,100%{opacity:1} 50%{opacity:.3} }
-  @keyframes waveAnim { 0%,100%{transform:scaleY(.2)} 50%{transform:scaleY(1)} }
-  .btn { transition: filter 150ms ease-out; }
-  .btn:hover:not(:disabled)  { filter: brightness(1.06); }
-  .btn:active:not(:disabled) { filter: brightness(0.92); }
-  .card-lift { transition: border-color 150ms ease-out; }
-  .data-row:hover { background: var(--fill) !important; }
-  .nav-btn:hover:not([aria-current="page"]) { background: var(--fill) !important; }
-  .nav-btn[aria-current="page"] { background: var(--selection) !important; }
-  @media (max-width: 800px) { .hero-grid { grid-template-columns: 1fr !important; } }
-`;

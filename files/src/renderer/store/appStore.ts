@@ -69,7 +69,6 @@ export interface AppState {
 
   // UI state
   activeScreen: ScreenId;
-  isDarkMode: boolean;
 
   // Claude assistant chat (persists across screen switches)
   chatMessages: ChatMessage[];
@@ -105,7 +104,6 @@ export interface AppState {
   addLogEntry: (entry: LogEntry) => void;
   addMarker: (label: string) => void;
   setActiveScreen: (screen: ScreenId) => void;
-  toggleDarkMode: () => void;
   exportCSV: () => string;
   exportLog: () => string;
 }
@@ -218,7 +216,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     messageRate: 0,
   },
   activeScreen: 'connect',
-  isDarkMode: true,
   chatMessages: [],
   btRSSI: null,
   btDistance: null,
@@ -369,8 +366,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setFreezeFrameFilter: (code) => set({ freezeFrameFilter: code }),
-
-  toggleDarkMode: () => set((state) => ({ isDarkMode: !state.isDarkMode })),
 
   // ── Export helpers ───────────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 import React from 'react';
-import { Thresholds, Status, statusFor, STATUS_FILL, TYPE, WEIGHT, NUMERIC, RADIUS, MOTION } from '../../theme/theme';
+import { Thresholds, statusFor, STATUS_FILL, TYPE, WEIGHT, NUMERIC, RADIUS, MOTION } from '../../theme/theme';
 import { describeArc, gaugeFraction, GAUGE_START, GAUGE_END } from './gaugeGeometry';
-import { statusFromLegacyColor, isMissing } from './logic';
+import { isMissing } from './logic';
 import { useStaleness } from './Metric';
 
 export type GaugeProps = Thresholds & {
@@ -11,8 +11,6 @@ export type GaugeProps = Thresholds & {
   max: number;
   unit?: string;
   size?: 'regular' | 'compact';
-  /** Legacy colour prop — only amber/red are honoured (as warn/crit). */
-  color?: string;
   staleAt?: number;
   staleAfterMs?: number;
 };
@@ -20,13 +18,12 @@ export type GaugeProps = Thresholds & {
 const VB = 120, CX = 60, CY = 62, R = 48, STROKE = 8;
 
 export function Gauge({
-  label, value, min = 0, max, unit, size = 'regular', color,
+  label, value, min = 0, max, unit, size = 'regular',
   warnLow, warnHigh, critLow, critHigh, staleAt, staleAfterMs = 3000,
 }: GaugeProps): React.ReactElement {
   const stale = useStaleness(staleAt, staleAfterMs);
   const missing = isMissing(value);
-  const byThreshold = statusFor(value, { warnLow, warnHigh, critLow, critHigh });
-  const tone: Status = byThreshold !== 'neutral' ? byThreshold : statusFromLegacyColor(color);
+  const tone = statusFor(value, { warnLow, warnHigh, critLow, critHigh });
   const fraction = gaugeFraction(value, min, max);
   const end = GAUGE_START + (GAUGE_END - GAUGE_START) * fraction;
   const compact = size === 'compact';

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { LIGHT, DARK, DERIVED, LEGACY_ALIASES, buildThemeCSS, statusFor, STATUS_TEXT } from './theme';
+import { LIGHT, DARK, DERIVED, buildThemeCSS, statusFor, STATUS_TEXT } from './theme';
 
 function luminance(hex: string): number {
   const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
@@ -27,11 +27,10 @@ test('every *-text status token reaches 4.5:1 on grouped and content', () => {
   }
 });
 
-test('every legacy alias points at a defined token', () => {
-  const defined = new Set([...Object.keys(LIGHT), ...Object.keys(DERIVED)]);
-  for (const [alias, target] of Object.entries(LEGACY_ALIASES)) {
-    const m = /^var\(--([a-z0-9-]+)\)$/.exec(target);
-    assert.ok(m && defined.has(m[1]), `--${alias} -> ${target}`);
+test('no legacy variable names remain', () => {
+  const css = buildThemeCSS();
+  for (const old of ['--bg:', '--bg2:', '--tw:', '--tm:', '--pp:', '--sg:', '--sa:', '--sr:', '--gb:', '--br:']) {
+    assert.ok(!css.includes(old), old);
   }
 });
 
@@ -39,7 +38,6 @@ test('theme CSS declares light defaults and a dark media override', () => {
   const css = buildThemeCSS();
   assert.match(css, /:root \{[^}]*--label: rgba\(0,0,0,0\.85\);/);
   assert.match(css, /@media \(prefers-color-scheme: dark\) \{ :root \{[^}]*--label: rgba\(255,255,255,0\.85\);/);
-  assert.match(css, /--tm: var\(--label-2\);/);
 });
 
 test('statusFor maps thresholds, crit before warn, in-range is neutral', () => {

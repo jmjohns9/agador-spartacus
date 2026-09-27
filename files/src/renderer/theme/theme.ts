@@ -82,30 +82,12 @@ export const DERIVED: Readonly<Record<string, string>> = {
   selection:     'color-mix(in srgb, var(--accent) 22%, transparent)',
 };
 
-/** Old variable names kept alive during the screen sweep. Removed in Task 13. */
-export const LEGACY_ALIASES: Readonly<Record<string, string>> = {
-  bg:  'var(--window)',
-  bg2: 'var(--grouped)',
-  bg3: 'var(--fill)',
-  bg4: 'var(--fill-strong)',
-  br:  'var(--separator)',
-  bs:  'var(--label-4)',
-  tw:  'var(--label)',
-  tm:  'var(--label-2)',
-  tp:  'var(--label)',
-  pp:  'var(--accent-text)',
-  gb:  'var(--teal)',
-  sg:  'var(--ok-text)',
-  sa:  'var(--warn-text)',
-  sr:  'var(--crit-text)',
-};
-
 const declare = (vars: Readonly<Record<string, string>>): string =>
   Object.entries(vars).map(([k, v]) => `--${k}: ${v};`).join(' ');
 
 export function buildThemeCSS(): string {
   return [
-    `:root { color-scheme: light dark; ${declare(LIGHT)} ${declare(DERIVED)} ${declare(LEGACY_ALIASES)} }`,
+    `:root { color-scheme: light dark; ${declare(LIGHT)} ${declare(DERIVED)} }`,
     `@media (prefers-color-scheme: dark) { :root { ${declare(DARK)} } }`,
   ].join('\n');
 }
@@ -136,12 +118,8 @@ export function statusFor(value: number, t: Thresholds): Status {
 const UI_FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif";
 
 export const FONTS = {
-  ui:      UI_FONT,
-  mono:    "ui-monospace, 'SF Mono', Menlo, monospace",
-  /** @deprecated legacy alias — removed in Task 13 */
-  body:    UI_FONT,
-  /** @deprecated legacy alias — removed in Task 13 */
-  display: UI_FONT,
+  ui:   UI_FONT,
+  mono: "ui-monospace, 'SF Mono', Menlo, monospace",
 } as const;
 
 export const WEIGHT = { regular: 400, medium: 510, semibold: 590, bold: 700 } as const;

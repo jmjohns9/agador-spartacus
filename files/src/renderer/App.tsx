@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useAppStore, vehicleDisplayName, selectActiveDTCCount, ScreenId } from './store/appStore';
 import { buildThemeCSS, FONTS, TYPE } from './theme/theme';
-import { GLOBAL_CSS, LEGACY_CSS } from './theme/globalStyles';
+import { GLOBAL_CSS } from './theme/globalStyles';
 import { Sidebar } from './components/shell/Sidebar';
 import { Toolbar } from './components/shell/Toolbar';
 import { shortcutFor, readSidebarPref, writeSidebarPref } from './components/shell/shellLogic';
@@ -204,7 +204,7 @@ export function App(): React.ReactElement {
   const Screen = SCREENS[activeScreen];
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: FONTS.ui, ...TYPE.body, color: 'var(--label)' }}>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: FONTS.ui, ...TYPE.body, color: 'var(--label)' }}> {/* style-ok: app root font */}
       {sidebarOpen && (
         <Sidebar
           active={activeScreen}
@@ -224,7 +224,7 @@ export function App(): React.ReactElement {
           <Screen />
         </main>
       </div>
-      <style>{`${buildThemeCSS()}\n${GLOBAL_CSS}\n${LEGACY_CSS}`}</style>
+      <style>{`${buildThemeCSS()}\n${GLOBAL_CSS}`}</style>
     </div>
   );
 }

@@ -3,10 +3,6 @@ import { TYPE, WEIGHT, RADIUS } from '../../theme/theme';
 import { nextIndex } from './logic';
 
 type Variant = 'primary' | 'secondary' | 'plain' | 'destructive';
-/** 'ghost' and 'danger' are legacy names kept until Task 13. */
-type ButtonVariant = Variant | 'ghost' | 'danger';
-
-const normalize = (v: ButtonVariant): Variant => (v === 'ghost' ? 'secondary' : v === 'danger' ? 'destructive' : v);
 
 const VARIANT: Record<Variant, React.CSSProperties> = {
   primary:     { background: 'var(--accent)', color: 'var(--on-accent)' },
@@ -21,7 +17,7 @@ const SIZE = {
 } as const;
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: ButtonVariant;
+  variant?: Variant;
   size?: 'sm' | 'md';
   icon?: string;
   children?: React.ReactNode;
@@ -34,7 +30,7 @@ export function Button({ variant = 'secondary', size = 'md', icon, children, sty
       className={`ui-button no-drag ${className ?? ''}`}
       disabled={disabled}
       style={{
-        ...VARIANT[normalize(variant)], ...sz,
+        ...VARIANT[variant], ...sz,
         fontWeight: WEIGHT.medium,
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
         border: 'none', borderRadius: RADIUS.control, whiteSpace: 'nowrap',

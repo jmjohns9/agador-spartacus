@@ -1,15 +1,5 @@
 // Pure helpers shared by UI components. No React, no DOM — unit tested.
 
-import type { Status } from '../../theme/theme';
-
-/** Map a legacy valueColor/barColor prop onto the new status model.
- *  Only amber and red carry meaning; everything else renders neutral. */
-export function statusFromLegacyColor(color?: string): Status {
-  if (color === 'var(--sr)') return 'crit';
-  if (color === 'var(--sa)') return 'warn';
-  return 'neutral';
-}
-
 export function clampPercent(n: number): number {
   if (!Number.isFinite(n)) return 0;
   return Math.min(100, Math.max(0, n));

@@ -5,8 +5,6 @@ interface CardProps {
   children: React.ReactNode;
   padding?: number;
   style?: React.CSSProperties;
-  /** @deprecated ignored — status is shown on values/badges now. Removed in Task 13. */
-  accentColor?: string;
 }
 export function Card({ children, padding = 16, style }: CardProps): React.ReactElement {
   return (
