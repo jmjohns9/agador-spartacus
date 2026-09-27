@@ -48,6 +48,7 @@ export class ELM327Commander extends EventEmitter {
   private pendingCommand = '';
   private pendingTimer: ReturnType<typeof setTimeout> | null = null;
   private isReady = false;
+  private closed = false;
   private adapterInfo: Partial<AdapterInfo> = {};
 
   constructor(sendFn: (data: string) => void) {
@@ -59,8 +60,23 @@ export class ELM327Commander extends EventEmitter {
     return this.adapterInfo;
   }
 
+  // ── End of session ─────────────────────────────────────────────────────────
+  // Called when the session is disconnected or replaced. The in-flight command
+  // and every later one resolve at once as failed ('Closed') without touching
+  // the transport, so an initialize() or poll still running on this session
+  // winds down immediately instead of timing out command by command against a
+  // closed port or a torn-down simulator.
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.isReady = false;
+    this.recvBuf = '';
+    this.resolveResponse('', true, 'Closed');
+  }
+
   // ── Called by the transport layer with each chunk of incoming bytes ──────────
   onData(chunk: string): void {
+    if (this.closed) return;
     // Without this cap the buffer grows for as long as the peripheral keeps
     // talking: a hostile adapter, a wrong-baud link, or a device emitting
     // binary never produces the '>' below, and the per-command timeout only
@@ -107,6 +123,7 @@ export class ELM327Commander extends EventEmitter {
     //    A live ELM327 answers ATZ with its banner ("ELM327 v1.5"); a dead or
     //    non-transporting link returns nothing.
     const probe = await this.probeAdapter();
+    this.assertOpen();
     if (!probe) {
       const msg = 'Adapter not responding — no reply to ATZ/ATI. The port opened but no data is coming back. Check the adapter connection (and, for Bluetooth on macOS, note that SPP serial may not be supported).';
       this.log(`ABORT: ${msg}`);
@@ -155,6 +172,9 @@ export class ELM327Commander extends EventEmitter {
     const atrvResp = await this.send('ATRV', 1000);
     this.adapterInfo.voltage = atrvResp.lines[0] ?? '0.0V';
 
+    // Every command after close() "succeeds" as an empty failure, so without
+    // this a closed session would still report a completed initialization.
+    this.assertOpen();
     this.isReady = true;
     this.log(`Initialization complete. Protocol: ${this.adapterInfo.protocol}`);
     this.emit('ready', this.adapterInfo);
@@ -212,6 +232,10 @@ export class ELM327Commander extends EventEmitter {
 
   private dispatch(command: string, timeoutMs: number): Promise<ELM327Response> {
     return new Promise((resolve) => {
+      if (this.closed) {
+        resolve({ command, raw: '', lines: [], success: false, errorMessage: 'Closed' });
+        return;
+      }
       this.pendingResolve = resolve;
       this.pendingCommand = command;
 
@@ -289,7 +313,11 @@ export class ELM327Commander extends EventEmitter {
   get ready(): boolean { return this.isReady; }
   get info(): Partial<AdapterInfo> { return this.adapterInfo; }
 
-  private resolveResponse(raw: string, timedOut = false): void {
+  private assertOpen(): void {
+    if (this.closed) throw new Error('Connection closed during initialization');
+  }
+
+  private resolveResponse(raw: string, timedOut = false, failure = 'Timeout'): void {
     if (!this.pendingResolve) return;
 
     // On timeout, discard any partial bytes so a late-arriving response can't
@@ -312,7 +340,7 @@ export class ELM327Commander extends EventEmitter {
       raw,
       lines,
       success,
-      errorMessage: timedOut ? 'Timeout' : raw.includes(ELM_ERROR) ? 'ELM327 ERROR' : undefined,
+      errorMessage: timedOut ? failure : raw.includes(ELM_ERROR) ? 'ELM327 ERROR' : undefined,
     };
 
     if (raw && !this.pendingCommand.startsWith('AT') && !this.pendingCommand.startsWith('ST')) {

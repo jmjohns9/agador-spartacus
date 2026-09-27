@@ -70,6 +70,14 @@ let activePort: any = null;       // currently open SerialPort (if any)
 let isConnecting = false;          // guard against concurrent connect attempts
 let debugSerial = false;           // set true to log every TX/RX byte over IPC
 
+// Session generation. Every connect and disconnect ends the current session
+// by bumping this; async connect/init/discovery chains capture the value they
+// started with and drop their results once it has moved on. Without this a
+// chain from a disconnected or replaced session kept running and later
+// reported 'connected' (or 'error') over the live state, or started a second
+// poll loop on the next session's adapter.
+let sessionGen = 0;
+
 const storage = new StorageService();
 
 // Ring-buffer cap so a long-lived connected session doesn't grow the log
@@ -102,7 +110,7 @@ function stopSimulatorTimers(): void {
   simulatorTimers.clear();
 }
 
-function startSimulator(): void {
+function startSimulator(gen: number): void {
   stopSimulatorTimers();
   simulatorMode = true;
   const sim = new ELM327Simulator();
@@ -122,30 +130,35 @@ function startSimulator(): void {
     simulatorTimers.add(timer);
   };
 
-  elm = new ELM327Commander(fakeSend);
+  const commander = new ELM327Commander(fakeSend);
+  elm = commander;
 
-  // Wire simulator responses back into ELM327Commander
-  fakeEmitter.on('data', (chunk: string) => elm?.onData(chunk));
+  // Wire simulator responses back into this session's commander
+  fakeEmitter.on('data', (chunk: string) => commander.onData(chunk));
 
   wireELMEvents();
 
   // Fire-and-forget the init chain — but surface failures to the UI so a
   // throw in elm.initialize() can't leave the renderer stuck in "connecting"
   // forever (see eval/quality QLT-002).
-  elm.initialize().then((info) => {
+  commander.initialize().then((info) => {
+    if (gen !== sessionGen) return;   // disconnected or replaced meanwhile
     sendToRenderer('obd:connection-status', {
       status: 'connected' as ConnectionStatus,
       protocol: 'SAE J1850 VPW (Simulator)',
       adapterInfo: `${info.firmwareVersion} — SIMULATOR MODE`,
     });
     addLog({ timestamp: Date.now(), level: 'ok', message: 'Simulator mode started — synthetic J1850 VPW session' });
-    startOBDManager();
+    startOBDManager(gen);
   }).catch((err) => {
+    if (gen !== sessionGen) return;
     const msg = err instanceof Error ? err.message : String(err);
     addLog({ timestamp: Date.now(), level: 'error', message: `Simulator init failed: ${msg}` });
     sendToRenderer('obd:connection-status', { status: 'error' as ConnectionStatus, adapterInfo: msg });
     simulatorMode = false;
     simulator = null;
+    stopSimulatorTimers();
+    commander.close();
     elm = null;
   });
 }
@@ -166,7 +179,33 @@ async function releaseActivePort(): Promise<void> {
   }
 }
 
-async function connectToPort(portPath: string): Promise<void> {
+async function closePort(p: any): Promise<void> {
+  try {
+    if (p.isOpen) await new Promise<void>((resolve) => p.close(() => resolve()));
+  } catch {
+    // ignore — best effort
+  }
+}
+
+// End the current session, whatever state it is in (connecting, initializing,
+// connected): invalidate its async chains, stop polling, fail its adapter's
+// pending commands fast, cancel simulator replies and release the port.
+async function endSession(): Promise<void> {
+  sessionGen++;
+  obd?.stopPolling();
+  obd?.removeAllListeners();
+  obd = null;
+  stopRSSIPolling();
+  elm?.close();
+  elm = null;
+  simulator = null;
+  stopSimulatorTimers();
+  simulatorMode = false;
+  // Actually close the serial port so the lock is released for the next session
+  await releaseActivePort();
+}
+
+async function connectToPort(portPath: string, gen: number): Promise<void> {
   // Guard: never run two connect attempts at once (that causes "Cannot lock port")
   if (isConnecting) {
     addLog({ timestamp: Date.now(), level: 'warn', message: 'Connect ignored — a connection attempt is already in progress' });
@@ -188,9 +227,11 @@ async function connectToPort(portPath: string): Promise<void> {
   // Make sure no stale port is still holding the lock
   await releaseActivePort();
 
+  let port: any = null;
+  let commander: ELM327Commander | null = null;
   try {
     // OBDLink MX+ over Bluetooth SPP uses 115200 baud
-    const port = new SerialPort({ path: portPath, baudRate: 115200, autoOpen: false });
+    port = new SerialPort({ path: portPath, baudRate: 115200, autoOpen: false });
     activePort = port;
 
     const fakeSend = (data: string): void => {
@@ -203,7 +244,8 @@ async function connectToPort(portPath: string): Promise<void> {
       });
     };
 
-    elm = new ELM327Commander(fakeSend);
+    commander = new ELM327Commander(fakeSend);
+    elm = commander;
 
     port.on('data', (chunk: Buffer) => {
       const ascii = chunk.toString('ascii');
@@ -211,15 +253,25 @@ async function connectToPort(portPath: string): Promise<void> {
         const display = ascii.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
         addLog({ timestamp: Date.now(), level: 'info', message: `RX ← ${display}` });
       }
-      elm?.onData(ascii);
+      commander?.onData(ascii);
     });
+    // Port events only speak for the live session. A port we closed ourselves
+    // (disconnect, a failed attempt, a replaced session) is no longer
+    // activePort — its 'close' used to overwrite the failed attempt's 'error'
+    // (hiding the reason) or a newer session's 'connected' with 'disconnected'.
     port.on('error', (err: Error) => {
       addLog({ timestamp: Date.now(), level: 'error', message: `Serial port error: ${err.message}` });
+      if (port !== activePort) return;
       sendToRenderer('obd:connection-status', { status: 'error' as ConnectionStatus });
     });
     port.on('close', () => {
+      if (port !== activePort) return;
+      // The adapter went away under a live session: end it so nothing keeps
+      // polling a closed port.
       addLog({ timestamp: Date.now(), level: 'warn', message: 'Serial port closed' });
-      sendToRenderer('obd:connection-status', { status: 'disconnected' as ConnectionStatus });
+      void endSession().then(() => {
+        sendToRenderer('obd:connection-status', { status: 'disconnected' as ConnectionStatus });
+      });
     });
 
     wireELMEvents();
@@ -228,9 +280,14 @@ async function connectToPort(portPath: string): Promise<void> {
       port.open((openErr: Error | null) => openErr ? reject(openErr) : resolve());
     });
 
+    // Disconnected (or replaced) while the port was opening: the teardown
+    // could not close a port that wasn't open yet, so close it here.
+    if (gen !== sessionGen) { await closePort(port); return; }
+
     sendToRenderer('obd:connection-status', { status: 'initializing' as ConnectionStatus });
 
-    const info = await elm.initialize();
+    const info = await commander.initialize();
+    if (gen !== sessionGen) return;   // teardown already closed the port
 
     sendToRenderer('obd:connection-status', {
       status: 'connected' as ConnectionStatus,
@@ -241,8 +298,15 @@ async function connectToPort(portPath: string): Promise<void> {
     addLog({ timestamp: Date.now(), level: 'ok', message: `Connected — ${info.firmwareVersion} — Protocol: ${info.protocol} — Battery: ${info.voltage}` });
 
     startRSSIPolling();
-    startOBDManager();
+    startOBDManager(gen);
   } catch (err) {
+    commander?.close();
+    if (gen !== sessionGen) {
+      // A later disconnect/connect owns the UI state now — just let go of the port.
+      if (port) await closePort(port);
+      return;
+    }
+    if (elm === commander) elm = null;
     const msg = err instanceof Error ? err.message : String(err);
     addLog({ timestamp: Date.now(), level: 'error', message: `Connection failed: ${msg}` });
     sendToRenderer('obd:connection-status', { status: 'error' as ConnectionStatus, adapterInfo: msg });
@@ -292,26 +356,29 @@ function wireELMEvents(): void {
   elm.on('log', (entry: LogEntry) => addLog(entry));
 }
 
-function startOBDManager(): void {
-  if (!elm) return;
-  obd = new OBDProtocolManager(elm);
+function startOBDManager(gen: number): void {
+  if (!elm || gen !== sessionGen) return;
+  const mgr = new OBDProtocolManager(elm);
+  obd = mgr;
 
-  obd.on('pid-reading', (reading: PIDReading) => {
+  mgr.on('pid-reading', (reading: PIDReading) => {
     sendToRenderer('obd:pid-reading', reading);
   });
 
-  obd.on('log', (entry: LogEntry) => addLog(entry));
+  mgr.on('log', (entry: LogEntry) => addLog(entry));
 
   // Discover supported PIDs then start the polling loop. A throw in
   // discoverSupportedPIDs would otherwise be silently dropped (see QLT-002).
-  obd.discoverSupportedPIDs().then(async () => {
-    obd?.startPolling();
+  mgr.discoverSupportedPIDs().then(async () => {
+    if (gen !== sessionGen) return;
+    mgr.startPolling();
     addLog({ timestamp: Date.now(), level: 'info', message: 'Sequential PID polling started (fast every cycle, normal every 3rd, slow every 10th)' });
 
     // Re-read the negotiated protocol now that the bus is active — init may
     // have seen "STOPPED" if the engine was off at connect time.
     try {
-      const protocol = await obd!.refreshProtocol();
+      const protocol = await mgr.refreshProtocol();
+      if (gen !== sessionGen) return;
       sendToRenderer('obd:connection-status', {
         status: 'connected' as ConnectionStatus,
         protocol,
@@ -321,10 +388,11 @@ function startOBDManager(): void {
 
     // Auto-detect VIN from ECM (Mode 09 PID 02)
     try {
-      const vin = await obd!.readVIN();
-      if (vin) sendToRenderer('obd:vin-detected', vin);
+      const vin = await mgr.readVIN();
+      if (vin && gen === sessionGen) sendToRenderer('obd:vin-detected', vin);
     } catch { /* non-fatal — not all vehicles support Mode 09 */ }
   }).catch((err) => {
+    if (gen !== sessionGen) return;
     const msg = err instanceof Error ? err.message : String(err);
     addLog({ timestamp: Date.now(), level: 'error', message: `PID discovery failed: ${msg}` });
     sendToRenderer('obd:connection-status', { status: 'error' as ConnectionStatus, adapterInfo: msg });
@@ -372,31 +440,33 @@ ipcMain.handle('obd:list-ports', async () => {
 });
 
 ipcMain.handle('obd:connect', async (_event, { port }: { port: string }) => {
+  // Guard: never run two serial connect attempts at once (that causes "Cannot lock port")
+  if (port !== 'SIMULATOR' && isConnecting) {
+    addLog({ timestamp: Date.now(), level: 'warn', message: 'Connect ignored — a connection attempt is already in progress' });
+    return;
+  }
+  // A new connection replaces whatever session is running.
+  await endSession();
+  const gen = sessionGen;
   if (port === 'SIMULATOR') {
-    startSimulator();
+    startSimulator(gen);
   } else {
-    await connectToPort(port);
+    await connectToPort(port, gen);
   }
 });
 
 ipcMain.handle('obd:disconnect', async () => {
-  obd?.stopPolling();
-  obd = null;
-  stopRSSIPolling();
-  // Actually close the serial port so the lock is released for the next session
-  await releaseActivePort();
-  elm = null;
-  simulator = null;
-  stopSimulatorTimers();
-  simulatorMode = false;
+  await endSession();
   addLog({ timestamp: Date.now(), level: 'info', message: 'Session disconnected — port released' });
   sendToRenderer('obd:connection-status', { status: 'disconnected' as ConnectionStatus });
 });
 
 ipcMain.handle('obd:scan-dtc', async () => {
-  if (!obd) return [];
-  const dtcs = await obd.scanDTCs();
-  sendToRenderer('obd:dtc-result', dtcs);
+  const mgr = obd;
+  if (!mgr) return [];
+  const dtcs = await mgr.scanDTCs();
+  // Disconnected mid-scan: don't wipe the renderer's list with an empty result
+  if (obd === mgr) sendToRenderer('obd:dtc-result', dtcs);
   return dtcs;
 });
 
@@ -413,8 +483,9 @@ ipcMain.handle('pcm:read-ids', async (): Promise<PcmReadResult> => {
 
   // The read reprograms the adapter's header and turns headers on, which would
   // corrupt parsePIDResponse mid-flight. Take the bus, then give it back.
-  const wasPolling = obd !== null;
-  obd?.stopPolling();
+  const mgr = obd;
+  const wasPolling = mgr !== null;
+  mgr?.stopPolling();
   addLog({ timestamp: Date.now(), level: 'info', message: 'PCM identity read starting — PID polling paused' });
 
   try {
@@ -430,8 +501,9 @@ ipcMain.handle('pcm:read-ids', async (): Promise<PcmReadResult> => {
     addLog({ timestamp: Date.now(), level: 'error', message: `PCM identity read failed: ${msg}` });
     return { ok: false, error: msg };
   } finally {
-    if (wasPolling) {
-      obd?.startPolling();
+    // Only resume the session we paused — not one that was disconnected meanwhile
+    if (wasPolling && mgr && obd === mgr) {
+      mgr.startPolling();
       addLog({ timestamp: Date.now(), level: 'info', message: 'PID polling resumed' });
     }
   }
@@ -642,9 +714,10 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  obd?.stopPolling();
-  // Release the serial port so the adapter isn't locked for other apps
-  releaseActivePort();
+  // End the session (stops polling, releases the serial port so the adapter
+  // isn't locked for other apps). On macOS the app stays running and a new
+  // window starts out disconnected, so nothing may keep polling behind it.
+  void endSession();
   if (process.platform !== 'darwin') app.quit();
 });
 
