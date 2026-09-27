@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
 import {
-  SectionHeader, Card, Badge, Button, SegmentedControl, DataRow, EmptyState, Metric, AlertBanner,
+  SectionHeader, Card, Badge, Button, SegmentedControl, DataRow, EmptyState, Metric, AlertBanner, Divider,
 } from '../components/layout/UIComponents';
 import { TYPE, NUMERIC, WEIGHT } from '../theme/theme';
 import type {
@@ -106,12 +106,14 @@ function timestamp(ms: number): string {
 // ─── Shared frame-table cell styles ─────────────────────────────────────────
 // One hairline divider per cell — the brief's allowed exception for a data
 // table too dense for <DataRow>. Defined once so no other line needs the
-// style-ok escape hatch.
+// style-ok escape hatch. Table cells only: non-table separators use <Divider />.
 const CELL_DIVIDER: React.CSSProperties = { borderBottom: '1px solid var(--separator)' }; // style-ok: table cell divider
-const TH_STYLE: React.CSSProperties = { ...TYPE.caption, ...CELL_DIVIDER, textAlign: 'left', color: 'var(--label-3)', padding: '6px 12px', fontWeight: WEIGHT.regular };
-const TD_STYLE: React.CSSProperties = { ...TYPE.caption, ...CELL_DIVIDER, padding: '6px 12px', verticalAlign: 'middle', color: 'var(--label)' };
-/** A panel's title bar: label (+ optional actions) with a hairline divider below. */
-const PANEL_HEADER: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', ...CELL_DIVIDER };
+const TH_STYLE: React.CSSProperties = { ...TYPE.caption, ...CELL_DIVIDER, textAlign: 'left', color: 'var(--label-3)', padding: '8px 12px', fontWeight: WEIGHT.regular, whiteSpace: 'nowrap' };
+const TD_STYLE: React.CSSProperties = { ...TYPE.caption, ...CELL_DIVIDER, padding: '8px 12px', verticalAlign: 'middle', color: 'var(--label)', whiteSpace: 'nowrap' };
+/** A panel's title bar: label (+ optional actions). Pair with <Divider /> below it. */
+const PANEL_HEADER: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px' };
+/** A plain caption-sized panel label, no table divider. Pair with <Divider /> below it. */
+const PANEL_LABEL: React.CSSProperties = { ...TYPE.caption, color: 'var(--label-3)', padding: '8px 12px' };
 
 // ─── Demo data generators ────────────────────────────────────────────────────
 
@@ -234,8 +236,8 @@ function CANMonitorTab(): React.ReactElement {
         <div ref={tableRef} style={{ flex: 1, overflowY: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: 72 }} /><col style={{ width: 44 }} /><col style={{ width: 96 }} />
-              <col style={{ width: 48 }} /><col /><col style={{ width: 64 }} /><col style={{ width: 64 }} /><col style={{ width: 52 }} />
+              <col style={{ width: 116 }} /><col style={{ width: 64 }} /><col style={{ width: 104 }} />
+              <col style={{ width: 56 }} /><col /><col style={{ width: 84 }} /><col style={{ width: 68 }} /><col style={{ width: 56 }} />
             </colgroup>
             <thead>
               <tr>
@@ -384,27 +386,30 @@ function UDSClientTab(): React.ReactElement {
       <div style={{ display: 'flex', gap: 12, flex: 1, overflow: 'hidden' }}>
         {/* Service list */}
         <Card padding={0} style={{ width: 260, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={TH_STYLE}>UDS services (ISO 14229)</div>
+          <div style={PANEL_LABEL}>UDS services (ISO 14229)</div>
+          <Divider />
           <div style={{ flex: 1, overflowY: 'auto' }}>
-            {UDS_SERVICES.map(svc => {
+            {UDS_SERVICES.map((svc, i) => {
               const selected = selectedService.sid === svc.sid;
               return (
-                <div
-                  key={svc.sid}
-                  className="row-hover"
-                  onClick={() => { setSelectedService(svc); setSubFunc(svc.subFunctions?.[0]?.id ?? 0); }}
-                  style={{
-                    padding: '8px 12px', cursor: 'pointer', ...CELL_DIVIDER,
-                    background: selected ? 'var(--accent-tint)' : 'transparent',
-                    boxShadow: selected ? 'inset 3px 0 0 var(--accent)' : 'none',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--accent-text)' }}>0x{hexByte(svc.sid)}</span>
-                    <Badge label={svc.shortName} variant="muted" />
+                <React.Fragment key={svc.sid}>
+                  <div
+                    className="row-hover"
+                    onClick={() => { setSelectedService(svc); setSubFunc(svc.subFunctions?.[0]?.id ?? 0); }}
+                    style={{
+                      padding: '8px 12px', cursor: 'pointer',
+                      background: selected ? 'var(--accent-tint)' : 'transparent',
+                      boxShadow: selected ? 'inset 3px 0 0 var(--accent)' : 'none',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--accent-text)' }}>0x{hexByte(svc.sid)}</span>
+                      <Badge label={svc.shortName} variant="muted" />
+                    </div>
+                    <div style={{ ...TYPE.caption, color: 'var(--label)', marginTop: 2 }}>{svc.name}</div>
                   </div>
-                  <div style={{ ...TYPE.caption, color: 'var(--label)', marginTop: 2 }}>{svc.name}</div>
-                </div>
+                  {i < UDS_SERVICES.length - 1 && <Divider />}
+                </React.Fragment>
               );
             })}
           </div>
@@ -464,7 +469,8 @@ function UDSClientTab(): React.ReactElement {
           {/* Common DIDs quick-pick */}
           {(selectedService.sid === 0x22) && (
             <Card padding={0} style={{ maxHeight: 130, overflow: 'hidden' }}>
-              <div style={TH_STYLE}>Common DIDs — click to populate</div>
+              <div style={PANEL_LABEL}>Common DIDs — click to populate</div>
+              <Divider />
               <div style={{ overflowY: 'auto', maxHeight: 96, padding: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                 {COMMON_DIDS.map(d => (
                   <Button
@@ -489,7 +495,7 @@ function UDSClientTab(): React.ReactElement {
               <div style={{ flex: 1, overflowY: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                   <colgroup>
-                    <col style={{ width: 84 }} /><col style={{ width: 64 }} /><col style={{ width: 56 }} /><col /><col />
+                    <col style={{ width: 116 }} /><col style={{ width: 84 }} /><col style={{ width: 72 }} /><col /><col />
                   </colgroup>
                   <thead>
                     <tr>
@@ -613,18 +619,22 @@ function TransmitTab(): React.ReactElement {
 
       {/* Sent log */}
       <Card padding={0} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', marginTop: 12 }}>
-        <div style={TH_STYLE}>TX log · {sentLog.length} frames sent</div>
+        <div style={PANEL_LABEL}>TX log · {sentLog.length} frames sent</div>
+        <Divider />
         {sentLog.length === 0 ? (
           <EmptyState icon="ti-send" title="No frames sent yet" />
         ) : (
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {sentLog.map((entry, i) => (
-              <div key={i} style={{ display: 'flex', gap: 12, padding: '6px 12px', alignItems: 'center', ...CELL_DIVIDER }}>
-                <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)', width: 70 }}>{timestamp(entry.ts)}</span>
-                <Badge label="TX" variant="warn" />
-                <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--accent-text)' }}>{entry.id}</span>
-                <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label)' }}>{entry.data}</span>
-              </div>
+              <React.Fragment key={i}>
+                <div style={{ display: 'flex', gap: 12, padding: '8px 12px', alignItems: 'center' }}>
+                  <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)', width: 70 }}>{timestamp(entry.ts)}</span>
+                  <Badge label="TX" variant="warn" />
+                  <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--accent-text)' }}>{entry.id}</span>
+                  <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label)' }}>{entry.data}</span>
+                </div>
+                {i < sentLog.length - 1 && <Divider />}
+              </React.Fragment>
             ))}
           </div>
         )}
@@ -653,9 +663,9 @@ function SignalsTab(): React.ReactElement {
         <div style={{ flex: 1, overflowY: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: 130 }} /><col style={{ width: 90 }} /><col style={{ width: 130 }} />
-              <col style={{ width: 70 }} /><col style={{ width: 70 }} /><col style={{ width: 60 }} />
-              <col style={{ width: 50 }} /><col style={{ width: 100 }} /><col style={{ width: 70 }} />
+              <col style={{ width: 136 }} /><col style={{ width: 96 }} /><col style={{ width: 104 }} />
+              <col style={{ width: 90 }} /><col style={{ width: 76 }} /><col style={{ width: 84 }} />
+              <col style={{ width: 60 }} /><col style={{ width: 70 }} /><col style={{ width: 70 }} />
             </colgroup>
             <thead>
               <tr>
@@ -742,6 +752,7 @@ function ScriptTab(): React.ReactElement {
               <Button size="sm" variant="secondary" icon="ti-player-stop" onClick={() => updateScript(script.id, { status: 'idle' })}>Stop</Button>
             </div>
           </div>
+          <Divider />
           <textarea
             value={script?.code ?? ''}
             onChange={e => updateScript(script.id, { code: e.target.value })}
@@ -749,7 +760,7 @@ function ScriptTab(): React.ReactElement {
             style={{
               flex: 1, resize: 'none', borderWidth: 0, outline: 'none',
               background: 'transparent', color: 'var(--label)',
-              ...NUMERIC, fontSize: 12,
+              ...TYPE.body, ...NUMERIC,
               lineHeight: 1.7, padding: '12px',
               tabSize: 2,
             }}
@@ -762,6 +773,7 @@ function ScriptTab(): React.ReactElement {
             <span style={{ ...TYPE.caption, color: 'var(--label-3)' }}>Console output</span>
             <Badge label={script?.status ?? 'idle'} variant={script?.status === 'running' ? 'warn' : script?.status === 'error' ? 'crit' : script?.status === 'success' ? 'ok' : 'muted'} />
           </div>
+          <Divider />
           <div style={{
             flex: 1, overflowY: 'auto', padding: 10,
             ...NUMERIC, ...TYPE.caption,
@@ -777,7 +789,8 @@ function ScriptTab(): React.ReactElement {
           </div>
 
           {/* API reference */}
-          <div style={{ boxShadow: 'inset 0 1px 0 var(--separator)', padding: 8 }}>
+          <Divider />
+          <div style={{ padding: 8 }}>
             <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>
               API reference
             </div>
@@ -820,8 +833,8 @@ function LINTab(): React.ReactElement {
         <div style={{ flex: 1, overflowY: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: 84 }} /><col style={{ width: 64 }} /><col style={{ width: 44 }} />
-              <col /><col style={{ width: 84 }} /><col style={{ width: 110 }} />
+              <col style={{ width: 116 }} /><col style={{ width: 64 }} /><col style={{ width: 56 }} />
+              <col /><col style={{ width: 92 }} /><col style={{ width: 140 }} />
             </colgroup>
             <thead>
               <tr>
@@ -876,8 +889,8 @@ function DoIPTab(): React.ReactElement {
         <div style={{ flex: 1, overflowY: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: 120 }} /><col style={{ width: 60 }} /><col style={{ width: 90 }} />
-              <col /><col style={{ width: 84 }} /><col style={{ width: 70 }} />
+              <col style={{ width: 136 }} /><col style={{ width: 70 }} /><col style={{ width: 112 }} />
+              <col /><col style={{ width: 96 }} /><col style={{ width: 96 }} />
             </colgroup>
             <thead>
               <tr>
@@ -944,17 +957,21 @@ function DoIPTab(): React.ReactElement {
 function HardwarePanel(): React.ReactElement {
   return (
     <Card padding={0}>
-      <div style={TH_STYLE}>Supported hardware adapters</div>
-      {HARDWARE_ADAPTERS.map(hw => (
-        <div key={hw.name} className="row-hover" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', ...CELL_DIVIDER }}>
-          <div>
-            <div style={{ ...TYPE.body, color: 'var(--label)' }}>{hw.name}</div>
-            <div style={{ display: 'flex', gap: 4, marginTop: 3 }}>
-              {hw.protocols.map(p => <Badge key={p} label={p} variant="muted" />)}
+      <div style={PANEL_LABEL}>Supported hardware adapters</div>
+      <Divider />
+      {HARDWARE_ADAPTERS.map((hw, i) => (
+        <React.Fragment key={hw.name}>
+          <div className="row-hover" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px' }}>
+            <div>
+              <div style={{ ...TYPE.body, color: 'var(--label)' }}>{hw.name}</div>
+              <div style={{ display: 'flex', gap: 4, marginTop: 3 }}>
+                {hw.protocols.map(p => <Badge key={p} label={p} variant="muted" />)}
+              </div>
             </div>
+            <Badge label={hw.status} variant="ok" />
           </div>
-          <Badge label={hw.status} variant="ok" />
-        </div>
+          {i < HARDWARE_ADAPTERS.length - 1 && <Divider />}
+        </React.Fragment>
       ))}
     </Card>
   );
@@ -966,7 +983,8 @@ function HardwarePanel(): React.ReactElement {
 function NRCReferencePanel(): React.ReactElement {
   return (
     <Card padding={0}>
-      <div style={TH_STYLE}>UDS negative response codes (NRC)</div>
+      <div style={PANEL_LABEL}>UDS negative response codes (NRC)</div>
+      <Divider />
       <div style={{ maxHeight: 200, overflowY: 'auto' }}>
         {Object.entries(NRC_CODES).map(([code, name]) => (
           <DataRow
@@ -1003,7 +1021,7 @@ export function EcuBusScreen(): React.ReactElement {
       {/* Sub-tab bar */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12,
-        padding: '8px 12px', ...CELL_DIVIDER, flexShrink: 0,
+        padding: '8px 12px', flexShrink: 0,
       }}>
         <SegmentedControl
           ariaLabel="EcuBus tool"
@@ -1016,20 +1034,24 @@ export function EcuBusScreen(): React.ReactElement {
           Powered by EcuBus-Pro · Apache 2.0
         </span>
       </div>
+      <Divider />
 
       {/* Quick actions bar */}
       {connectionStatus === 'connected' && (
-        <div style={{
-          display: 'flex', gap: 8, padding: '8px 12px', ...CELL_DIVIDER, flexShrink: 0,
-          flexWrap: 'wrap', alignItems: 'center',
-        }}>
-          <span style={{ ...TYPE.caption, color: 'var(--label-3)' }}>Quick:</span>
-          {QUICK_ACTIONS.map(q => (
-            <Button key={q.label} size="sm" variant="secondary" icon={q.icon} onClick={() => setSubTab(q.tab)}>
-              {q.label}
-            </Button>
-          ))}
-        </div>
+        <>
+          <div style={{
+            display: 'flex', gap: 8, padding: '8px 12px', flexShrink: 0,
+            flexWrap: 'wrap', alignItems: 'center',
+          }}>
+            <span style={{ ...TYPE.caption, color: 'var(--label-3)' }}>Quick:</span>
+            {QUICK_ACTIONS.map(q => (
+              <Button key={q.label} size="sm" variant="secondary" icon={q.icon} onClick={() => setSubTab(q.tab)}>
+                {q.label}
+              </Button>
+            ))}
+          </div>
+          <Divider />
+        </>
       )}
 
       {connectionStatus !== 'connected' && (
