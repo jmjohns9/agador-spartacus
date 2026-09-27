@@ -111,6 +111,8 @@ function timestamp(ms: number): string {
 const CELL_DIVIDER: React.CSSProperties = { borderBottom: '1px solid var(--separator)' }; // style-ok: table cell divider
 const TH_STYLE: React.CSSProperties = { ...TYPE.caption, ...CELL_DIVIDER, textAlign: 'left', color: 'var(--label-3)', padding: '6px 12px', fontWeight: WEIGHT.regular };
 const TD_STYLE: React.CSSProperties = { ...TYPE.caption, ...CELL_DIVIDER, padding: '6px 12px', verticalAlign: 'middle', color: 'var(--label)' };
+/** A panel's title bar: label (+ optional actions) with a hairline divider below. */
+const PANEL_HEADER: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', ...CELL_DIVIDER };
 
 // ─── Demo data generators ────────────────────────────────────────────────────
 
@@ -716,24 +718,21 @@ function ScriptTab(): React.ReactElement {
 
   return (
     <>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-        <Button size="sm" icon="ti-plus">New script</Button>
-        <Button size="sm" icon="ti-file-import">Import</Button>
+      <div style={{ display: 'flex', gap: 8, margin: '0 0 12px' }}>
+        <Button size="sm" variant="secondary" icon="ti-plus">New script</Button>
+        <Button size="sm" variant="secondary" icon="ti-file-import">Import</Button>
         <div style={{ flex: 1 }} />
         <Badge label="TypeScript" variant="info" />
         <Badge label="CAPL-like API" variant="muted" />
       </div>
 
-      <div style={{ display: 'flex', gap: 8, flex: 1, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', gap: 12, flex: 1, overflow: 'hidden' }}>
         {/* Editor */}
         <Card padding={0} style={{ flex: 2, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '5px 10px', background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
-          }}>
+          <div style={PANEL_HEADER}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <i className="ti ti-file-code" style={{ fontSize: 13, color: 'var(--pp)' }} />
-              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--tw)' }}>
+              <i className="ti ti-file-code" style={{ fontSize: 13, color: 'var(--accent-text)' }} />
+              <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label)' }}>
                 {script?.name ?? 'untitled.ts'}
               </span>
             </div>
@@ -741,7 +740,7 @@ function ScriptTab(): React.ReactElement {
               <Button size="sm" variant="primary" icon="ti-player-play" onClick={() => updateScript(script.id, { status: 'running', output: [...script.output, `[${new Date().toLocaleTimeString()}] Script started...`, `[${new Date().toLocaleTimeString()}] VIN: 1GCEK19T04E123456`, `[${new Date().toLocaleTimeString()}] Script completed.`], lastRun: Date.now() })}>
                 Run
               </Button>
-              <Button size="sm" icon="ti-player-stop" onClick={() => updateScript(script.id, { status: 'idle' })}>Stop</Button>
+              <Button size="sm" variant="secondary" icon="ti-player-stop" onClick={() => updateScript(script.id, { status: 'idle' })}>Stop</Button>
             </div>
           </div>
           <textarea
@@ -749,10 +748,10 @@ function ScriptTab(): React.ReactElement {
             onChange={e => updateScript(script.id, { code: e.target.value })}
             spellCheck={false}
             style={{
-              flex: 1, resize: 'none', border: 'none', outline: 'none',
-              background: 'var(--bg)', color: 'var(--tw)',
-              fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12,
-              lineHeight: 1.7, padding: '10px 12px',
+              flex: 1, resize: 'none', borderWidth: 0, outline: 'none',
+              background: 'transparent', color: 'var(--label)',
+              ...NUMERIC, fontSize: 12,
+              lineHeight: 1.7, padding: '12px',
               tabSize: 2,
             }}
           />
@@ -760,23 +759,17 @@ function ScriptTab(): React.ReactElement {
 
         {/* Console output */}
         <Card padding={0} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '5px 10px', background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
-          }}>
-            <span style={{ fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--tm)' }}>
-              Console output
-            </span>
+          <div style={PANEL_HEADER}>
+            <span style={{ ...TYPE.caption, color: 'var(--label-3)' }}>Console output</span>
             <Badge label={script?.status ?? 'idle'} variant={script?.status === 'running' ? 'warn' : script?.status === 'error' ? 'crit' : script?.status === 'success' ? 'ok' : 'muted'} />
           </div>
           <div style={{
             flex: 1, overflowY: 'auto', padding: 10,
-            fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11,
-            color: 'var(--sg)', lineHeight: 1.8,
-            scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent',
+            ...NUMERIC, ...TYPE.caption,
+            color: 'var(--ok-text)', lineHeight: 1.8,
           }}>
             {(script?.output ?? []).length === 0 ? (
-              <span style={{ color: 'var(--tm)' }}>Run the script to see output here...</span>
+              <span style={{ color: 'var(--label-3)' }}>Run the script to see output here…</span>
             ) : (
               (script?.output ?? []).map((line, i) => (
                 <div key={i}>{line}</div>
@@ -785,19 +778,13 @@ function ScriptTab(): React.ReactElement {
           </div>
 
           {/* API reference */}
-          <div style={{ borderTop: '2px solid var(--br)', padding: 8 }}>
-            <div style={{ fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9, letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--tm)', marginBottom: 4 }}>
-              API Reference
+          <div style={{ boxShadow: 'inset 0 1px 0 var(--separator)', padding: 8 }}>
+            <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>
+              API reference
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {['CAN.send()', 'CAN.on()', 'UDS.readDID()', 'UDS.writeDID()', 'UDS.session()', 'UDS.reset()', 'LIN.send()', 'delay()', 'log()'].map(fn => (
-                <span key={fn} style={{
-                  fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 9,
-                  background: 'var(--bg3)', border: '2px solid var(--br)',
-                  borderRadius: 0, padding: '2px 6px', color: 'var(--pp)',
-                }}>
-                  {fn}
-                </span>
+                <Badge key={fn} label={fn} variant="muted" />
               ))}
             </div>
           </div>
