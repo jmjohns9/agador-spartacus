@@ -73,7 +73,7 @@ function VoltageTimeline(): React.ReactElement {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <svg width="100%" viewBox={`-40 -8 ${W + 60} ${H + 20}`} style={{ overflow: 'visible' }}>
+      <svg width="100%" viewBox={`-40 -8 ${W + 100} ${H + 20}`} style={{ overflow: 'visible' }}>
         {REFS.map(({ v, label, status, dim }) => (
           <g key={v}>
             <line
@@ -81,7 +81,7 @@ function VoltageTimeline(): React.ReactElement {
               stroke={STATUS_FILL[status]} strokeOpacity={dim ? 0.4 : 0.8}
               strokeWidth="0.7" strokeDasharray="4,3"
             />
-            <text x={W + 4} y={yOf(v) + 4} style={{ ...NUMERIC, fontSize: 9, fill: STATUS_TEXT[status] }} opacity={dim ? 0.6 : 1}>
+            <text x={W + 4} y={yOf(v) + 4} style={{ ...NUMERIC, ...TYPE.caption, fill: STATUS_TEXT[status] }} opacity={dim ? 0.6 : 1}>
               {label}
             </text>
           </g>
@@ -91,7 +91,7 @@ function VoltageTimeline(): React.ReactElement {
           <circle cx={W} cy={yOf(lastV)} r="4" fill={lineColor} stroke="var(--grouped)" strokeWidth="1.5" />
         )}
         {[11.6, 11.8, 12.0, 12.2, 12.4, 12.6, 12.8, 13.0].map(v => (
-          <text key={v} x={-4} y={yOf(v) + 3} style={{ ...NUMERIC, fontSize: 9, fill: 'var(--label-3)' }} textAnchor="end">{v}</text>
+          <text key={v} x={-4} y={yOf(v) + 3} style={{ ...NUMERIC, ...TYPE.caption, fill: 'var(--label-3)' }} textAnchor="end">{v}</text>
         ))}
       </svg>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -141,7 +141,7 @@ function FusePanel({ fuses }: { fuses: FuseCircuit[] }): React.ReactElement {
                 className={f.status === 'confirmed' ? 'pulse' : undefined}
                 style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: STATUS_FILL[FUSE_STATUS_TONE[f.status]] }}
               />
-              <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--label)', width: 40, flexShrink: 0 }}>{f.amperage}A</span>
+              <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label)', width: 40, flexShrink: 0 }}>{f.amperage}A</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ ...TYPE.body, color: 'var(--label)' }}>{f.name}</div>
                 <div style={{ ...TYPE.caption, color: 'var(--label-3)' }}>
@@ -158,9 +158,9 @@ function FusePanel({ fuses }: { fuses: FuseCircuit[] }): React.ReactElement {
               <Button size="sm" onClick={e => { e.stopPropagation(); cycleStatus(f); }}>Cycle</Button>
             </div>
             {isOpen && (
-              <div style={{ padding: '10px 12px 14px' }}>
+              <div style={{ padding: '8px 12px 16px' }}>
                 <SectionHeader>Circuit detail</SectionHeader>
-                <div style={{ ...TYPE.body, color: 'var(--label)', marginTop: 6 }}>
+                <div style={{ ...TYPE.body, color: 'var(--label)', marginTop: 8 }}>
                   <strong>Feeds:</strong> {f.feeds.join(', ')}
                 </div>
                 {f.notes && (
@@ -216,7 +216,7 @@ function ChecklistSection(): React.ReactElement {
         {checklist.map((item, i) => (
           <React.Fragment key={item.id}>
             <div style={{
-              display: 'flex', alignItems: 'flex-start', gap: 10,
+              display: 'flex', alignItems: 'flex-start', gap: 8,
               padding: '8px 12px', minHeight: 32,
               background: item.completed ? (item.passed ? 'var(--ok-tint)' : 'var(--crit-tint)') : 'transparent',
             }}>
@@ -246,7 +246,7 @@ function ChecklistSection(): React.ReactElement {
                 )}
               </div>
               {!item.completed && (
-                <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
                   <input
                     placeholder="Notes…"
                     value={noteInput[item.id] ?? ''}
@@ -315,7 +315,7 @@ function KnownCulprits(): React.ReactElement {
     <Card padding={0}>
       {culprits.map((c, i) => (
         <React.Fragment key={c.address}>
-          <div className="row-hover" style={{ padding: '10px 12px' }}>
+          <div className="row-hover" style={{ padding: '8px 12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-3)' }}>{c.address}</span>
               <span style={{ ...TYPE.body, fontWeight: WEIGHT.medium, color: 'var(--label)' }}>{c.component}</span>
