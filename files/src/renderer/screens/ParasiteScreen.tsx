@@ -1,18 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { useAppStore, selectBatteryVoltage, selectVoltageTrend, selectParasiteRiskScore, selectActiveDTCCount } from '../store/appStore';
 import {
-  ScrollPane, SectionHeader, Grid, Card, DenseMetricTile, CompactArcGauge,
-  HeroCard, Badge, AlertBanner, Button, Sparkline,
+  ScrollPane, SectionHeader, Grid, Card, Metric, Gauge, Badge, AlertBanner, Button, DataRow, EmptyState, Divider,
 } from '../components/layout/UIComponents';
-import { FuseCircuit, FuseStatus, ParasiticChecklistItem } from '../../shared/types';
+import { TYPE, WEIGHT, NUMERIC, STATUS_TEXT, STATUS_FILL } from '../theme/theme';
+import type { Status } from '../theme/theme';
+import { FuseCircuit, FuseStatus } from '../../shared/types';
 
-// ─── Risk score color helper ─────────────────────────────────────────────────
-
-function riskColor(score: number): string {
-  if (score >= 7) return 'var(--sr)';
-  if (score >= 4) return 'var(--sa)';
-  return 'var(--sg)';
-}
+// ─── Risk score helpers ───────────────────────────────────────────────────────
 
 function riskLabel(score: number): string {
   if (score >= 7) return 'High risk';
@@ -21,14 +16,21 @@ function riskLabel(score: number): string {
   return 'None detected';
 }
 
+/** Same cut-offs the legacy riskColor() used: >=7 crit, >=4 warn, else neutral. */
+function riskStatus(score: number): Status {
+  if (score >= 7) return 'crit';
+  if (score >= 4) return 'warn';
+  return 'neutral';
+}
+
 // ─── Fuse status helpers ─────────────────────────────────────────────────────
 
-const FUSE_STATUS_COLOR: Record<FuseStatus, string> = {
-  normal:      'var(--sg)',
-  tested_ok:   'var(--sg)',
-  suspect:     'var(--sa)',
-  confirmed:   'var(--sr)',
-  unknown:     'var(--tm)',
+const FUSE_STATUS_TONE: Record<FuseStatus, Status> = {
+  normal:      'ok',
+  tested_ok:   'ok',
+  suspect:     'warn',
+  confirmed:   'crit',
+  unknown:     'neutral',
 };
 
 const FUSE_STATUS_VARIANT: Record<FuseStatus, 'ok' | 'warn' | 'crit' | 'muted'> = {
@@ -39,18 +41,18 @@ const FUSE_STATUS_VARIANT: Record<FuseStatus, 'ok' | 'warn' | 'crit' | 'muted'> 
   unknown:     'muted',
 };
 
-// ─── Voltage Timeline (shared with ElectricalScreen pattern) ─────────────────
+// ─── Voltage Timeline ────────────────────────────────────────────────────────
+
+const REFS: Array<{ v: number; label: string; status: Status; dim?: boolean }> = [
+  { v: 12.6, label: '12.6 Full', status: 'ok' },
+  { v: 12.4, label: '12.4 50%',  status: 'warn' },
+  { v: 12.0, label: '12.0 Crit', status: 'crit' },
+  { v: 11.8, label: '11.8 Dead', status: 'crit', dim: true },
+];
 
 function VoltageTimeline(): React.ReactElement {
   const history = useAppStore(s => s.history['ATRV'] ?? []);
   const recent  = history.slice(-120);
-
-  const REFS = [
-    { v: 12.6, label: '12.6 Full', color: 'var(--sg)' },
-    { v: 12.4, label: '12.4 50%',  color: 'var(--sa)' },
-    { v: 12.0, label: '12.0 Crit', color: 'var(--sr)' },
-    { v: 11.8, label: '11.8 Dead', color: 'rgba(255,36,64,0.5)' },
-  ];
 
   const W = 500, H = 100;
   const V_MIN = 11.6, V_MAX = 13.0;
@@ -58,9 +60,7 @@ function VoltageTimeline(): React.ReactElement {
 
   if (recent.length < 2) {
     return (
-      <div style={{ height: H + 20, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg4)', borderRadius: 0 }}>
-        <span style={{ fontSize: 11, color: 'var(--tm)' }}>Collecting voltage history…</span>
-      </div>
+      <EmptyState icon="ti-chart-dots" title="Collecting voltage history" message="Gathering battery voltage samples — check back in a moment." />
     );
   }
 
@@ -69,31 +69,39 @@ function VoltageTimeline(): React.ReactElement {
   const lastV  = values[values.length - 1];
   const firstV = values[0];
   const drift  = lastV - firstV;
-  const lineColor = lastV < 12.0 ? 'var(--sr)' : lastV < 12.4 ? 'var(--sa)' : '#9B8AFF';
+  const lineColor = lastV < 12.0 ? 'var(--crit)' : lastV < 12.4 ? 'var(--warn)' : 'var(--purple)';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <svg width="100%" viewBox={`-40 -8 ${W + 60} ${H + 20}`} style={{ overflow: 'visible' }}>
-        {REFS.map(({ v, label, color }) => (
+        {REFS.map(({ v, label, status, dim }) => (
           <g key={v}>
-            <line x1={0} y1={yOf(v)} x2={W} y2={yOf(v)} stroke={color} strokeWidth="0.7" strokeDasharray="4,3" />
-            <text x={W + 4} y={yOf(v) + 4} fontSize="8" fill={color} fontFamily="JetBrains Mono, Roboto Mono, monospace">{label}</text>
+            <line
+              x1={0} y1={yOf(v)} x2={W} y2={yOf(v)}
+              stroke={STATUS_FILL[status]} strokeOpacity={dim ? 0.4 : 0.8}
+              strokeWidth="0.7" strokeDasharray="4,3"
+            />
+            <text x={W + 4} y={yOf(v) + 4} style={{ ...NUMERIC, fontSize: 9, fill: STATUS_TEXT[status] }} opacity={dim ? 0.6 : 1}>
+              {label}
+            </text>
           </g>
         ))}
         <polyline points={pts} fill="none" stroke={lineColor} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
         {values.length > 0 && (
-          <circle cx={W} cy={yOf(lastV)} r="4" fill={lineColor} stroke="var(--bg2)" strokeWidth="1.5" />
+          <circle cx={W} cy={yOf(lastV)} r="4" fill={lineColor} stroke="var(--grouped)" strokeWidth="1.5" />
         )}
         {[11.6, 11.8, 12.0, 12.2, 12.4, 12.6, 12.8, 13.0].map(v => (
-          <text key={v} x={-4} y={yOf(v) + 3} fontSize="8" fill="var(--tm)" fontFamily="JetBrains Mono, Roboto Mono, monospace" textAnchor="end">{v}</text>
+          <text key={v} x={-4} y={yOf(v) + 3} style={{ ...NUMERIC, fontSize: 9, fill: 'var(--label-3)' }} textAnchor="end">{v}</text>
         ))}
       </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--tm)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace" }}>
-        <span>{recent.length} samples · {Math.round(recent.length * 0.5 / 60)} min window</span>
-        <span style={{ color: drift < -0.05 ? 'var(--sr)' : drift < -0.02 ? 'var(--sa)' : 'var(--sg)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>
+          {recent.length} samples · {Math.round(recent.length * 0.5 / 60)} min window
+        </span>
+        <span style={{ ...TYPE.caption, ...NUMERIC, color: drift < -0.05 ? STATUS_TEXT.crit : drift < -0.02 ? STATUS_TEXT.warn : 'var(--label-2)' }}>
           Drift: {drift >= 0 ? '+' : ''}{drift.toFixed(3)} V
         </span>
-        <span style={{ color: lineColor }}>Current: {lastV.toFixed(3)} V</span>
+        <span style={{ ...TYPE.caption, ...NUMERIC, color: lineColor }}>Current: {lastV.toFixed(3)} V</span>
       </div>
     </div>
   );
@@ -101,7 +109,7 @@ function VoltageTimeline(): React.ReactElement {
 
 // ─── Fuse Panel ──────────────────────────────────────────────────────────────
 
-function FusePanel({ title, fuses }: { title: string; fuses: FuseCircuit[] }): React.ReactElement {
+function FusePanel({ fuses }: { fuses: FuseCircuit[] }): React.ReactElement {
   const updateFuse = useAppStore(s => s.updateFuse);
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -114,84 +122,72 @@ function FusePanel({ title, fuses }: { title: string; fuses: FuseCircuit[] }): R
 
   return (
     <Card padding={0}>
-      <div style={{
-        padding: '8px 12px', background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
-        display: 'grid', gridTemplateColumns: '36px 1fr 50px 90px 70px', gap: 8, alignItems: 'center',
-      }}>
-        {['Amp', 'Circuit', 'Draw', 'Status', 'Action'].map(h => (
-          <span key={h} style={{
-            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-            letterSpacing: 1.2, textTransform: 'uppercase' as const, color: 'var(--tm)',
-          }}>{h}</span>
-        ))}
-      </div>
-      {fuses.map((f, i) => (
-        <React.Fragment key={f.id}>
-          <div
-            style={{
-              display: 'grid', gridTemplateColumns: '36px 1fr 50px 90px 70px', gap: 8,
-              padding: '8px 12px', alignItems: 'center',
-              borderBottom: i < fuses.length - 1 || expanded === f.id ? '1px solid var(--bg3)' : 'none',
-              background: f.status === 'confirmed' ? 'rgba(255,36,64,0.04)' : f.status === 'suspect' ? 'rgba(255,179,0,0.04)' : 'transparent',
-              cursor: 'pointer', transition: 'background 0.1s',
-            }}
-            onClick={() => setExpanded(expanded === f.id ? null : f.id)}
-            onMouseEnter={e => { if (f.status === 'unknown' || f.status === 'normal' || f.status === 'tested_ok') (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = f.status === 'confirmed' ? 'rgba(255,36,64,0.04)' : f.status === 'suspect' ? 'rgba(255,179,0,0.04)' : 'transparent'; }}
-          >
-            <span style={{
-              fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12,
-              color: FUSE_STATUS_COLOR[f.status], fontWeight: 600,
-            }}>
-              {f.amperage}A
-            </span>
-            <div>
-              <div style={{ fontSize: 12, color: 'var(--tw)' }}>{f.name}</div>
-              <div style={{ fontSize: 10, color: 'var(--tm)', marginTop: 1 }}>
-                {f.feeds.slice(0, 2).join(' · ')}{f.feeds.length > 2 ? ` +${f.feeds.length - 2}` : ''}
-              </div>
-            </div>
-            <span style={{
-              fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11,
-              color: f.estimatedDrawAmps && f.estimatedDrawAmps > 0.05 ? 'var(--sa)' : 'var(--tm)',
-            }}>
-              {f.estimatedDrawAmps ? `${(f.estimatedDrawAmps * 1000).toFixed(0)}mA` : '—'}
-            </span>
-            <Badge label={f.status.replace('_', ' ')} variant={FUSE_STATUS_VARIANT[f.status]} />
-            <Button size="sm" onClick={(e) => { e.stopPropagation(); cycleStatus(f); }}>
-              Cycle
-            </Button>
-          </div>
-          {expanded === f.id && (
-            <div style={{
-              padding: '10px 12px 10px 48px', background: 'var(--bg3)',
-              borderBottom: '2px solid var(--br)', fontSize: 11, color: 'var(--tm)', lineHeight: 1.7,
-            }}>
-              <div style={{ fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9, letterSpacing: 1.2, textTransform: 'uppercase' as const, color: 'var(--tm)', marginBottom: 4 }}>
-                Circuit detail
-              </div>
-              <div><strong style={{ color: 'var(--tw)' }}>Feeds:</strong> {f.feeds.join(', ')}</div>
-              {f.notes && <div style={{ marginTop: 4 }}><strong style={{ color: 'var(--tw)' }}>Notes:</strong> {f.notes}</div>}
-              {f.relatedDTCs.length > 0 && (
-                <div style={{ marginTop: 4 }}>
-                  <strong style={{ color: 'var(--tw)' }}>Related DTCs:</strong>{' '}
-                  {f.relatedDTCs.map(c => (
-                    <span key={c} style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", color: 'var(--sr)', marginRight: 6 }}>{c}</span>
-                  ))}
+      {fuses.map((f, i) => {
+        const isOpen = expanded === f.id;
+        const tint = f.status === 'confirmed' ? 'var(--crit-tint)' : f.status === 'suspect' ? 'var(--warn-tint)' : 'transparent';
+        return (
+          <React.Fragment key={f.id}>
+            <div
+              onClick={() => setExpanded(isOpen ? null : f.id)}
+              className={isOpen ? undefined : 'row-hover'}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '8px 12px', cursor: 'pointer',
+                background: isOpen ? 'var(--fill)' : tint,
+              }}
+            >
+              <span
+                aria-hidden
+                className={f.status === 'confirmed' ? 'pulse' : undefined}
+                style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: STATUS_FILL[FUSE_STATUS_TONE[f.status]] }}
+              />
+              <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--label)', width: 40, flexShrink: 0 }}>{f.amperage}A</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ ...TYPE.body, color: 'var(--label)' }}>{f.name}</div>
+                <div style={{ ...TYPE.caption, color: 'var(--label-3)' }}>
+                  {f.feeds.slice(0, 2).join(' · ')}{f.feeds.length > 2 ? ` +${f.feeds.length - 2}` : ''}
                 </div>
-              )}
-              {f.relatedModules.length > 0 && (
-                <div style={{ marginTop: 4 }}>
-                  <strong style={{ color: 'var(--tw)' }}>Related modules:</strong>{' '}
-                  {f.relatedModules.map(m => (
-                    <span key={m} style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", color: 'var(--gb)', marginRight: 6 }}>{m}</span>
-                  ))}
-                </div>
-              )}
+              </div>
+              <span style={{
+                ...TYPE.caption, ...NUMERIC, width: 70, textAlign: 'right', flexShrink: 0,
+                color: f.estimatedDrawAmps && f.estimatedDrawAmps > 0.05 ? STATUS_TEXT.warn : 'var(--label-3)',
+              }}>
+                {f.estimatedDrawAmps ? `${(f.estimatedDrawAmps * 1000).toFixed(0)} mA` : '—'}
+              </span>
+              <Badge label={f.status.replace('_', ' ')} variant={FUSE_STATUS_VARIANT[f.status]} />
+              <Button size="sm" onClick={e => { e.stopPropagation(); cycleStatus(f); }}>Cycle</Button>
             </div>
-          )}
-        </React.Fragment>
-      ))}
+            {isOpen && (
+              <div style={{ padding: '10px 12px 14px' }}>
+                <SectionHeader>Circuit detail</SectionHeader>
+                <div style={{ ...TYPE.body, color: 'var(--label)', marginTop: 6 }}>
+                  <strong>Feeds:</strong> {f.feeds.join(', ')}
+                </div>
+                {f.notes && (
+                  <div style={{ ...TYPE.body, color: 'var(--label)', marginTop: 4 }}><strong>Notes:</strong> {f.notes}</div>
+                )}
+                {f.relatedDTCs.length > 0 && (
+                  <div style={{ ...TYPE.body, color: 'var(--label)', marginTop: 4 }}>
+                    <strong>Related DTCs:</strong>{' '}
+                    {f.relatedDTCs.map(c => (
+                      <span key={c} style={{ ...NUMERIC, color: 'var(--crit-text)', marginRight: 8 }}>{c}</span>
+                    ))}
+                  </div>
+                )}
+                {f.relatedModules.length > 0 && (
+                  <div style={{ ...TYPE.body, color: 'var(--label)', marginTop: 4 }}>
+                    <strong>Related modules:</strong>{' '}
+                    {f.relatedModules.map(m => (
+                      <span key={m} style={{ ...NUMERIC, color: 'var(--accent-text)', marginRight: 8 }}>{m}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {i < fuses.length - 1 && <Divider />}
+          </React.Fragment>
+        );
+      })}
     </Card>
   );
 }
@@ -209,74 +205,66 @@ function ChecklistSection(): React.ReactElement {
 
   return (
     <>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8,
-        fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--tm)',
-      }}>
-        <span>{completed}/{checklist.length} steps completed</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)' }}>
+          {completed}/{checklist.length} steps completed
+        </span>
         {passed > 0 && <Badge label={`${passed} passed`} variant="ok" />}
         {failed > 0 && <Badge label={`${failed} failed`} variant="crit" />}
       </div>
       <Card padding={0}>
         {checklist.map((item, i) => (
-          <div key={item.id} style={{
-            padding: '10px 12px',
-            borderBottom: i < checklist.length - 1 ? '1px solid var(--bg3)' : 'none',
-            background: item.completed
-              ? item.passed ? 'rgba(0,230,118,0.03)' : 'rgba(255,36,64,0.03)'
-              : 'transparent',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-              <span style={{
-                fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11,
-                color: item.completed ? (item.passed ? 'var(--sg)' : 'var(--sr)') : 'var(--pp)',
-                width: 24, flexShrink: 0, paddingTop: 1,
-              }}>
-                {item.completed ? (item.passed ? '✓' : '✗') : `${item.step}.`}
-              </span>
-              <div style={{ flex: 1 }}>
+          <React.Fragment key={item.id}>
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+              padding: '8px 12px', minHeight: 32,
+              background: item.completed ? (item.passed ? 'var(--ok-tint)' : 'var(--crit-tint)') : 'transparent',
+            }}>
+              <i
+                aria-hidden
+                className={`ti ${item.completed ? (item.passed ? 'ti-circle-check' : 'ti-circle-x') : 'ti-circle-dashed'}`}
+                style={{
+                  fontSize: 16, marginTop: 1, flexShrink: 0,
+                  color: item.completed ? (item.passed ? 'var(--ok-text)' : 'var(--crit-text)') : 'var(--label-3)',
+                }}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
-                  fontSize: 12, color: 'var(--tw)', lineHeight: 1.5,
+                  ...TYPE.body, color: 'var(--label)',
                   opacity: item.completed ? 0.7 : 1,
                   textDecoration: item.completed ? 'line-through' : 'none',
                 }}>
-                  {item.description}
+                  {item.step}. {item.description}
                 </div>
                 {item.completed && item.notes && (
-                  <div style={{ fontSize: 10, color: 'var(--tm)', marginTop: 3, fontStyle: 'italic' }}>
-                    Note: {item.notes}
-                  </div>
+                  <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginTop: 2 }}>Note: {item.notes}</div>
                 )}
                 {item.completed && item.timestamp && (
-                  <div style={{ fontSize: 9, color: 'var(--tm)', marginTop: 2, fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace" }}>
+                  <div style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-3)', marginTop: 2 }}>
                     {new Date(item.timestamp).toLocaleTimeString()}
                   </div>
                 )}
               </div>
               {!item.completed && (
-                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
                   <input
                     placeholder="Notes…"
                     value={noteInput[item.id] ?? ''}
                     onChange={e => setNoteInput({ ...noteInput, [item.id]: e.target.value })}
                     onClick={e => e.stopPropagation()}
-                    style={{
-                      width: 120, padding: '3px 6px', fontSize: 10,
-                      background: 'var(--bg4)', border: '2px solid var(--br)',
-                      borderRadius: 0, color: 'var(--tw)',
-                      fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
-                    }}
+                    style={{ width: 130, height: 24 }}
                   />
-                  <Button size="sm" variant="primary" onClick={() => { toggle(item.id, true, noteInput[item.id] ?? ''); }}>
+                  <Button size="sm" variant="primary" onClick={() => toggle(item.id, true, noteInput[item.id] ?? '')}>
                     Pass
                   </Button>
-                  <Button size="sm" variant="danger" onClick={() => { toggle(item.id, false, noteInput[item.id] ?? ''); }}>
+                  <Button size="sm" variant="destructive" onClick={() => toggle(item.id, false, noteInput[item.id] ?? '')}>
                     Fail
                   </Button>
                 </div>
               )}
             </div>
-          </div>
+            {i < checklist.length - 1 && <Divider />}
+          </React.Fragment>
         ))}
       </Card>
     </>
@@ -326,32 +314,24 @@ function KnownCulprits(): React.ReactElement {
   return (
     <Card padding={0}>
       {culprits.map((c, i) => (
-        <div key={c.address} style={{
-          padding: '10px 12px',
-          borderBottom: i < culprits.length - 1 ? '1px solid var(--bg3)' : 'none',
-          transition: 'background 0.1s',
-        }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--gb)' }}>{c.address}</span>
-            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--tw)' }}>{c.component}</span>
-            <Badge label={c.drawRange} variant={c.severity} />
+        <React.Fragment key={c.address}>
+          <div className="row-hover" style={{ padding: '10px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-3)' }}>{c.address}</span>
+              <span style={{ ...TYPE.body, fontWeight: WEIGHT.medium, color: 'var(--label)' }}>{c.component}</span>
+              <Badge label={c.drawRange} variant={c.severity} />
+            </div>
+            <div style={{ ...TYPE.body, color: 'var(--label-2)', marginBottom: 4 }}>{c.description}</div>
+            <div style={{ ...TYPE.body, color: 'var(--label)' }}>
+              <strong>Fix:</strong> {c.fix}
+            </div>
           </div>
-          <div style={{ fontSize: 11, color: 'var(--tm)', lineHeight: 1.6, marginBottom: 4 }}>
-            {c.description}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--sg)', lineHeight: 1.5 }}>
-            <strong style={{ color: 'var(--tw)' }}>Fix:</strong> {c.fix}
-          </div>
-        </div>
+          {i < culprits.length - 1 && <Divider />}
+        </React.Fragment>
       ))}
-      <div style={{
-        padding: '6px 12px', background: 'var(--bg4)',
-        fontSize: 10, color: 'var(--tm)', fontStyle: 'italic',
-      }}>
-        Platform: {platform.name}
+      <Divider />
+      <div style={{ padding: '8px 12px' }}>
+        <span style={{ ...TYPE.caption, color: 'var(--label-3)' }}>Platform: {platform.name}</span>
       </div>
     </Card>
   );
@@ -395,10 +375,7 @@ function PowerConsumers(): React.ReactElement {
   if (!isConnected && modules.length === 0) {
     return (
       <Card>
-        <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--tm)', fontSize: 12 }}>
-          <i className="ti ti-plug-connected-x" style={{ fontSize: 20, display: 'block', marginBottom: 6 }} />
-          Connect to adapter to detect active power consumers
-        </div>
+        <EmptyState icon="ti-plug-connected-x" title="No power consumer data" message="Connect the adapter to detect active power consumers." />
       </Card>
     );
   }
@@ -408,37 +385,18 @@ function PowerConsumers(): React.ReactElement {
     return order[a.status] - order[b.status];
   });
 
-  const statusColor = { rogue: 'var(--sr)', active: 'var(--sa)', sleep: 'var(--sg)' };
-  const statusIcon  = { rogue: 'ti-alert-triangle', active: 'ti-bolt', sleep: 'ti-zzz' };
+  const variant: Record<'rogue' | 'active' | 'sleep', 'crit' | 'warn' | 'ok'> = { rogue: 'crit', active: 'warn', sleep: 'ok' };
 
   return (
     <Card padding={0}>
-      <div style={{
-        padding: '8px 12px', background: 'var(--bg4)', borderBottom: '2px solid var(--br)',
-        display: 'grid', gridTemplateColumns: '1fr 90px 70px 90px', gap: 8,
-      }}>
-        {['Consumer', 'Est. Draw', 'State', 'Source'].map(h => (
-          <span key={h} style={{
-            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-            letterSpacing: 1.2, textTransform: 'uppercase' as const, color: 'var(--tm)',
-          }}>{h}</span>
-        ))}
-      </div>
       {consumers.map((c, i) => (
-        <div key={`${c.name}-${i}`} style={{
-          display: 'grid', gridTemplateColumns: '1fr 90px 70px 90px', gap: 8,
-          padding: '6px 12px', alignItems: 'center',
-          borderBottom: i < consumers.length - 1 ? '1px solid var(--bg3)' : 'none',
-          background: c.status === 'rogue' ? 'rgba(255,59,80,0.04)' : 'transparent',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--tw)' }}>
-            <i className={`ti ${statusIcon[c.status]}`} style={{ fontSize: 12, color: statusColor[c.status] }} />
-            {c.name}
-          </div>
-          <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: statusColor[c.status] }}>{c.draw}</span>
-          <Badge label={c.status} variant={c.status === 'rogue' ? 'crit' : c.status === 'active' ? 'warn' : 'ok'} />
-          <span style={{ fontSize: 10, color: 'var(--tm)' }}>{c.source}</span>
-        </div>
+        <DataRow
+          key={`${c.name}-${i}`}
+          name={c.name}
+          subtext={c.source}
+          value={c.draw}
+          badge={<Badge label={c.status} variant={variant[c.status]} />}
+        />
       ))}
     </Card>
   );
@@ -487,61 +445,62 @@ export function ParasiteScreen(): React.ReactElement {
       )}
 
       {/* ── Hero row — risk overview ──────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
-        <HeroCard
+      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', gap: 8 }}>
+        <Metric
+          size="hero"
           label="Parasitic draw risk score"
           value={riskScore.toFixed(1)}
           unit="/ 10"
           subtext={riskLabel(riskScore)}
-          valueColor={riskColor(riskScore)}
-          accentBorder={riskColor(riskScore)}
-          pid="ATRV"
-          sparkColor="#9B8AFF"
+          status={riskStatus(riskScore)}
+          spark={{ pid: 'ATRV', color: 'var(--purple)' }}
           staleAt={batteryAt}
         />
-        <HeroCard
+        <Metric
+          size="hero"
           label="Battery voltage"
           value={batteryV > 0 ? batteryV.toFixed(2) : '—'}
           unit="V"
-          valueColor={batteryV < 12.0 ? 'var(--sr)' : batteryV < 12.4 ? 'var(--sa)' : '#9B8AFF'}
-          pid="ATRV"
-          sparkColor="#9B8AFF"
+          status={batteryV > 0 ? (batteryV < 12.0 ? 'crit' : batteryV < 12.4 ? 'warn' : 'neutral') : 'neutral'}
+          spark={{ pid: 'ATRV', color: 'var(--purple)' }}
           staleAt={batteryAt}
           subtext={voltageTrend === 'stable' ? 'Stable' : voltageTrend === 'dropping' ? 'Dropping' : 'Critical drop'}
         />
-        <HeroCard
+        <Metric
+          size="hero"
           label="Discharge rate"
           value={voltDropRate > 0 ? `${(voltDropRate * 1000).toFixed(1)}` : '—'}
           unit="mV/min"
           subtext={voltDropRate > 5 ? 'High — active draw' : voltDropRate > 1 ? 'Moderate drain' : 'Normal'}
-          valueColor={voltDropRate > 5 ? 'var(--sr)' : voltDropRate > 1 ? 'var(--sa)' : 'var(--sg)'}
-          pid="ATRV"
-          sparkColor="var(--sa)"
+          status={voltDropRate > 5 ? 'crit' : voltDropRate > 1 ? 'warn' : 'neutral'}
+          spark={{ pid: 'ATRV', color: 'var(--warn)' }}
         />
       </div>
 
       {/* ── Risk breakdown ────────────────────────────────────────────── */}
       <SectionHeader>Risk breakdown</SectionHeader>
       <Grid cols={4}>
-        <CompactArcGauge label="Risk" value={Math.round(riskScore)} max={10} unit="/ 10" color={riskColor(riskScore)} />
-        <DenseMetricTile
+        <Gauge size="compact" label="Risk" value={Math.round(riskScore)} max={10} unit="/ 10" />
+        <Metric
+          size="compact"
           label="Rogue modules"
           value={rogueCount}
-          valueColor={rogueCount > 0 ? 'var(--sr)' : 'var(--sg)'}
+          status={rogueCount > 0 ? 'crit' : 'neutral'}
           subtext={suspectCount > 0 ? `${suspectCount} suspect` : 'All sleeping'}
           barPercent={rogueCount > 0 ? Math.min(100, rogueCount * 33) : 0}
-          barColor="var(--sr)"
         />
-        <DenseMetricTile
+        <Metric
+          size="compact"
           label="Active DTCs"
           value={activeDTCs}
-          valueColor={activeDTCs > 0 ? 'var(--sa)' : 'var(--sg)'}
+          status={activeDTCs > 0 ? 'warn' : 'neutral'}
           subtext="Body (B) & network (U) weighted"
         />
-        <DenseMetricTile
+        <Metric
+          size="compact"
           label="Fuse circuits"
           value={confirmedFuses > 0 ? `${confirmedFuses} confirmed` : suspectFuses > 0 ? `${suspectFuses} suspect` : 'All clear'}
-          valueColor={confirmedFuses > 0 ? 'var(--sr)' : suspectFuses > 0 ? 'var(--sa)' : 'var(--sg)'}
+          status={confirmedFuses > 0 ? 'crit' : suspectFuses > 0 ? 'warn' : 'neutral'}
           subtext={`${ipfbFuses.length + uhfrcFuses.length} total circuits`}
         />
       </Grid>
@@ -562,11 +521,11 @@ export function ParasiteScreen(): React.ReactElement {
 
       {/* ── Fuse panel — IPFB ─────────────────────────────────────────── */}
       <SectionHeader>Instrument panel fuse block (IPFB)</SectionHeader>
-      <FusePanel title="IPFB" fuses={ipfbFuses} />
+      <FusePanel fuses={ipfbFuses} />
 
       {/* ── Fuse panel — UHFRC ────────────────────────────────────────── */}
       <SectionHeader>Under-hood fuse relay center (UHFRC)</SectionHeader>
-      <FusePanel title="UHFRC" fuses={uhfrcFuses} />
+      <FusePanel fuses={uhfrcFuses} />
 
       {/* ── Known culprits — platform-specific ───────────────────────── */}
       {isGMT800 && (
