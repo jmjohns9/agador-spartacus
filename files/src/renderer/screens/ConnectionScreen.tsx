@@ -205,7 +205,8 @@ export function ConnectionScreen(): React.ReactElement {
   const [scanError,     setScanError]     = useState('');
 
   const isConnected   = connectionStatus === 'connected';
-  const isBusy        = connectionStatus === 'connecting' || connectionStatus === 'initializing' || connecting;
+  const inProgress    = connectionStatus === 'connecting' || connectionStatus === 'initializing';
+  const isBusy        = inProgress || connecting;
   const effectivePort = selectedPort;
 
   // Derive a human-readable device name from the raw port path. macOS device
@@ -341,6 +342,12 @@ export function ConnectionScreen(): React.ReactElement {
           {isConnected && (
             <Button variant="danger" icon="ti-plug-x" onClick={handleDisconnect}>
               Disconnect
+            </Button>
+          )}
+          {/* Abandon a connect attempt still in progress (same IPC as Disconnect) */}
+          {inProgress && (
+            <Button icon="ti-x" onClick={handleDisconnect}>
+              Cancel
             </Button>
           )}
         </div>
