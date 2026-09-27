@@ -4,7 +4,8 @@
 // Native vibrancy is not captured (CDP renders web content only).
 // Usage: npm run build && node scripts/capture-screens.mjs <outDir> [--only live,health]
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
@@ -17,11 +18,16 @@ const PORT = 9333;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 mkdirSync(outDir, { recursive: true });
+// Give every run its own throwaway userData dir so freeze frames, appearance.json
+// and other auto-saved state never land in the user's real
+// ~/Library/Application Support/silverado-dx. Confirmed empirically that Electron 42
+// honours --user-data-dir for app.getPath('userData').
+const userDataDir = mkdtempSync(path.join(os.tmpdir(), 'agador-capture-'));
 // Some shells (including this repo's agent sandbox) export ELECTRON_RUN_AS_NODE=1,
 // which makes the "electron" binary boot as plain Node — no app/BrowserWindow,
 // no CDP target. Strip it so the harness always gets a real Electron process.
 const { ELECTRON_RUN_AS_NODE: _unused, ...cleanEnv } = process.env;
-const child = spawn(electronBin, ['.', `--remote-debugging-port=${PORT}`], {
+const child = spawn(electronBin, ['.', `--remote-debugging-port=${PORT}`, `--user-data-dir=${userDataDir}`], {
   stdio: 'ignore',
   env: { ...cleanEnv, NODE_ENV: 'production' },
 });
@@ -72,4 +78,11 @@ try {
   ws.close();
 } finally {
   child.kill();
+  // Wait for the process to actually exit before deleting its userData dir —
+  // otherwise Electron's shutdown can recreate files after rmSync runs.
+  await Promise.race([
+    new Promise(r => child.once('exit', r)),
+    sleep(5000),
+  ]);
+  rmSync(userDataDir, { recursive: true, force: true });
 }
