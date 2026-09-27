@@ -16,6 +16,11 @@ export class OBDProtocolManager extends EventEmitter {
   private supportedPIDs = new Set<string>();
   private cycleCount = 0;
   private pollLoopRunning = false;
+  // True between startPolling() and stopPolling(). A DTC scan / VIN read /
+  // clear pauses the loop via pollingActive and only resumes it if polling is
+  // still wanted — otherwise a stopPolling() (disconnect) made mid-operation
+  // was undone and the loop ran forever on a dead session.
+  private pollingWanted = false;
 
   constructor(elm: ELM327Commander) {
     super();
@@ -36,7 +41,7 @@ export class OBDProtocolManager extends EventEmitter {
     const vin = await this.elm.readVIN();
     this.log(vin ? `VIN read: ${vin}` : 'VIN not available from ECM');
 
-    if (wasPolling) {
+    if (wasPolling && this.pollingWanted) {
       this.pollingActive = true;
       this.runPollLoop();
     }
@@ -81,6 +86,7 @@ export class OBDProtocolManager extends EventEmitter {
   // ── Start the sequential polling loop ────────────────────────────────────────
   startPolling(): void {
     if (this.pollingActive) return;
+    this.pollingWanted = true;
     this.pollingActive = true;
     this.cycleCount = 0;
     this.log('Sequential polling loop starting');
@@ -88,6 +94,7 @@ export class OBDProtocolManager extends EventEmitter {
   }
 
   stopPolling(): void {
+    this.pollingWanted = false;
     this.pollingActive = false;
     this.log('Polling stopped');
   }
@@ -236,7 +243,7 @@ export class OBDProtocolManager extends EventEmitter {
     this.log(`DTC scan complete — ${results.length} codes found`);
 
     // Resume polling
-    if (wasPolling) {
+    if (wasPolling && this.pollingWanted) {
       this.pollingActive = true;
       this.runPollLoop();
     }
@@ -292,7 +299,7 @@ export class OBDProtocolManager extends EventEmitter {
     const success = resp.success && !resp.raw.includes('ERROR');
     this.log(success ? 'DTC codes cleared successfully' : 'Failed to clear DTC codes');
 
-    if (wasPolling) {
+    if (wasPolling && this.pollingWanted) {
       this.pollingActive = true;
       this.runPollLoop();
     }
