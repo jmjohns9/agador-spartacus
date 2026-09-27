@@ -289,7 +289,7 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
 
     addLog({ timestamp: Date.now(), level: 'ok', message: `Connected — ${info.firmwareVersion} — Protocol: ${info.protocol} — Battery: ${info.voltage}` });
 
-    startRSSIPolling();
+    startRSSIPolling(gen);
     startOBDManager(gen, commander);
   } catch (err) {
     commander?.close();
@@ -311,10 +311,13 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
 
 let rssiTimer: ReturnType<typeof setInterval> | null = null;
 
-function startRSSIPolling(): void {
+function startRSSIPolling(gen: number): void {
   stopRSSIPolling();
   rssiTimer = setInterval(() => {
     execFile('system_profiler', ['SPBluetoothDataType', '-json'], { timeout: 5000 }, (err, stdout) => {
+      // system_profiler takes seconds; drop a result that lands after the
+      // session ended, or it would re-post an RSSI that endSession cleared.
+      if (gen !== sessionGen) return;
       if (err) { sendToRenderer('obd:bt-rssi', null); return; }
       try {
         const data = JSON.parse(stdout);
