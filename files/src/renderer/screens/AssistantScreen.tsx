@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAppStore, ChatMessage, vehicleDisplayName } from '../store/appStore';
-import { Badge, Button } from '../components/layout/UIComponents';
+import { Badge, Button, Divider, EmptyState } from '../components/layout/UIComponents';
+import { TYPE, WEIGHT, NUMERIC, RADIUS } from '../theme/theme';
 import { PID_MAP } from '../../core/pidCatalog';
 
 // ─── AssistantScreen — ask Claude about the live session ─────────────────────
@@ -41,20 +42,9 @@ interface ClaudeConfigInfo {
 // ── Per-message hover-action button ────────────────────────────────────────
 function MsgAction({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
   return (
-    <button
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 4,
-        background: 'transparent', border: '2px solid var(--br)', borderRadius: 0,
-        padding: '3px 7px', cursor: 'pointer', color: 'var(--tm)',
-        fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9, letterSpacing: 1.0, textTransform: 'uppercase',
-      }}
-    >
-      <i className={`ti ${icon}`} style={{ fontSize: 11 }} />
+    <Button size="sm" variant="plain" icon={icon} onClick={onClick} title={label} aria-label={label}>
       {label}
-    </button>
+    </Button>
   );
 }
 
@@ -310,14 +300,11 @@ export function AssistantScreen(): React.ReactElement {
       {/* ── Top bar: identity + 2 toggles + overflow ─────────────────── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px',
-        borderBottom: '2px solid var(--br)', flexShrink: 0,
-        background: 'var(--bg2)',
+        boxShadow: 'inset 0 -1px 0 var(--separator)', flexShrink: 0,
+        background: 'var(--grouped)',
       }}>
-        <i className="ti ti-sparkles" style={{ fontSize: 16, color: 'var(--pp)' }} />
-        <span style={{
-          fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
-          fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', color: 'var(--tw)',
-        }}>
+        <i className="ti ti-sparkles" style={{ fontSize: 16, color: 'var(--accent-text)' }} aria-hidden />
+        <span style={{ ...TYPE.headline, color: 'var(--label)' }}>
           Claude diagnostic assistant
         </span>
         <Badge
@@ -325,7 +312,7 @@ export function AssistantScreen(): React.ReactElement {
           variant={config?.hasKey ? 'ok' : 'warn'}
         />
         {(sessionUsage.i + sessionUsage.o) > 0 && (
-          <span title="Session token usage (input + output)" style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--tm)' }}>
+          <span title="Session token usage (input + output)" style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)' }}>
             {sessionUsage.i.toLocaleString()} in · {sessionUsage.o.toLocaleString()} out
           </span>
         )}
@@ -353,24 +340,21 @@ export function AssistantScreen(): React.ReactElement {
         <div ref={menuRef} style={{ position: 'relative' }}>
           <Button
             size="sm"
+            icon="ti-dots"
             onClick={() => setShowMenu(m => !m)}
             title="More actions"
+            aria-label="More actions"
             aria-haspopup="menu"
             aria-expanded={showMenu}
-          >
-            ⋯
-          </Button>
+          />
           {showMenu && (
             <div role="menu" style={{
               position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 300,
-              background: 'var(--bg2)', border: '2px solid var(--br)',
-              minWidth: 260, padding: 6,
+              background: 'var(--elevated)', borderRadius: RADIUS.card,
+              boxShadow: 'inset 0 0 0 0.5px var(--separator), 0 8px 24px var(--shadow)',
+              minWidth: 260, padding: 8,
             }}>
-              <div style={{
-                fontSize: 9, color: 'var(--tm)',
-                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
-                letterSpacing: 1.2, textTransform: 'uppercase', padding: '4px 8px',
-              }}>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', padding: '4px 8px' }}>
                 Model
               </div>
               {config?.models.map(m => (
@@ -378,41 +362,48 @@ export function AssistantScreen(): React.ReactElement {
                   key={m.id}
                   role="menuitemradio"
                   aria-checked={config.model === m.id}
+                  className="row-hover"
                   onClick={() => { setModel(m.id); setShowMenu(false); }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
-                    background: 'transparent', border: 'none', borderRadius: 0,
-                    padding: '6px 8px', cursor: 'pointer', color: 'var(--tw)', fontSize: 11,
+                    background: 'transparent', borderRadius: RADIUS.control,
+                    padding: '6px 8px', color: 'var(--label)', ...TYPE.body,
                   }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg3)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                 >
                   <i className={`ti ${config.model === m.id ? 'ti-circle-check-filled' : 'ti-circle'}`}
-                     style={{ fontSize: 14, color: config.model === m.id ? 'var(--pp)' : 'var(--tm)' }} />
+                     style={{ fontSize: 14, color: config.model === m.id ? 'var(--accent-text)' : 'var(--label-3)' }} aria-hidden />
                   {m.label}
                 </button>
               ))}
-              <div style={{ height: 1, background: 'var(--br)', margin: '6px 0' }} />
+              <Divider />
               <button
                 role="menuitem"
+                className="row-hover"
                 onClick={() => { exportChat(); setShowMenu(false); }}
                 disabled={messages.length === 0}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', background: 'transparent', border: 'none', borderRadius: 0, padding: '6px 8px', cursor: messages.length ? 'pointer' : 'not-allowed', color: messages.length ? 'var(--tw)' : 'var(--tm)', fontSize: 11 }}
-                onMouseEnter={e => { if (messages.length) (e.currentTarget as HTMLElement).style.background = 'var(--bg3)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                  background: 'transparent', borderRadius: RADIUS.control,
+                  padding: '6px 8px', color: messages.length ? 'var(--label)' : 'var(--label-3)', ...TYPE.body,
+                  opacity: messages.length ? 1 : 0.5,
+                }}
               >
-                <i className="ti ti-download" style={{ fontSize: 14 }} />
+                <i className="ti ti-download" style={{ fontSize: 14 }} aria-hidden />
                 Export chat as Markdown
               </button>
               <button
                 role="menuitem"
+                className="row-hover"
                 onClick={() => { clearChat(); setShowMenu(false); }}
                 disabled={messages.length === 0}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', background: 'transparent', border: 'none', borderRadius: 0, padding: '6px 8px', cursor: messages.length ? 'pointer' : 'not-allowed', color: messages.length ? 'var(--sr)' : 'var(--tm)', fontSize: 11 }}
-                onMouseEnter={e => { if (messages.length) (e.currentTarget as HTMLElement).style.background = 'var(--bg3)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                  background: 'transparent', borderRadius: RADIUS.control,
+                  padding: '6px 8px', color: messages.length ? 'var(--crit-text)' : 'var(--label-3)', ...TYPE.body,
+                  opacity: messages.length ? 1 : 0.5,
+                }}
               >
-                <i className="ti ti-trash" style={{ fontSize: 14 }} />
+                <i className="ti ti-trash" style={{ fontSize: 14 }} aria-hidden />
                 Clear conversation
               </button>
             </div>
@@ -423,23 +414,18 @@ export function AssistantScreen(): React.ReactElement {
       {/* ── Snapshot preview ─────────────────────────────────────────── */}
       {showSnapshot && (
         <div style={{
-          padding: '10px 14px', borderBottom: '2px solid var(--br)',
-          background: 'var(--bg2)', flexShrink: 0,
+          padding: '10px 14px', boxShadow: 'inset 0 -1px 0 var(--separator)',
+          background: 'var(--grouped)', flexShrink: 0,
         }}>
-          <div style={{
-            fontSize: 9, color: 'var(--tm)',
-            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
-            letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 6,
-          }}>
-            <i className="ti ti-eye" style={{ fontSize: 11, marginRight: 5 }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, ...TYPE.caption, color: 'var(--label-2)', marginBottom: 6 }}>
+            <i className="ti ti-eye" style={{ fontSize: 12 }} aria-hidden />
             What Claude sees with every question
           </div>
-          <pre style={{
+          <pre className="selectable" style={{
             margin: 0, padding: '8px 10px',
-            background: 'var(--bg3)', border: '2px solid var(--br)', borderRadius: 0,
-            fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--tw)',
+            background: 'var(--fill)', borderRadius: RADIUS.control,
+            ...TYPE.caption, ...NUMERIC, color: 'var(--label)',
             whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 180, overflowY: 'auto',
-            scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent',
           }}>{snapshotPreview}</pre>
         </div>
       )}
@@ -447,14 +433,15 @@ export function AssistantScreen(): React.ReactElement {
       {/* ── Setup panel ──────────────────────────────────────────────── */}
       {showSetup && (
         <div style={{
-          padding: '12px 14px', borderBottom: '2px solid var(--br)',
-          background: 'var(--bg2)', flexShrink: 0,
+          padding: '12px 14px', boxShadow: 'inset 0 -1px 0 var(--separator)',
+          background: 'var(--grouped)', flexShrink: 0,
         }}>
-          <div style={{ fontSize: 11, color: 'var(--tm)', marginBottom: 8, lineHeight: 1.6 }}>
-            Paste your Claude API key (starts with <code style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", color: 'var(--pp)' }}>sk-ant-</code>).
-            Get one at <span style={{ color: 'var(--gb)' }}>console.anthropic.com</span> → API Keys.
+          <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginBottom: 8, lineHeight: '18px' }}>
+            Paste your Claude API key (starts with{' '}
+            <span style={{ ...NUMERIC, padding: '2px 6px', borderRadius: 4, background: 'var(--fill)', color: 'var(--accent-text)' }}>sk-ant-</span>).
+            Get one at <span style={{ ...NUMERIC, color: 'var(--accent-text)' }}>console.anthropic.com</span> → API Keys.
             The key is stored locally on this Mac only{config?.hasKey ? ` — current key ends in ${config.keyHint}` : ''}.
-            {config?.hasKey && <> Current model: <strong style={{ color: 'var(--tw)' }}>{currentModelLabel}</strong> (change via the ⋯ menu).</>}
+            {config?.hasKey && <> Current model: <strong style={{ color: 'var(--label)' }}>{currentModelLabel}</strong> (change via the ⋯ menu).</>}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <input
@@ -464,12 +451,7 @@ export function AssistantScreen(): React.ReactElement {
               aria-label="Claude API key"
               onChange={e => setKeyDraft(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') saveSetup(); }}
-              style={{
-                flex: 1, padding: '8px 10px', fontSize: 11,
-                fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
-                background: 'var(--bg3)', border: '2px solid var(--br)', borderRadius: 0,
-                color: 'var(--tw)',
-              }}
+              style={{ flex: 1, ...NUMERIC }}
             />
             <Button variant="primary" onClick={saveSetup} disabled={!keyDraft.trim() && !config?.hasKey}>
               Save
@@ -477,17 +459,18 @@ export function AssistantScreen(): React.ReactElement {
           </div>
 
           {/* Advanced: custom system prompt */}
-          <button
+          <Button
+            variant="plain" size="sm"
+            icon={showAdvanced ? 'ti-chevron-down' : 'ti-chevron-right'}
             onClick={() => setShowAdvanced(a => !a)}
             aria-expanded={showAdvanced}
-            style={{ marginTop: 12, background: 'none', border: 'none', color: 'var(--tm)', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+            style={{ marginTop: 12 }}
           >
-            <i className={`ti ${showAdvanced ? 'ti-chevron-down' : 'ti-chevron-right'}`} style={{ fontSize: 12 }} />
             Advanced — custom system prompt
-          </button>
+          </Button>
           {showAdvanced && config && (
             <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 10, color: 'var(--tm)', marginBottom: 6, lineHeight: 1.5 }}>
+              <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginBottom: 6, lineHeight: '16px' }}>
                 Override the assistant's built-in instructions. Leave blank to use the default
                 ({config.defaultSystemPrompt.length} chars). The session snapshot is appended automatically.
               </div>
@@ -497,17 +480,11 @@ export function AssistantScreen(): React.ReactElement {
                 placeholder={config.defaultSystemPrompt}
                 rows={6}
                 aria-label="Custom system prompt"
-                style={{
-                  width: '100%', padding: '8px 10px', fontSize: 10,
-                  fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", lineHeight: 1.5,
-                  boxSizing: 'border-box',
-                  background: 'var(--bg3)', border: '2px solid var(--br)', borderRadius: 0,
-                  color: 'var(--tw)',
-                }}
+                style={{ width: '100%', boxSizing: 'border-box', ...TYPE.caption }}
               />
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                <Button variant="primary" onClick={saveCustomPrompt}>Save prompt</Button>
-                <Button variant="ghost" onClick={() => setPromptDraft('')}>Reset to default</Button>
+                <Button variant="primary" size="sm" onClick={saveCustomPrompt}>Save prompt</Button>
+                <Button variant="secondary" size="sm" onClick={() => setPromptDraft('')}>Reset to default</Button>
               </div>
             </div>
           )}
@@ -518,64 +495,46 @@ export function AssistantScreen(): React.ReactElement {
       <div ref={scrollRef} style={{
         flex: 1, overflowY: 'auto', padding: '14px',
         display: 'flex', flexDirection: 'column', gap: 10,
-        scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent',
       }}>
         {messages.length === 0 && !busy && (
-          <div style={{ margin: 'auto', maxWidth: 620, textAlign: 'center' }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: 0,
-              background: 'rgba(255,87,34,0.06)', border: '1px solid rgba(255,87,34,0.2)',
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              marginBottom: 12,
-            }}>
-              <i className="ti ti-sparkles" style={{ fontSize: 24, color: 'var(--pp)' }} />
-            </div>
-            <div style={{
-              fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
-              fontSize: 13, letterSpacing: 0.8, textTransform: 'uppercase',
-              color: 'var(--tw)', marginBottom: 6,
-            }}>
-              Ask Claude about {vehicleDisplayName(vehicle) !== 'No vehicle set' ? vehicleDisplayName(vehicle) : 'this vehicle'}, live
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--tm)', lineHeight: 1.6, marginBottom: 16 }}>
-              Every question includes a snapshot of the current session — live readings,
-              DTCs, and recent logs — so answers are grounded in what the app is actually seeing.
-              Type <code style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", color: 'var(--pp)', fontSize: 10 }}>/</code> for slash commands.
-            </div>
+          <div style={{ margin: 'auto', maxWidth: 460 }}>
+            <EmptyState
+              icon="ti-sparkles"
+              title={`Ask Claude about ${vehicleDisplayName(vehicle) !== 'No vehicle set' ? vehicleDisplayName(vehicle) : 'this vehicle'}, live`}
+              message="Every question includes a snapshot of the current session — live readings, DTCs, and recent logs — so answers are grounded in what the app is actually seeing. Type / for slash commands."
+            />
           </div>
         )}
 
         {messages.map((m, i) => {
           const isLastAssistant = m.role === 'assistant' && i === messages.length - 1 && !busy;
+          const isUser  = m.role === 'user';
+          const isError = m.role === 'error';
           return (
-            <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-              <div style={{
-                maxWidth: '80%', padding: '10px 13px', borderRadius: 0, fontSize: 12, lineHeight: 1.6,
+            <div key={i} style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+              <div className="selectable" style={{
+                maxWidth: '80%', padding: '10px 13px', borderRadius: 12, ...TYPE.body, lineHeight: '20px',
                 whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                background: m.role === 'user' ? 'rgba(255,87,34,0.05)'
-                  : m.role === 'error' ? 'rgba(255,36,64,0.05)' : 'var(--bg2)',
-                border: `1px solid ${m.role === 'user' ? 'rgba(255,87,34,0.2)'
-                  : m.role === 'error' ? 'rgba(255,36,64,0.3)' : 'var(--br)'}`,
-                color: m.role === 'error' ? 'var(--sr)' : 'var(--tw)',
+                background: isUser ? 'var(--accent)' : isError ? 'var(--crit-tint)' : 'var(--grouped)',
+                boxShadow: isUser ? 'none' : isError ? 'inset 0 0 0 1px var(--crit)' : 'inset 0 0 0 1px var(--separator)',
+                color: isUser ? 'var(--on-accent)' : isError ? 'var(--crit-text)' : 'var(--label)',
               }}>
                 {m.role === 'assistant' && (
                   <div style={{
-                    fontSize: 9, color: 'var(--pp)',
-                    fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
-                    letterSpacing: 1.2, textTransform: 'uppercase',
-                    marginBottom: 5, display: 'flex', alignItems: 'center', gap: 8,
+                    display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5,
+                    ...TYPE.caption, fontWeight: WEIGHT.semibold, color: 'var(--accent-text)',
                   }}>
                     <span>
-                      <i className="ti ti-sparkles" style={{ fontSize: 10, marginRight: 4 }} />
+                      <i className="ti ti-sparkles" style={{ fontSize: 11, marginRight: 4 }} aria-hidden />
                       Claude
                     </span>
                     {m.model && (
-                      <span style={{ color: 'var(--tm)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontWeight: 400, letterSpacing: 0, fontSize: 9 }}>
+                      <span style={{ ...NUMERIC, color: 'var(--label-2)', fontWeight: WEIGHT.regular }}>
                         {m.model.replace('claude-', '')}
                       </span>
                     )}
                     {m.usage && (
-                      <span style={{ color: 'var(--tm)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontWeight: 400, letterSpacing: 0, fontSize: 9 }}>
+                      <span style={{ ...NUMERIC, color: 'var(--label-2)', fontWeight: WEIGHT.regular }}>
                         · {m.usage.input_tokens}↑ {m.usage.output_tokens}↓
                       </span>
                     )}
@@ -598,21 +557,19 @@ export function AssistantScreen(): React.ReactElement {
         {/* Live streaming bubble */}
         {busy && (
           <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-            <div aria-live="polite" style={{
-              maxWidth: '80%', padding: '10px 13px', borderRadius: 0, fontSize: 12, lineHeight: 1.6,
+            <div aria-live="polite" className="selectable" style={{
+              maxWidth: '80%', padding: '10px 13px', borderRadius: 12, ...TYPE.body, lineHeight: '20px',
               whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-              background: 'var(--bg2)', border: '1px solid var(--pp)', color: 'var(--tw)',
+              background: 'var(--grouped)', boxShadow: 'inset 0 0 0 1px var(--accent)', color: 'var(--label)',
             }}>
               <div style={{
-                fontSize: 9, color: 'var(--pp)',
-                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
-                letterSpacing: 1.2, textTransform: 'uppercase',
-                marginBottom: 5, display: 'flex', alignItems: 'center', gap: 6,
+                display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5,
+                ...TYPE.caption, fontWeight: WEIGHT.semibold, color: 'var(--accent-text)',
               }}>
-                <i className="ti ti-loader" style={{ fontSize: 11, animation: 'spin 1s linear infinite' }} />
+                <i className="ti ti-loader" style={{ fontSize: 12, animation: 'spin 1s linear infinite' }} aria-hidden />
                 Claude {streamingText ? 'is replying' : 'is reading the session data'}…
               </div>
-              {streamingText || <span style={{ color: 'var(--tm)' }}>…</span>}
+              {streamingText || <span style={{ color: 'var(--label-2)' }}>…</span>}
             </div>
           </div>
         )}
@@ -621,26 +578,17 @@ export function AssistantScreen(): React.ReactElement {
       {/* ── Quick actions ────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '8px 14px 0', flexShrink: 0 }}>
         {QUICK_ACTIONS.map(q => (
-          <button
+          <Button
             key={q.label}
-            onClick={() => send(q.prompt)}
+            size="sm"
+            variant="secondary"
+            icon={q.icon}
             disabled={busy || !config?.hasKey}
             title={q.prompt}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              background: 'var(--bg2)', border: '2px solid var(--br)', borderRadius: 0,
-              padding: '5px 10px', cursor: (busy || !config?.hasKey) ? 'not-allowed' : 'pointer',
-              color: (busy || !config?.hasKey) ? 'var(--tm)' : 'var(--tw)',
-              fontSize: 10, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
-              letterSpacing: 0.4, textTransform: 'uppercase',
-              transition: 'border-color 0.15s',
-            }}
-            onMouseEnter={e => { if (!busy && config?.hasKey) (e.currentTarget as HTMLElement).style.borderColor = 'var(--bs)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--br)'; }}
+            onClick={() => send(q.prompt)}
           >
-            <i className={`ti ${q.icon}`} style={{ fontSize: 11, color: 'var(--pp)' }} />
             {q.label}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -648,20 +596,23 @@ export function AssistantScreen(): React.ReactElement {
       {slashHints.length > 0 && (
         <div style={{ padding: '6px 14px 0', flexShrink: 0 }}>
           <div style={{
-            background: 'var(--bg2)', border: '2px solid var(--br)', borderRadius: 0,
+            background: 'var(--elevated)', borderRadius: RADIUS.card,
+            boxShadow: 'inset 0 0 0 0.5px var(--separator), 0 8px 24px var(--shadow)',
             padding: 6, maxHeight: 160, overflowY: 'auto',
-            scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent',
           }}>
             {slashHints.map(c => (
               <button
                 key={c.cmd}
+                className="row-hover"
                 onClick={() => { setInput(c.cmd); }}
-                style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: '4px 8px', cursor: 'pointer', color: 'var(--tw)', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 0 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg3)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                style={{
+                  width: '100%', textAlign: 'left', background: 'transparent',
+                  padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 10,
+                  borderRadius: RADIUS.control,
+                }}
               >
-                <code style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--pp)', minWidth: 70 }}>{c.cmd}</code>
-                <span style={{ fontSize: 10, color: 'var(--tm)' }}>{c.description}</span>
+                <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--accent-text)', minWidth: 70 }}>{c.cmd}</span>
+                <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>{c.description}</span>
               </button>
             ))}
           </div>
@@ -671,25 +622,21 @@ export function AssistantScreen(): React.ReactElement {
       {/* ── Input ────────────────────────────────────────────────────── */}
       <div style={{
         display: 'flex', gap: 8, padding: '10px 14px 12px',
-        borderTop: '2px solid var(--br)', flexShrink: 0, marginTop: 8,
-        background: 'var(--bg2)',
+        boxShadow: 'inset 0 1px 0 var(--separator)', flexShrink: 0, marginTop: 8,
+        background: 'var(--grouped)',
       }}>
-        <input
-          type="text"
+        <textarea
           placeholder={config?.hasKey ? 'Ask about the vehicle, a reading, a fault code… or type / for shortcuts' : 'Add your API key in Settings first'}
           value={input}
           disabled={busy || !config?.hasKey}
           aria-label="Message to Claude"
+          rows={1}
           onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) send(input); }}
-          style={{
-            flex: 1, padding: '8px 12px', fontSize: 12,
-            background: 'var(--bg3)', border: '2px solid var(--br)', borderRadius: 0,
-            color: 'var(--tw)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
-          }}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input); } }}
+          style={{ flex: 1, resize: 'none', minHeight: 32, maxHeight: 120, ...TYPE.body }}
         />
         {busy ? (
-          <Button variant="danger" icon="ti-player-stop" onClick={cancel}>
+          <Button variant="destructive" icon="ti-player-stop" onClick={cancel}>
             Stop
           </Button>
         ) : (
@@ -707,21 +654,13 @@ export function AssistantScreen(): React.ReactElement {
       {copyToast && (
         <div role="status" style={{
           position: 'absolute', bottom: 70, left: '50%', transform: 'translateX(-50%)',
-          background: 'var(--bg2)', border: '1px solid var(--pp)', color: 'var(--pp)',
-          borderRadius: 0, padding: '5px 12px', fontSize: 9,
-          fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
-          letterSpacing: 1.0, textTransform: 'uppercase',
+          background: 'var(--elevated)', color: 'var(--accent-text)',
+          boxShadow: 'inset 0 0 0 1px var(--accent), 0 8px 24px var(--shadow)',
+          borderRadius: RADIUS.control, padding: '5px 12px', ...TYPE.caption, fontWeight: WEIGHT.semibold,
         }}>
           {copyToast}
         </div>
       )}
-
-      <style>{`
-        @keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
-        @media (prefers-reduced-motion: reduce) {
-          .ti-loader { animation: none !important; }
-        }
-      `}</style>
     </div>
   );
 }
