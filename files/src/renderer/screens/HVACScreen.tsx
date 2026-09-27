@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAppStore } from '../store/appStore';
 import {
-  ScrollPane, SectionHeader, Grid, Card, Metric, Gauge, Badge, DataRow, EmptyState, Divider,
+  ScrollPane, SectionHeader, Grid, Card, Metric, Gauge, Badge, DataRow, EmptyState,
 } from '../components/layout/UIComponents';
 import { TYPE, NUMERIC, STATUS_TEXT } from '../theme/theme';
 import type { Status } from '../theme/theme';
@@ -226,16 +226,14 @@ export function HVACScreen(): React.ReactElement {
       <SectionHeader>HVAC-related fault codes</SectionHeader>
       {hvacDTCs.length > 0 ? (
         <Card padding={0}>
-          {hvacDTCs.map((dtc, i) => (
-            <React.Fragment key={dtc.code}>
-              <DataRow
-                pid={dtc.code}
-                name={dtc.description}
-                value=""
-                badge={<Badge label={dtc.status} variant={dtc.status === 'active' ? 'crit' : 'warn'} />}
-              />
-              {i < hvacDTCs.length - 1 && <Divider />}
-            </React.Fragment>
+          {hvacDTCs.map(dtc => (
+            <DataRow
+              key={dtc.code}
+              pid={dtc.code}
+              name={dtc.description}
+              value=""
+              badge={<Badge label={dtc.status} variant={dtc.status === 'active' ? 'crit' : 'warn'} />}
+            />
           ))}
         </Card>
       ) : (
@@ -253,11 +251,8 @@ export function HVACScreen(): React.ReactElement {
           { code: 'B0480', desc: 'Rear HVAC mode door actuator circuit fault', circuit: 'HVAC' },
           { code: 'B3703', desc: 'HVAC blend door — calibration required after replacement', circuit: 'HVAC' },
           { code: 'P0480', desc: 'Cooling fan 1 control circuit — condenser fan relay', circuit: 'A/C' },
-        ].map(({ code, desc, circuit }, i, arr) => (
-          <React.Fragment key={code}>
-            <DataRow pid={code} name={desc} value="" badge={<Badge label={circuit} variant="info" />} />
-            {i < arr.length - 1 && <Divider />}
-          </React.Fragment>
+        ].map(({ code, desc, circuit }) => (
+          <DataRow key={code} pid={code} name={desc} value="" badge={<Badge label={circuit} variant="info" />} />
         ))}
       </Card>
 
