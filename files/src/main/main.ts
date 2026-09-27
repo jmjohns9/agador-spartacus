@@ -93,19 +93,33 @@ function addLog(entry: LogEntry): void {
 
 // ─── Simulator Mode ───────────────────────────────────────────────────────────
 
+// Pending simulated serial replies — cancelled on disconnect so none fire after
+// the simulator is torn down (a late reply used to throw in the main process).
+const simulatorTimers = new Set<ReturnType<typeof setTimeout>>();
+
+function stopSimulatorTimers(): void {
+  for (const t of simulatorTimers) clearTimeout(t);
+  simulatorTimers.clear();
+}
+
 function startSimulator(): void {
+  stopSimulatorTimers();
   simulatorMode = true;
-  simulator = new ELM327Simulator();
+  const sim = new ELM327Simulator();
+  simulator = sim;
 
   // Create a fake "send" function that feeds simulator responses back
   const fakeEmitter = new EventEmitter();
 
   const fakeSend = (data: string): void => {
     // Small async delay to simulate serial latency
-    setTimeout(() => {
-      const response = simulator!.respond(data.trim());
-      fakeEmitter.emit('data', response);
+    const timer = setTimeout(() => {
+      simulatorTimers.delete(timer);
+      // Session ended or was replaced while this reply was in flight
+      if (simulator !== sim) return;
+      fakeEmitter.emit('data', sim.respond(data.trim()));
     }, 20 + Math.random() * 30);
+    simulatorTimers.add(timer);
   };
 
   elm = new ELM327Commander(fakeSend);
@@ -373,6 +387,7 @@ ipcMain.handle('obd:disconnect', async () => {
   await releaseActivePort();
   elm = null;
   simulator = null;
+  stopSimulatorTimers();
   simulatorMode = false;
   addLog({ timestamp: Date.now(), level: 'info', message: 'Session disconnected — port released' });
   sendToRenderer('obd:connection-status', { status: 'disconnected' as ConnectionStatus });
