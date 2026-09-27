@@ -111,6 +111,9 @@ function stopSimulatorTimers(): void {
 }
 
 function startSimulator(gen: number): void {
+  // Tell the UI straight away, as the serial path does — otherwise it shows
+  // "Disconnected" (and an enabled Launch button) for the whole init.
+  sendToRenderer('obd:connection-status', { status: 'connecting' as ConnectionStatus });
   stopSimulatorTimers();
   simulatorMode = true;
   const sim = new ELM327Simulator();
