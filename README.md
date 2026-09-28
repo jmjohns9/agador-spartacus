@@ -350,6 +350,7 @@ Known open findings are tracked in `eval/security/last-run-summary.md` rather th
 | [`README_SILVERADO_DX_PROJECT.md`](README_SILVERADO_DX_PROJECT.md) | Original hardware/procurement doc index, decision matrices, troubleshooting |
 | [`OBD2_Mac_App_Prompt.md`](OBD2_Mac_App_Prompt.md) | Full original application specification |
 | [`DELIVERABLES_MANIFEST.txt`](DELIVERABLES_MANIFEST.txt) | Deliverable inventory |
+| [`docs/ui-styling.md`](docs/ui-styling.md) | macOS design system: tokens, fonts, styling conventions |
 | `docs/superpowers/specs/` | Design specs |
 | `docs/superpowers/plans/` | Implementation plans |
 
