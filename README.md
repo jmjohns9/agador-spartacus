@@ -1,99 +1,170 @@
 # Project Agador Spartacus
 
-**An OBD-II diagnostic suite for the desktop — live telemetry, fault codes, parasitic-draw analysis, and a Claude-powered diagnostic assistant.**
+**An OBD-II diagnostic suite for the Mac. It reads live telemetry and fault codes, analyses parasitic battery drain, and includes a Claude-powered diagnostic assistant.**
 
-Built as an Electron + React + TypeScript application that talks to an ELM327-class adapter over Bluetooth or USB serial. It started as a targeted tool for chasing a parasitic battery drain on a 2004 Chevrolet Silverado 1500 Z71 (GM GMT800, J1850 VPW), and has since been generalized: the protocol layer works against any OBD-II vehicle, with platform-specific reference data (module maps, fuse panels, draw checklists) resolved from a registry.
+![Project Agador Spartacus in light mode: the Vehicle health screen](docs/screenshots/health.png)
 
-The app runs fully offline against a built-in ELM327 simulator, so no vehicle or adapter is required for development.
+The app is built with Electron, React and TypeScript, and talks to an ELM327-class adapter over Bluetooth or USB serial. It started as a tool for chasing a parasitic battery drain on a 2004 Chevrolet Silverado 1500 Z71 (GM GMT800, J1850 VPW), and has since been generalized. The protocol layer works with any OBD-II vehicle. Platform-specific reference data (module maps, fuse panels, draw checklists) comes from a registry.
 
----
-
-## Screenshots
-
-All captured from the built-in simulator — no vehicle or adapter required to see them. The app follows macOS light and dark appearance; these are shown in light.
-
-| | |
-|---|---|
-| **Vehicle health overview** — battery voltage, parasite risk score, I/M readiness monitors, adapter/protocol status at a glance | ![Health screen](docs/screenshots/health.png) |
-| **Live telemetry** — RPM, load, throttle and timing gauges, plus temperature, fuel trim, and electrical readings updating in real time | ![Live telemetry screen](docs/screenshots/live.png) |
-| **Diagnostic fault codes** — active/pending/permanent DTCs cross-referenced against the GMT800 known-fault-code table | ![DTC screen](docs/screenshots/dtc.png) |
-| **Parasitic draw analysis** — risk score, active power consumers with estimated draw, and a live battery voltage timeline | ![Parasitic draw screen](docs/screenshots/draw.png) |
-| **Module wake monitor** — per-module address, latency, awake/asleep state, and known draw-risk annotations | ![Modules screen](docs/screenshots/modules.png) |
-| **Connection** — vehicle profile, adapter and protocol status, and Bluetooth signal details, with connect/disconnect from here or the toolbar | ![Connection screen](docs/screenshots/connect.png) |
-| **Engine & fuel** — engine performance gauges, thermal readings, air/fuel delivery, and per-bank short- and long-term fuel trim analysis | ![Engine and fuel screen](docs/screenshots/engine.png) |
-| **EcuBus-Pro** — CAN monitor, UDS client, transmit, signals, scripting, LIN and DoIP tabs (currently shows demo data) | ![EcuBus-Pro screen](docs/screenshots/ecubus.png) |
-| **Settings** — System / Light / Dark appearance, storage backend (local JSON or SQLite), and app info | ![Settings screen](docs/screenshots/settings.png) |
+A built-in ELM327 simulator lets the whole app run offline, so you don't need a vehicle or an adapter for development.
 
 ---
 
 ## Table of contents
 
+- [What's new](#whats-new)
 - [Screenshots](#screenshots)
 - [Features](#features)
-- [Screens](#screens)
+- [Screens and navigation](#screens-and-navigation)
+- [Design system](#design-system)
 - [Architecture](#architecture)
 - [Repository layout](#repository-layout)
 - [Getting started](#getting-started)
 - [Running against real hardware](#running-against-real-hardware)
 - [Running in Docker (headless)](#running-in-docker-headless)
 - [Testing](#testing)
+- [Known issues](#known-issues)
 - [The automated review pipeline](#the-automated-review-pipeline)
 - [Hardware](#hardware)
 - [Security notes](#security-notes)
 - [Documentation](#documentation)
 - [Attribution and licensing](#attribution-and-licensing)
+- [Safety](#safety)
+
+---
+
+## What's new
+
+### macOS-native redesign
+
+The whole interface was redesigned to look and behave like a native macOS app, in the style of Xcode, Instruments and Activity Monitor. It replaces the earlier dark "McLaren" theme. The design is in [`docs/superpowers/specs/2026-09-26-macos-redesign-design.md`](docs/superpowers/specs/2026-09-26-macos-redesign-design.md).
+
+- **Light, dark and System appearance.**
+  - Choose it under **Settings → Appearance → Theme**. The app follows macOS by default.
+  - The choice is saved in the app's `userData/appearance.json` and applied before the window appears, so there's no flash of the wrong theme on launch.
+- **New app shell.**
+  - A 220px translucent sidebar groups the screens into Overview, Subsystems, Diagnostic, Advanced and Records, with Settings pinned at the bottom.
+  - A toolbar shows the vehicle, adapter and protocol, battery voltage, the active fault-code count and the session timer.
+  - Clicking the connection status opens a popover to connect, disconnect or cancel.
+- **Keyboard shortcuts.** ⌃⌘S shows or hides the sidebar, and ⌘, opens Settings.
+- **A shared component library** replaces the old tiles, gauges and bars:
+  - Card, Metric, Gauge, Sparkline, Button, SegmentedControl, Badge, AlertBanner, DataRow, EmptyState and Tooltip.
+  - They live in `components/ui/`.
+- **All 19 screens were restyled.** Their controls and data are unchanged.
+- **Accessible colour.**
+  - Status text uses dedicated colours that meet WCAG 4.5:1 contrast in both appearances.
+  - Normal readings are shown in neutral colours. Orange and red are reserved for warnings and critical values, so problems stand out.
+- **Native typography.**
+  - SF Pro for text; SF Mono with tabular figures only for numbers, VINs, hex and PIDs.
+  - Web fonts were removed, so the app works fully offline.
+- **Consistent spacing.** A 4pt spacing grid and three corner radii (6/10/12px) are used across the app.
+
+### Bug fixes
+
+- **Crash on disconnect (fixed).** A simulator reply that arrived just after you disconnected hit a null reference in the main process. The app then showed an error dialog and had to be force-quit. Pending simulator replies are now cancelled on disconnect.
+- **Connect/disconnect races (fixed).**
+  - Each connection attempt is now tied to its own session. Late replies, port events and Bluetooth signal readings from an earlier session are ignored instead of corrupting the new one.
+  - A newer connect or disconnect now wins over one that is still closing the port.
+- **Cancel while connecting (new).** A connection attempt in progress can now be cancelled from the connection popover or the Connection screen.
+- **"Connecting" state.** The app now reports "connecting" while the simulator is starting up, instead of jumping straight to connected.
+- **Polling after disconnect (fixed).** Disconnecting during a scan no longer lets polling restart by itself.
+- **Live telemetry crash (fixed).** A React hooks-order bug could crash the Live screen when a second reading appeared.
+- **Card sizing (fixed).** Cards and metric tiles no longer shrink or overlap inside scrolling columns.
+- **EcuBus CAN table (fixed).** Columns no longer overlap.
+
+Bugs found during the redesign but not yet fixed are listed under [Known issues](#known-issues).
+
+---
+
+## Screenshots
+
+All screenshots were captured from the built-in simulator in light mode, so you don't need a vehicle or adapter to see them. The app also has a full dark appearance.
+
+| | |
+|---|---|
+| **Vehicle health overview:** battery voltage, check-engine light, parasite risk score, active and pending fault codes, and I/M readiness monitors | ![Vehicle health screen](docs/screenshots/health.png) |
+| **Live telemetry:** RPM, load, throttle and timing gauges, a live RPM sparkline, and temperature, fuel-trim and electrical readings updating in real time | ![Live telemetry screen](docs/screenshots/live.png) |
+| **Fault codes:** active, pending and permanent DTCs with severity banners, cross-referenced against the GMT800 known-fault-code table | ![Fault codes screen](docs/screenshots/dtc.png) |
+| **Parasitic draw analysis:** risk score, battery voltage trend, risk breakdown, and active power consumers with estimated draw | ![Parasitic draw screen](docs/screenshots/draw.png) |
+| **Module monitor:** address, latency and awake/asleep state for each module, plus known draw-risk annotations | ![Module monitor screen](docs/screenshots/modules.png) |
+| **Connection:** vehicle profile, adapter and protocol status, and Bluetooth signal details, with connect and disconnect here or in the toolbar | ![Connection screen](docs/screenshots/connect.png) |
+| **Engine & fuel:** engine performance gauges, thermal readings, air and fuel delivery, and short- and long-term fuel trim per bank | ![Engine and fuel screen](docs/screenshots/engine.png) |
+| **EcuBus-Pro:** tabs for CAN monitor, UDS client, transmit, signals, scripting, LIN and DoIP (currently demo data; see [Known issues](#known-issues)) | ![EcuBus-Pro screen](docs/screenshots/ecubus.png) |
+| **Settings:** System / Light / Dark appearance, storage backend (local JSON or SQLite), and app info | ![Settings screen](docs/screenshots/settings.png) |
 
 ---
 
 ## Features
 
 **Live diagnostics**
-- Sequential PID polling loop with three priority tiers — battery voltage and fast PIDs (RPM, ECM voltage) every cycle, normal PIDs every 3rd cycle, slow PIDs every 10th. Commands never overlap on the serial line.
-- 34-PID catalog with SAE J1979 decode formulas, ranges, units, and plain-English descriptions.
-- Telemetry ingest buffer decouples wire rate from render rate: samples are absorbed at adapter speed and committed to React on a fixed interval, with unchanged values dropped before they leave the buffer.
-- VIN detection and decode, with automatic vehicle profile population.
+- A sequential PID polling loop with three priority tiers:
+  - Battery voltage and fast PIDs (RPM, ECM voltage) every cycle.
+  - Normal PIDs every 3rd cycle.
+  - Slow PIDs every 10th cycle.
+
+  Commands never overlap on the serial line.
+- A 34-PID catalog with SAE J1979 decode formulas, ranges, units and plain-English descriptions.
+- Sparklines of recent history on the key metrics.
+- VIN detection and decoding, which fills in the vehicle profile automatically.
 
 **Fault codes**
-- DTC scan / clear across all supported modes, with a 371-entry generated code catalog.
-- Freeze-frame capture and viewer, persisted per DTC.
-- Optional CarsXE lookup for code descriptions, likely causes, and repair guidance.
+- DTC scan and clear across all supported modes, backed by a generated catalog of 371 codes.
+- Freeze-frame capture and a viewer, saved per DTC.
+- Optional CarsXE lookup for code descriptions, likely causes and repair guidance.
 
 **Parasitic draw suite**
-- Module wake monitor — polls known module addresses after key-off to find the one staying awake.
-- Battery voltage timeline over long sessions.
-- Interactive fuse map (interior panel + under-hood fuse/relay center), ordered by draw likelihood.
-- Step-by-step draw isolation protocol driven by the resolved platform profile.
+- A module wake monitor. It polls known module addresses after key-off to find the one staying awake.
+- A battery voltage timeline over long sessions.
+- An interactive fuse map (interior panel and under-hood fuse/relay center), ordered by how likely each circuit is to cause a draw.
+- A step-by-step draw isolation procedure, driven by the resolved platform profile.
 
 **GM-specific**
-- Read-only PCM identity over J1850 VPW Mode 3C — VIN, hardware/software IDs, calibration and segment info from GM P01/P59-family PCMs.
+- Read-only PCM identity over J1850 VPW Mode 3C: VIN, hardware and software IDs, and calibration and segment info from GM P01/P59-family PCMs.
 
 **Records and reporting**
-- CSV / JSON data logger with recording playback.
-- Session snapshots, live-vs-historic compare with overlay.
+- A CSV/JSON data logger with recording playback.
+- Session snapshots, and a live-versus-historic compare with overlay.
 - HTML/PDF report generation.
-- Pluggable storage backend: flat JSON file or SQLite (`better-sqlite3`), migratable in-app.
+- A choice of storage backend: a flat JSON file or SQLite (`better-sqlite3`), with migration between them in the app.
 
 **Claude assistant**
-- In-app chat that receives a snapshot of the live session (current PIDs, active DTCs, recent log) as context.
-- Model selectable in Settings; streaming responses; chat exportable to Markdown.
-- API key stored in the app's `userData` directory and encrypted at rest via the OS keychain (Electron `safeStorage`).
+- An in-app chat that receives a snapshot of the live session as context: current PIDs, active DTCs and the recent log.
+- Selectable model, streaming responses, and chat export to Markdown.
+- The API key is stored in the app's `userData` directory and encrypted at rest through the OS keychain (Electron `safeStorage`).
 
 ---
 
-## Screens
+## Screens and navigation
 
-19 screens, grouped in the sidebar:
+There are 19 screens. The sidebar groups them like this:
 
 | Group | Screens |
 |---|---|
-| — | **Connect** (port list, RSSI, protocol negotiation) · **Claude** (diagnostic assistant) |
-| Overview | **Health** · **Live** · **PIDs** (full parameter browser) · **Logger** |
-| Subsystems | **Engine** · **Electrical** · **HVAC** · **Trans** |
-| Diagnostic | **DTC** · **Modules** · **Draw** (parasitic analysis) |
-| Advanced | **EcuBus** (CAN/UDS tooling) · **PCM** (powertrain module identity) |
-| Records | **Compare** · **Freeze** · **Logs** · **Settings** |
+| (top) | **Connection** · **Claude assistant** |
+| Overview | **Vehicle health** · **Live telemetry** · **All parameters** · **Data logger** |
+| Subsystems | **Engine & fuel** · **Electrical** · **HVAC** · **Transmission** |
+| Diagnostic | **Fault codes** (with active-code badge) · **Module monitor** · **Parasitic draw** |
+| Advanced | **EcuBus-Pro** (CAN/UDS tooling) · **PCM identity** |
+| Records | **Compare** · **Freeze frames** · **Session log** |
+| (bottom) | **Settings** |
 
-Theme: McLaren Technology Centre — papaya and Gulf blue on a near-black ground.
+| Shortcut | Action |
+|---|---|
+| ⌃⌘S | Show or hide the sidebar |
+| ⌘, | Open Settings |
+
+---
+
+## Design system
+
+The full reference is [`docs/ui-styling.md`](docs/ui-styling.md). In short:
+
+- **Tokens.** Colours, type, spacing, radii and motion are defined in `renderer/theme/theme.ts`.
+  - `buildThemeCSS()` turns them into CSS custom properties under `prefers-color-scheme`.
+  - The main process sets `nativeTheme.themeSource` from the saved appearance, so light and dark switch natively, including the window's vibrancy.
+- **Components.** Screens are built from `components/layout/UIComponents.tsx`, which re-exports `components/ui/*`.
+- **Screen styling rules.** Screens never set their own colours, font families, letter-spacing, text-transform or borders. `npm run lint:styles <files>` enforces this.
+- **Screenshots.** `npm run build && node scripts/capture-screens.mjs <dir>` writes a light and a dark PNG of every screen, using a throwaway profile so your real app data is never touched.
 
 ---
 
@@ -103,31 +174,29 @@ Theme: McLaren Technology Centre — papaya and Gulf blue on a near-black ground
 ┌─────────────────────────────────────────────────────────────────────┐
 │ Renderer (React 18 + Zustand)                                       │
 │                                                                     │
-│   19 screens ── appStore ◄── TelemetryBuffer ◄── IPC events         │
-│                                (batches at display rate)            │
+│   App shell (Sidebar · Toolbar · ConnectionPopover)                 │
+│   19 screens ── components/ui ── theme tokens (CSS variables)       │
+│        │                                                            │
+│        └── appStore (Zustand) ◄── IPC events                        │
 └────────────────────────────┬────────────────────────────────────────┘
                              │ contextBridge (contextIsolation: true)
 ┌────────────────────────────▼────────────────────────────────────────┐
 │ Main process (Electron)                                             │
 │                                                                     │
+│   main.ts ── window, IPC handlers, connection sessions              │
+│      │         (serialport for real adapters, simulator offline)    │
+│      │                                                              │
 │   OBDProtocolManager ── poll loop, DTC scan, module wake check      │
-│           │                                                         │
+│      │                                                              │
 │   ELM327Commander ── AT command engine, timeouts, response framing  │
-│           │                                                         │
-│   ObdTransport (interface) ──┬── SerialTransport   (real adapter)   │
-│                              └── SimulatorTransport (offline)       │
 │                                                                     │
-│   StorageService · claudeAssistant · PcmDiagnostics                 │
+│   appearance · storageService · claudeAssistant · pcmDiagnostics    │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-Three seams do most of the structural work:
+**Connection sessions.** Every connect starts a new session generation. Replies, port events, init chains and Bluetooth signal readings carry their session. Anything that arrives after its session has ended is dropped, and disconnecting cancels pending simulator replies. This is what makes rapid connect/disconnect cycles, cancelling a connect, and quitting mid-session safe.
 
-**`ObdTransport`** (`src/core/transport.ts`) — the link, and nothing else: no protocol knowledge, no framing, no ELM327 semantics. `open`/`close`/`write` all return promises that reject on failure, so a dead port fails fast instead of burning the full command timeout, and `onClose`/`onError` let the commander learn the link died. The same commander drives a serial port, the simulator, and (if hardware ever justified it) a BLE GATT link unchanged. It also makes the whole protocol stack testable without launching Electron.
-
-**`normalizeElmResponse`** (`src/core/elmFraming.ts`) — the ELM327 does its own ISO-TP reassembly but prints the result as a length header plus one `0:`/`1:`-prefixed line per segment. Naïvely stripping whitespace and concatenating mixes those prefixes into the payload and corrupts every downstream parse. Everything that reads a response body goes through this first. Test fixtures cover chunk boundaries falling at arbitrary offsets, since a real link splits reads anywhere and a BLE notification is capped at the ATT MTU with no alignment to the `>` prompt.
-
-**`PlatformProfile`** (`src/core/platforms/`) — the app is vehicle-agnostic at the protocol level, but module address maps, fuse layouts, and draw checklists are platform-specific. A registry resolves the most specific profile for the detected vehicle (`gmt800`, then `generic`), never returning undefined.
+**`PlatformProfile`** (`src/core/platforms/`). The protocol layer doesn't depend on the vehicle, but module address maps, fuse layouts and draw checklists are platform-specific. A registry resolves the most specific profile for the vehicle (`gmt800`, then `generic`) and never returns undefined.
 
 ### ELM327 initialization sequence
 
@@ -152,44 +221,47 @@ ATRV     Live battery voltage
 
 ```
 .
-├── files/                          # The application
+├── files/                             # The application
 │   ├── src/
-│   │   ├── main/                   # Electron main process
-│   │   │   ├── main.ts             #   window, IPC handlers, session state
-│   │   │   ├── preload.ts          #   contextBridge API surface
-│   │   │   ├── serialTransport.ts  #   ObdTransport over node-serialport
-│   │   │   ├── storageService.ts   #   JSON + SQLite backends, migration
-│   │   │   └── claudeAssistant.ts  #   Claude API bridge, encrypted key store
-│   │   ├── core/                   # Protocol layer (no Electron imports)
-│   │   │   ├── transport.ts        #   ObdTransport seam + test chunkers
-│   │   │   ├── simulatorTransport.ts
-│   │   │   ├── elm327Commander.ts  #   AT engine, timeouts, retries
-│   │   │   ├── elm327Simulator.ts  #   offline 2004 Silverado session
-│   │   │   ├── elmFraming.ts       #   multi-line / segmented response framing
-│   │   │   ├── obdProtocolManager.ts #  poll loop, DTC scan, wake check
-│   │   │   ├── pidCatalog.ts       #   36 PIDs, J1979 decode functions
-│   │   │   ├── dtcCatalog.generated.ts # 371 codes (see scripts/gen-dtc-catalog.ts)
-│   │   │   ├── pcmDiagnostics.ts   #   GM Mode 3C identity read (read-only)
-│   │   │   └── platforms/          #   gmt800 · generic · registry
-│   │   ├── renderer/
-│   │   │   ├── App.tsx             #   shell, nav, IPC wiring
-│   │   │   ├── screens/            #   19 screens
-│   │   │   ├── store/appStore.ts   #   Zustand global state
-│   │   │   ├── telemetry/          #   TelemetryBuffer
-│   │   │   ├── theme/theme.ts      #   CSS vars, gauge geometry
-│   │   │   └── components/         #   Card, MetricTile, ArcGauge, ErrorBoundary…
-│   │   └── shared/types.ts         # Types shared across the IPC boundary
-│   ├── tests/                      # node:test suites
-│   ├── scripts/gen-dtc-catalog.ts  # DTC catalog generator
-│   ├── docker/                     # Dockerfile + Xvfb/noVNC entrypoint
-│   └── assets/report.html          # PDF report template
-├── eval/                           # Automated review harness (see below)
-│   └── {security,deps,architecture,performance,quality,tests}/
-├── docs/superpowers/               # Design specs and implementation plans
-├── docker-compose.yml              # Headless container with noVNC on :6080
+│   │   ├── main/                      # Electron main process
+│   │   │   ├── main.ts                #   window, IPC handlers, connection sessions, simulator
+│   │   │   ├── preload.ts             #   contextBridge API surface
+│   │   │   ├── appearance.ts          #   saved System/Light/Dark override
+│   │   │   ├── storageService.ts      #   JSON + SQLite backends, migration
+│   │   │   └── claudeAssistant.ts     #   Claude API bridge, encrypted key store
+│   │   ├── core/                      # Protocol layer (no Electron imports)
+│   │   │   ├── elm327Commander.ts     #   AT engine, timeouts, retries
+│   │   │   ├── elm327Simulator.ts     #   offline 2004 Silverado session
+│   │   │   ├── obdProtocolManager.ts  #   poll loop, DTC scan, wake check
+│   │   │   ├── pidCatalog.ts          #   PID catalog, J1979 decode functions
+│   │   │   ├── dtcCatalog.generated.ts #  371 codes (see scripts/gen-dtc-catalog.ts)
+│   │   │   ├── pcmDiagnostics.ts      #   GM Mode 3C identity read (read-only)
+│   │   │   └── platforms/             #   gmt800 · generic · registry
+│   │   └── renderer/
+│   │       ├── App.tsx                #   app shell, routing, IPC wiring, shortcuts
+│   │       ├── screens/               #   19 screens
+│   │       ├── store/appStore.ts      #   Zustand global state
+│   │       ├── theme/                 #   theme.ts (tokens) · globalStyles.ts
+│   │       └── components/
+│   │           ├── ui/                #   Card, Metric, Gauge, Sparkline, controls, feedback
+│   │           ├── shell/             #   Sidebar, Toolbar, ConnectionPopover, nav items
+│   │           ├── layout/            #   UIComponents.tsx (re-exports ui/)
+│   │           └── ErrorBoundary.tsx
+│   ├── scripts/
+│   │   ├── gen-dtc-catalog.ts         # DTC catalog generator
+│   │   ├── check-styles.mjs           # screen style linter (npm run lint:styles)
+│   │   └── capture-screens.mjs        # light/dark screenshot harness
+│   ├── docker/                        # Dockerfile + Xvfb/noVNC entrypoint
+│   └── assets/report.html             # PDF report template
+├── docs/
+│   ├── ui-styling.md                  # Design system reference
+│   ├── screenshots/                   # README images
+│   └── superpowers/                   # Design specs, plans, code-review notes
+├── eval/                              # Automated review harness (see below)
+├── docker-compose.yml                 # Headless container with noVNC on :6080
 ├── HARDWARE_SOFTWARE_COMPATIBILITY_REVIEW.md
-├── README_SILVERADO_DX_PROJECT.md  # Original hardware/procurement doc set
-└── shopping-list.html              # Parts list with retailer sourcing
+├── README_SILVERADO_DX_PROJECT.md     # Original hardware/procurement doc set
+└── shopping-list.html                 # Parts list with retailer sourcing
 ```
 
 ---
@@ -198,9 +270,11 @@ ATRV     Live battery voltage
 
 ### Prerequisites
 
-- **Node.js 18+** (22 recommended — the container builds on `node:22-bookworm`)
-- **macOS 13 Ventura or later** for the packaged app; Linux works for development and via Docker
-- Build toolchain for native modules (`serialport`, `better-sqlite3`) — Xcode Command Line Tools on macOS (`xcode-select --install`), or `python3 make g++` on Debian/Ubuntu
+- **Node.js 18+.** Node 22 is recommended; the container builds on `node:22-bookworm`.
+- **macOS 13 Ventura or later** for the packaged app. Linux works for development and via Docker.
+- **A build toolchain for the native modules** (`serialport`, `better-sqlite3`):
+  - On macOS, Xcode Command Line Tools (`xcode-select --install`).
+  - On Debian/Ubuntu, `python3 make g++`.
 
 ### Install and run
 
@@ -208,41 +282,52 @@ ATRV     Live battery voltage
 git clone git@github.com:jmjohns9/agador-spartacus.git
 cd agador-spartacus/files
 npm install
+npx electron-rebuild --only better-sqlite3   # match the SQLite module to Electron's ABI
 npm run dev
 ```
 
-`npm run dev` runs three concurrent processes: `tsc --watch` for the main process, `webpack --watch` for the renderer bundle, and `electron .` once `dist/main/main.js` exists.
+`npm run dev` runs three processes at once:
+- `tsc --watch` for the main process;
+- `webpack --watch` for the renderer bundle;
+- `electron .`, once `dist/main/main.js` exists.
 
-**The app starts in simulator mode — no adapter needed.** The simulator emulates a 2004 Silverado J1850 VPW session:
+### Try it without an adapter
 
-- Battery voltage stepping 12.89 V → 11.8 V over four hours, reproducing a parasitic drain
-- Instrument cluster staying awake after engine-off, reproducing the known GMT800 fault
-- Pre-loaded DTCs: `B1982`, `P0300`, `U0100`
-- Realistic noise on every sensor reading
+1. Open the **Connection** screen and click **Launch Emulator**.
+2. To see the GMT800 module map and fuse data, click **Edit** on the vehicle card and set the vehicle to a 2004 Chevrolet Silverado 1500.
+
+The simulator emulates a 2004 Silverado J1850 VPW session:
+
+- Battery voltage steps from 12.89 V down to 11.8 V over four hours, reproducing a parasitic drain.
+- The instrument cluster stays awake after engine-off, reproducing the known GMT800 fault.
+- The DTCs `B1982`, `P0300` and `U0100` are preloaded.
+- Every sensor reading has realistic noise.
 
 ### Scripts
 
 | Command | What it does |
 |---|---|
 | `npm run dev` | Watch-mode development with hot reload |
-| `npm run build` | Compile main process + bundle renderer |
+| `npm run build` | Compile the main process and bundle the renderer |
 | `npm run dist` | Build and package a macOS `.dmg` / `.zip` via electron-builder |
 | `npm run typecheck` | `tsc --noEmit` across the project |
-| `npm test` | Compile and run the `node:test` suites |
+| `npm test` | Run the `node:test` suites |
+| `npm run lint:styles <files>` | Check screens against the design-system styling rules |
 | `npm run gen:dtcs` | Regenerate `dtcCatalog.generated.ts` |
 
 ---
 
 ## Running against real hardware
 
-The reference adapter is the **OBDLink MX+** (Bluetooth Classic, ELM327 v1.5 superset, GM-LAN + J1850 VPW, extended `STx` commands). Any ELM327-class adapter that presents as a serial port should work; `STx`-dependent features degrade gracefully.
+The reference adapter is the **OBDLink MX+**: Bluetooth Classic, an ELM327 v1.5 superset, GM-LAN and J1850 VPW, and the extended `STx` commands. Any ELM327-class adapter that shows up as a serial port should work. Features that depend on `STx` degrade gracefully.
 
 **macOS (Bluetooth):**
 
-1. Plug the adapter into the OBD-II port; ignition ON (engine optional).
-2. Pair it under **System Settings → Bluetooth** (PIN `1234` for HC-05-based builds).
-3. Find the port: `ls /dev/tty.* | grep -i obd` — typically `/dev/tty.OBDII` or `/dev/tty.OBDLink-MXPlus-Port`.
-4. Open the **Connect** screen in the app and pick the port from the list. Detected OBD adapters are flagged in the picker.
+1. Plug the adapter into the OBD-II port and turn the ignition ON. The engine can be off.
+2. Pair it under **System Settings → Bluetooth**. HC-05-based builds use the PIN `1234`.
+3. Find the port with `ls /dev/tty.* | grep -i obd`. It's usually `/dev/tty.OBDII` or `/dev/tty.OBDLink-MXPlus-Port`.
+4. Open the **Connection** screen and pick the port from the list. Detected OBD adapters are flagged in the list.
+5. To give up on a slow connection, click **Cancel**.
 
 **Linux (USB serial):** the adapter appears as `/dev/ttyUSB0` or `/dev/ttyACM0`. Add your user to the `dialout` group.
 
@@ -250,7 +335,7 @@ The reference adapter is the **OBDLink MX+** (Bluetooth Classic, ELM327 v1.5 sup
 
 ## Running in Docker (headless)
 
-The container runs the full Electron GUI under Xvfb and exposes it over noVNC — useful for CI, for a headless shop machine, or for driving the app from a browser.
+The container runs the full Electron GUI under Xvfb and exposes it over noVNC. This is useful for CI, for a headless shop machine, or for driving the app from a browser.
 
 ```bash
 docker compose up --build
@@ -259,29 +344,45 @@ docker compose up --build
 
 Details worth knowing:
 
-- `/dev` is live-mounted so an adapter hot-plugged after startup is visible without a restart.
-- `device_cgroup_rules` grant access to USB-serial (`c 188:*`) and CDC-ACM (`c 166:*`) character devices; the container joins `dialout`.
-- App data (`storage.db`, `storage.json`) persists in the `obd-data` volume mounted at `/root/.config`.
-- The image rebuilds **only** `better-sqlite3` and `serialport` against Electron's ABI. electron-builder's default full-tree rebuild also hits `ttf2woff2`, a dev-only transitive dep of the icon tooling whose nan-based addon does not compile against Electron 42's V8.
+- `/dev` is live-mounted, so an adapter plugged in after startup is visible without a restart.
+- `device_cgroup_rules` grant access to USB-serial (`c 188:*`) and CDC-ACM (`c 166:*`) character devices, and the container joins `dialout`.
+- App data (`storage.db`, `storage.json`) persists in the `obd-data` volume, mounted at `/root/.config`.
+- The image rebuilds **only** `better-sqlite3` and `serialport` against Electron's ABI. electron-builder's default full-tree rebuild would also hit `ttf2woff2`, a dev-only dependency of the icon tooling that doesn't compile against Electron 42's V8.
 
 ---
 
 ## Testing
 
 ```bash
-cd files && npm test
+cd files && npm test && npm run typecheck
 ```
 
-Suites under `files/tests/`:
+The suites sit next to the code they test:
 
 | Suite | Covers |
 |---|---|
-| `framing.test.ts` | `normalizeElmResponse` — segmented replies, status tokens (`SEARCHING...`, `BUS INIT`), arbitrary chunk boundaries |
-| `commander.test.ts` | ELM327 command engine against a simulated transport under every delivery profile (whole-response, fixed MTU, pinned offsets) |
-| `pidDecode.test.ts` | J1979 decode formulas across the PID catalog |
-| `telemetryBuffer.test.ts` | Ingest/commit batching, unchanged-value suppression, timer lifecycle |
+| `src/core/elm327Commander.test.ts` | Closing the ELM327 commander mid-initialize or mid-command, and sending after close |
+| `src/core/obdProtocolManager.test.ts` | Polling staying stopped when stopped during a DTC scan or VIN read |
+| `src/main/appearance.test.ts` | Parsing, loading and saving the appearance override |
+| `src/renderer/theme/theme.test.ts` | Light/dark palettes, contrast of the status text colours, generated CSS |
+| `src/renderer/components/ui/*.test.ts` | Gauge geometry, status logic, component barrel exports |
+| `src/renderer/components/shell/shellLogic.test.ts` | Toolbar battery status and connection tone |
+| `scripts/check-styles.test.mjs` | The screen style linter |
 
-The transport seam is what makes these possible — every one runs without launching Electron or touching a serial port.
+For visual checks, run `npm run build && node scripts/capture-screens.mjs .screens/current`, which captures every screen in light and dark.
+
+---
+
+## Known issues
+
+These bugs predate the redesign. They are tracked in [`docs/superpowers/code-review-notes.md`](docs/superpowers/code-review-notes.md) and will be fixed in a follow-up code review.
+
+- **Module monitor** status never leaves "Unknown", because module scan results aren't sent back to the screen.
+- **Transmission** gear indicator compares a raw PID value against gear letters.
+- **Compare** snapshot limit never removes old snapshots.
+- **EcuBus-Pro** CAN/UDS tabs show static demo data. The hardware and NRC reference panels exist but can't be reached.
+- **Electrical** battery-voltage chart labels render too large.
+- **Clear DTCs** sends OBD-II Mode 04. This clears codes on the vehicle, and it needs a decision against the "nothing writes to a control module" rule below.
 
 ---
 
@@ -300,19 +401,22 @@ The transport seam is what makes these possible — every one runs without launc
 
 Each `eval/<type>/` directory contains:
 
-- **`review-<type>.md`** — the review prompt itself, defining a closed-set finding taxonomy, explicit non-findings, and the required JSON output shape.
-- **`expected.json`** — the answer key: findings a correct review should surface.
-- **`history/<YYYY-MM-DD>.json`** — one file per run, committed.
-- **`score.py`** — scores a run against the key. Findings match on exact fingerprint first, then fall back to category + file + line proximity, with alias sets for categories that name the same defect family from different vantage points (`prompt_injection` ≈ `injection_via_untrusted_peripheral`, `missing_csp` ≈ `electron_hardening`) and line-tolerant handling for defects that span an IPC handler and its callee. Prints recall by severity, severity-match rate, and false-positive rate.
-- **`last-run-summary.md`** — human-readable digest, with new findings deduped against the previous run by fingerprint.
+- **`review-<type>.md`**: the review prompt itself. It defines a closed set of finding categories, explicit non-findings, and the required JSON output shape.
+- **`expected.json`**: the answer key, listing the findings a correct review should surface.
+- **`history/<YYYY-MM-DD>.json`**: one file per run, committed.
+- **`score.py`**: scores a run against the key, and prints recall by severity, severity-match rate and false-positive rate.
+  - A finding first matches on its exact fingerprint. Failing that, it falls back to category, file and line proximity.
+  - Alias sets cover categories that name the same defect from different angles (`prompt_injection` ≈ `injection_via_untrusted_peripheral`, `missing_csp` ≈ `electron_hardening`).
+  - Line matching is tolerant for defects that span an IPC handler and the function it calls.
+- **`last-run-summary.md`**: a readable digest, with new findings deduplicated against the previous run by fingerprint.
 
-Runs are path-scoped commits (`review: security 2026-08-10 (2 new)`) so unrelated working-tree changes can't be swept in, and the review never reads `expected.json` or prior history — that would bias the result.
+Each run is committed with only its own paths (`review: security 2026-08-10 (2 new)`), so unrelated working-tree changes can't be swept in. The review never reads `expected.json` or earlier history, because that would bias the result.
 
 ---
 
 ## Hardware
 
-Two validated procurement paths. Full analysis in [`HARDWARE_SOFTWARE_COMPATIBILITY_REVIEW.md`](HARDWARE_SOFTWARE_COMPATIBILITY_REVIEW.md); parts and retailer sourcing in [`shopping-list.html`](shopping-list.html).
+There are two validated ways to buy the hardware. The full analysis is in [`HARDWARE_SOFTWARE_COMPATIBILITY_REVIEW.md`](HARDWARE_SOFTWARE_COMPATIBILITY_REVIEW.md), and parts with retailer sourcing are in [`shopping-list.html`](shopping-list.html).
 
 | | Path A — OBDLink MX+ | Path B — DIY STN1110 + HC-05 |
 |---|---|---|
@@ -322,27 +426,33 @@ Two validated procurement paths. Full analysis in [`HARDWARE_SOFTWARE_COMPATIBIL
 | Protocols | J1850 VPW, GM-LAN, extended `STx` | J1850 VPW, standard OBD-II (no `STx`) |
 | Best for | Immediate diagnostics | Learning electronics, redundant adapter |
 
-**Do not use:** AliExpress/eBay STN1110 clones (counterfeit chips), HC-05 modules without an AT-mode button (baud rate can't be reconfigured), or the Macchina A0 (CAN-only, incompatible with J1850 VPW). Bench-calibrate any LM2596 to 5.0 V ±0.1 V **before** connecting it to anything.
+**Do not use:**
+- AliExpress/eBay STN1110 clones, which use counterfeit chips.
+- HC-05 modules without an AT-mode button, because their baud rate can't be reconfigured.
+- The Macchina A0, which is CAN-only and doesn't work with J1850 VPW.
 
-Approved parts: SparkFun WIG-09555 (genuine STN1110), DSD TECH HC-05 model B076BS39YZ, LYLANMO LM2596.
+Bench-calibrate any LM2596 to 5.0 V ±0.1 V **before** connecting it to anything.
+
+Approved parts: SparkFun WIG-09555 (genuine STN1110), DSD TECH HC-05 model B076BS39YZ, and LYLANMO LM2596.
 
 ---
 
 ## Security notes
 
-This is a desktop app that ingests data from an untrusted peripheral (the adapter) and from third-party APIs, so the threat model is taken seriously and reviewed daily.
+This desktop app takes in data from an untrusted peripheral (the adapter) and from third-party APIs, so its threat model is reviewed daily.
 
 Currently enforced:
 
-- `contextIsolation: true`, `nodeIntegration: false` on the main window; all privileged operations go through explicit IPC handlers.
-- Claude API key encrypted at rest via `safeStorage`, with a documented plaintext-migration path for configs written before encryption existed, and `0600` enforced on rewrite.
-- Bounded adapter input on the ELM327 receive path.
-- Report data escaped before it reaches `innerHTML`.
-- Session log capped as a ring buffer (5000 entries) so long-lived sessions don't grow unboundedly.
+- `contextIsolation: true` and `nodeIntegration: false` on the main window. All privileged operations go through explicit IPC handlers.
+- The Claude API key is encrypted at rest via `safeStorage`, and rewrites enforce `0600` permissions. There is a documented migration path for configs written in plaintext before encryption existed.
+- Input from the adapter is bounded on the ELM327 receive path.
+- Report data is escaped before it reaches `innerHTML`.
+- The session log is a ring buffer capped at 5000 entries, so long sessions don't grow without limit.
+- The Content Security Policy no longer allows any remote font or style origin. The UI loads nothing from the network.
 
-Known open findings are tracked in `eval/security/last-run-summary.md` rather than hidden — as of the last run: 7 medium, 7 low, covering DoS bounds on adapter-controlled parsing, prompt-injection fencing in the assistant context, Electron sandbox hardening, and rate limiting on metered third-party proxies.
+Known open findings are tracked in `eval/security/last-run-summary.md` rather than hidden. As of the last run there are 7 medium and 7 low findings. They cover DoS bounds on parsing that the adapter controls, prompt-injection fencing in the assistant context, Electron sandbox hardening, and rate limiting on metered third-party proxies.
 
-**The PCM surface is read-only by design.** PcmHammer's reason for existing is flashing — kernel upload, segment write, recovery. None of that is implemented here, because a diagnostics tab has no business holding a write primitive that can brick an ECU.
+**The PCM surface is read-only by design.** PcmHammer exists mainly for flashing: kernel upload, segment write and recovery. None of that is implemented here, because a diagnostics tab has no business holding a write primitive that can brick an ECU.
 
 ---
 
@@ -350,26 +460,33 @@ Known open findings are tracked in `eval/security/last-run-summary.md` rather th
 
 | Document | Contents |
 |---|---|
+| [`docs/ui-styling.md`](docs/ui-styling.md) | Design system reference: tokens, fonts, styling rules |
+| [`docs/superpowers/specs/2026-09-26-macos-redesign-design.md`](docs/superpowers/specs/2026-09-26-macos-redesign-design.md) | The macOS redesign spec |
+| [`docs/superpowers/code-review-notes.md`](docs/superpowers/code-review-notes.md) | Bugs found during the redesign, for the upcoming code review |
 | [`HARDWARE_SOFTWARE_COMPATIBILITY_REVIEW.md`](HARDWARE_SOFTWARE_COMPATIBILITY_REVIEW.md) | Section-by-section protocol review, commander code validation, Bluetooth specifics, appendices |
 | [`README_SILVERADO_DX_PROJECT.md`](README_SILVERADO_DX_PROJECT.md) | Original hardware/procurement doc index, decision matrices, troubleshooting |
 | [`OBD2_Mac_App_Prompt.md`](OBD2_Mac_App_Prompt.md) | Full original application specification |
 | [`DELIVERABLES_MANIFEST.txt`](DELIVERABLES_MANIFEST.txt) | Deliverable inventory |
-| [`docs/ui-styling.md`](docs/ui-styling.md) | macOS design system: tokens, fonts, styling conventions |
-| `docs/superpowers/specs/` | Design specs |
-| `docs/superpowers/plans/` | Implementation plans |
+| `docs/superpowers/specs/`, `docs/superpowers/plans/` | Other design specs and implementation plans |
 
-> `files/README.md` is the original app-level README and predates the transport seam, the platform registry, and the Connect screen. This root README is the current reference.
+> `files/README.md` is the original app-level README and predates the platform registry, the Connection screen and the redesign. This root README is the current reference.
 
 ---
 
 ## Attribution and licensing
 
-- GM PCM Mode 3C block IDs and request/response framing in `pcmDiagnostics.ts` are derived from **PcmHammer** (GPL-3.0) — `Apps/PcmLibrary/Messages/BlockId.cs` and `Docs/Read_ID_Commands.txt`.
-- PID decode formulas follow **SAE J1979**; the GMT800 bus behavior follows **SAE J1850 VPW**.
-- The Claude assistant uses the [Anthropic API](https://docs.anthropic.com) via `@anthropic-ai/sdk`. You supply your own API key.
+- The GM PCM Mode 3C block IDs and request/response framing in `pcmDiagnostics.ts` are derived from **PcmHammer** (GPL-3.0): `Apps/PcmLibrary/Messages/BlockId.cs` and `Docs/Read_ID_Commands.txt`.
+- PID decode formulas follow **SAE J1979**, and the GMT800 bus behaviour follows **SAE J1850 VPW**.
+- The Claude assistant uses the [Anthropic API](https://docs.anthropic.com) through `@anthropic-ai/sdk`. You supply your own API key.
+- Icons are from [Tabler Icons](https://tabler.io/icons) (MIT), bundled locally.
 
 ---
 
 ## Safety
 
-Diagnostic work on a vehicle carries real risk. Do not read live data while driving. Clearing DTCs erases freeze-frame data and readiness monitors — capture a report first. Verify any voltage source with a multimeter before connecting it to the OBD-II port. Nothing in this app writes to a control module, and it should stay that way.
+Diagnostic work on a vehicle carries real risk.
+- Don't read live data while driving.
+- Clearing DTCs erases freeze-frame data and readiness monitors, so capture a report first.
+- Check any voltage source with a multimeter before connecting it to the OBD-II port.
+
+Apart from the standard Mode 04 clear-codes request, nothing in this app writes to a control module, and it should stay that way.
