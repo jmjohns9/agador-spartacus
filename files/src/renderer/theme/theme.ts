@@ -1,152 +1,144 @@
-// ─── Project Agador Spartacus — Dark Navy Professional Theme ─────────────────
-// Deep navy/slate backgrounds, electric blue accent, GitHub-dark-inspired.
-// Professional diagnostic software feel: precise, readable, no visual noise.
+// ─── Project Agador Spartacus — macOS-native design tokens ───────────────────
+// Apple system colours, SF type scale, 4pt spacing. Light/dark switch purely via
+// prefers-color-scheme; the main process drives it with nativeTheme.themeSource.
 
-export const COLORS = {
-  // Accent colors
-  primary:   '#2188FF',   // Electric blue — active states, primary CTA
-  secondary: '#3FB950',   // GitHub green — OK/connected status
+import type { CSSProperties } from 'react';
 
-  // Light-mode accent variants (WCAG AA on white)
-  primaryLight:   '#0366D6',
-  secondaryLight: '#2EA043',
+export type Status = 'neutral' | 'ok' | 'warn' | 'crit';
 
-  // Dark mode — deep navy layering
-  dark: {
-    bg:      '#0D1117',
-    bg2:     '#161B22',
-    bg3:     '#1C2128',
-    bg4:     '#22272E',
-    border:  '#30363D',
-    subtle:  '#3D444D',
-    text:    '#F0F6FC',
-    muted:   '#8B949E',
-  },
+export interface Thresholds {
+  warnLow?: number;
+  warnHigh?: number;
+  critLow?: number;
+  critHigh?: number;
+}
 
-  // Light mode — cool slate
-  light: {
-    bg:      '#F6F8FA',
-    bg2:     '#FFFFFF',
-    bg3:     '#EAEEF2',
-    bg4:     '#DDE1E6',
-    border:  '#C5CBD2',
-    subtle:  '#9198A1',
-    text:    '#1F2328',
-    muted:   '#636C76',
-  },
+// ─── Colour ──────────────────────────────────────────────────────────────────
+// *-text variants are contrast-checked for body text (see theme.test.ts);
+// the plain status colours are for fills, strokes and dots.
 
-  // Semantic status colors
-  ok:     '#3FB950',
-  warn:   '#D29922',
-  crit:   '#F85149',
-  info:   '#58A6FF',
-
-  // Dark mode semantic
-  darkOk:   '#3FB950',
-  darkWarn: '#D29922',
-  darkCrit: '#F85149',
-
-  // Light mode semantic
-  lightOk:   '#2EA043',
-  lightWarn: '#9A6700',
-  lightCrit: '#CF222E',
+export const LIGHT = {
+  window:        '#F5F5F7',
+  content:       '#F5F5F7',
+  grouped:       '#FFFFFF',
+  elevated:      '#FFFFFF',
+  fill:          'rgba(118,118,128,0.12)',
+  'fill-strong': 'rgba(118,118,128,0.20)',
+  label:         'rgba(0,0,0,0.85)',
+  'label-2':     'rgba(0,0,0,0.55)',
+  'label-3':     'rgba(0,0,0,0.40)',
+  'label-4':     'rgba(0,0,0,0.10)',
+  separator:     'rgba(0,0,0,0.10)',
+  shadow:        'rgba(0,0,0,0.12)',
+  accent:        '#007AFF',
+  'accent-text': '#0066CC',
+  'on-accent':   '#FFFFFF',
+  ok:            '#34C759',
+  'ok-text':     '#1F7A35',
+  warn:          '#FF9500',
+  'warn-text':   '#C93400',
+  crit:          '#FF3B30',
+  'crit-text':   '#D70015',
+  teal:          '#30B0C7',
+  indigo:        '#5856D6',
+  purple:        '#AF52DE',
+  pink:          '#FF2D55',
 } as const;
+
+export const DARK: Record<keyof typeof LIGHT, string> = {
+  window:        '#1C1C1E',
+  content:       '#1C1C1E',
+  grouped:       '#2C2C2E',
+  elevated:      '#3A3A3C',
+  fill:          'rgba(118,118,128,0.24)',
+  'fill-strong': 'rgba(118,118,128,0.36)',
+  label:         'rgba(255,255,255,0.85)',
+  'label-2':     'rgba(255,255,255,0.55)',
+  'label-3':     'rgba(255,255,255,0.40)',
+  'label-4':     'rgba(255,255,255,0.10)',
+  separator:     'rgba(255,255,255,0.10)',
+  shadow:        'rgba(0,0,0,0.40)',
+  accent:        '#0A84FF',
+  'accent-text': '#409CFF',
+  'on-accent':   '#FFFFFF',
+  ok:            '#30D158',
+  'ok-text':     '#30D158',
+  warn:          '#FF9F0A',
+  'warn-text':   '#FF9F0A',
+  crit:          '#FF453A',
+  'crit-text':   '#FF6961',
+  teal:          '#40CBE0',
+  indigo:        '#5E5CE6',
+  purple:        '#BF5AF2',
+  pink:          '#FF375F',
+};
+
+/** Tints derived from the active palette — resolve per appearance automatically. */
+export const DERIVED: Readonly<Record<string, string>> = {
+  'accent-tint': 'color-mix(in srgb, var(--accent) 16%, transparent)',
+  'ok-tint':     'color-mix(in srgb, var(--ok) 16%, transparent)',
+  'warn-tint':   'color-mix(in srgb, var(--warn) 16%, transparent)',
+  'crit-tint':   'color-mix(in srgb, var(--crit) 16%, transparent)',
+  selection:     'color-mix(in srgb, var(--accent) 22%, transparent)',
+};
+
+const declare = (vars: Readonly<Record<string, string>>): string =>
+  Object.entries(vars).map(([k, v]) => `--${k}: ${v};`).join(' ');
+
+export function buildThemeCSS(): string {
+  return [
+    `:root { color-scheme: light dark; ${declare(LIGHT)} ${declare(DERIVED)} }`,
+    `@media (prefers-color-scheme: dark) { :root { ${declare(DARK)} } }`,
+  ].join('\n');
+}
+
+export const STATUS_TEXT: Record<Status, string> = {
+  neutral: 'var(--label)',
+  ok:      'var(--ok-text)',
+  warn:    'var(--warn-text)',
+  crit:    'var(--crit-text)',
+};
+
+export const STATUS_FILL: Record<Status, string> = {
+  neutral: 'var(--accent)',
+  ok:      'var(--ok)',
+  warn:    'var(--warn)',
+  crit:    'var(--crit)',
+};
+
+export function statusFor(value: number, t: Thresholds): Status {
+  if (!Number.isFinite(value)) return 'neutral';
+  if ((t.critLow !== undefined && value < t.critLow) || (t.critHigh !== undefined && value > t.critHigh)) return 'crit';
+  if ((t.warnLow !== undefined && value < t.warnLow) || (t.warnHigh !== undefined && value > t.warnHigh)) return 'warn';
+  return 'neutral';
+}
+
+// ─── Typography ──────────────────────────────────────────────────────────────
+
+const UI_FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif";
 
 export const FONTS = {
-  display:  "'Plus Jakarta Sans', system-ui, sans-serif",
-  body:     "'Plus Jakarta Sans', system-ui, sans-serif",
-  mono:     "'JetBrains Mono', 'Roboto Mono', monospace",
+  ui:   UI_FONT,
+  mono: "ui-monospace, 'SF Mono', Menlo, monospace",
 } as const;
 
-export const FONT_SIZES = {
-  xs:   10,
-  sm:   11,
-  base: 13,
-  md:   14,
-  lg:   18,
-  xl:   22,
-  xxl:  28,
-  hero: 36,
-} as const;
+export const WEIGHT = { regular: 400, medium: 510, semibold: 590, bold: 700 } as const;
 
-export const SPACING = {
-  xs: 4,
-  sm: 6,
-  md: 10,
-  lg: 14,
-  xl: 20,
-} as const;
+export const TYPE = {
+  caption:  { fontSize: 11, lineHeight: '14px', fontWeight: WEIGHT.regular },
+  body:     { fontSize: 13, lineHeight: '18px', fontWeight: WEIGHT.regular },
+  headline: { fontSize: 15, lineHeight: '20px', fontWeight: WEIGHT.semibold },
+  title3:   { fontSize: 17, lineHeight: '22px', fontWeight: WEIGHT.semibold },
+  title2:   { fontSize: 22, lineHeight: '28px', fontWeight: WEIGHT.bold },
+  title1:   { fontSize: 28, lineHeight: '34px', fontWeight: WEIGHT.bold },
+  display:  { fontSize: 34, lineHeight: '40px', fontWeight: WEIGHT.bold },
+} satisfies Record<string, CSSProperties>;
 
-export const BORDER_RADIUS = 0;
+/** Spread onto any element showing a number, VIN, hex byte or PID id. */
+export const NUMERIC: CSSProperties = { fontFamily: FONTS.mono, fontVariantNumeric: 'tabular-nums' };
 
-export const BORDER_WIDTH = 2;
+// ─── Space, shape, motion ────────────────────────────────────────────────────
 
-export const EASING = {
-  spring: 'cubic-bezier(0.16, 1, 0.3, 1)',
-  bounce: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
-} as const;
-
-// ─── CSS Custom Properties injected into :root ──────────────────────────────
-
-export function buildCSSVars(dark: boolean): string {
-  const c = dark ? COLORS.dark : COLORS.light;
-  const ok   = dark ? COLORS.darkOk   : COLORS.lightOk;
-  const warn = dark ? COLORS.darkWarn : COLORS.lightWarn;
-  const crit = dark ? COLORS.darkCrit : COLORS.lightCrit;
-
-  return `
-    --bg:     ${c.bg};
-    --bg2:    ${c.bg2};
-    --bg3:    ${c.bg3};
-    --bg4:    ${c.bg4};
-    --br:     ${c.border};
-    --bs:     ${c.subtle};
-    --tw:     ${c.text};
-    --tm:     ${c.muted};
-    --pp:     ${dark ? COLORS.primary : COLORS.primaryLight};
-    --gb:     ${dark ? COLORS.secondary : COLORS.secondaryLight};
-    --sg:     ${ok};
-    --sa:     ${warn};
-    --sr:     ${crit};
-  `;
-}
-
-// ─── Gauge arc geometry helpers ───────────────────────────────────────────────
-
-export function gaugeArc(
-  value: number,
-  min: number,
-  max: number,
-  radius: number,
-  sweep = 270
-): { dashArray: string; dashOffset: number } {
-  const circumference = 2 * Math.PI * radius;
-  const fraction = Math.min(1, Math.max(0, (value - min) / (max - min)));
-  const arcLength = (sweep / 360) * circumference;
-  const filled = fraction * arcLength;
-  const gap = circumference - filled;
-  const dashOffset = -circumference * ((360 - sweep) / 2 / 360);
-  return {
-    dashArray: `${filled.toFixed(1)} ${gap.toFixed(1)}`,
-    dashOffset,
-  };
-}
-
-export function valueColor(
-  value: number,
-  warnLow?: number,
-  warnHigh?: number,
-  critLow?: number,
-  critHigh?: number,
-  dark = true
-): string {
-  const ok   = dark ? COLORS.darkOk   : COLORS.lightOk;
-  const warn = dark ? COLORS.darkWarn : COLORS.lightWarn;
-  const crit = dark ? COLORS.darkCrit : COLORS.lightCrit;
-
-  if ((critLow  !== undefined && value < critLow)  ||
-      (critHigh !== undefined && value > critHigh)) return crit;
-  if ((warnLow  !== undefined && value < warnLow)  ||
-      (warnHigh !== undefined && value > warnHigh)) return warn;
-  return ok;
-}
+export const SPACE = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32 } as const;
+export const RADIUS = { control: 6, card: 10, panel: 12 } as const;
+export const MOTION = { fast: '150ms ease-out', base: '200ms ease-out', slow: '250ms ease-out' } as const;

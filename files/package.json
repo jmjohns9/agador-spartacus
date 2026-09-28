@@ -10,7 +10,9 @@
     "build": "tsc -p tsconfig.main.json && webpack --config webpack.renderer.js",
     "dist": "npm run build && electron-builder",
     "typecheck": "tsc --noEmit",
-    "gen:dtcs": "ts-node scripts/gen-dtc-catalog.ts"
+    "gen:dtcs": "ts-node scripts/gen-dtc-catalog.ts",
+    "test": "TS_NODE_TRANSPILE_ONLY=1 node --require ts-node/register --test \"src/**/*.test.ts\" \"scripts/*.test.mjs\"",
+    "lint:styles": "node scripts/check-styles.mjs"
   },
   "build": {
     "appId": "com.silveradodx.obd2",

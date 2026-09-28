@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAppStore } from '../store/appStore';
-import { ScrollPane, SectionHeader, Card, Badge, AlertBanner, Button } from '../components/layout/UIComponents';
-import { FONTS } from '../theme/theme';
+import { ScrollPane, SectionHeader, Card, Badge, AlertBanner, Button, DataRow } from '../components/layout/UIComponents';
+import { TYPE, NUMERIC } from '../theme/theme';
 import { PcmField, PcmFieldGroup, PcmIdentity } from '../../shared/types';
 
 // ─── PCM diagnostics ──────────────────────────────────────────────────────────
@@ -28,35 +28,18 @@ const GROUP_HINT: Record<PcmFieldGroup, string> = {
 
 function FieldRow({ field }: { field: PcmField }): React.ReactElement {
   const [showRaw, setShowRaw] = useState(false);
+  const value = field.supported
+    ? (showRaw && field.raw ? field.raw : (field.value || '—'))
+    : 'Not supported by this calibration';
+
   return (
-    <div
-      style={{
-        display: 'flex', alignItems: 'baseline', gap: 10,
-        padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.05)',
-      }}
-    >
-      <span style={{ fontSize: 11, color: 'var(--tm)', minWidth: 190, flexShrink: 0 }}>
-        {field.label}
-      </span>
-      {field.supported ? (
-        <>
-          <span
-            onClick={() => field.raw && setShowRaw(v => !v)}
-            title={field.raw ? 'Click to toggle raw bytes' : undefined}
-            style={{
-              fontFamily: FONTS.mono, fontSize: 13, color: 'var(--tp)',
-              cursor: field.raw ? 'pointer' : 'default', wordBreak: 'break-all',
-            }}
-          >
-            {showRaw && field.raw ? field.raw : (field.value || '—')}
-          </span>
-          {showRaw && <Badge label="RAW" variant="info" />}
-        </>
-      ) : (
-        <span style={{ fontSize: 11, color: 'var(--tm)', fontStyle: 'italic' }}>
-          not supported by this calibration
-        </span>
-      )}
+    <div className="selectable" title={field.supported && field.raw ? 'Click to toggle raw bytes' : undefined}>
+      <DataRow
+        name={field.label}
+        value={value}
+        badge={showRaw && field.supported ? <Badge label="Raw" variant="info" /> : undefined}
+        onClick={field.supported && field.raw ? () => setShowRaw(v => !v) : undefined}
+      />
     </div>
   );
 }
@@ -116,27 +99,26 @@ export function PcmScreen(): React.ReactElement {
           </Button>
 
           {reading && progress && (
-            <span style={{ fontFamily: FONTS.mono, fontSize: 12, color: 'var(--tm)' }}>
+            <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)' }}>
               block {progress.done} / {progress.total}
             </span>
           )}
 
           {identity && !reading && (
             <>
-              <Badge label={`${supported}/${identity.fields.length} SUPPORTED`} variant="ok" />
-              <span style={{ fontSize: 11, color: 'var(--tm)' }}>
+              <Badge label={`${supported}/${identity.fields.length} supported`} variant="ok" />
+              <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>
                 {identity.protocol} · read {new Date(identity.readAt).toLocaleTimeString()}
               </span>
             </>
           )}
         </div>
-
-        <p style={{ margin: '10px 0 0', fontSize: 11, color: 'var(--tm)', lineHeight: 1.55 }}>
-          Queries GM Mode <span style={{ fontFamily: FONTS.mono }}>3C</span> identity blocks over J1850 VPW.
-          PID polling pauses while this runs, because the read reprograms the adapter header and
-          turns message headers on. This is read-only — nothing is written to the module.
-        </p>
       </Card>
+
+      <AlertBanner
+        variant="info"
+        message="Queries GM Mode 3C identity blocks over J1850 VPW. PID polling pauses while this runs, because the read reprograms the adapter header and turns message headers on. Read-only — nothing is written to the module."
+      />
 
       {error && <AlertBanner variant="crit" message={error} />}
 
@@ -146,8 +128,8 @@ export function PcmScreen(): React.ReactElement {
         return (
           <React.Fragment key={group}>
             <SectionHeader>{GROUP_LABEL[group]}</SectionHeader>
-            <Card>
-              <p style={{ margin: '0 0 6px', fontSize: 10, color: 'var(--tm)' }}>
+            <Card padding={0}>
+              <p style={{ margin: 0, padding: '8px 12px 4px', ...TYPE.caption, color: 'var(--label-2)' }}>
                 {GROUP_HINT[group]}
               </p>
               {fields.map(f => <FieldRow key={f.key} field={f} />)}
@@ -158,7 +140,7 @@ export function PcmScreen(): React.ReactElement {
 
       {!identity && !error && (
         <Card>
-          <p style={{ margin: 0, fontSize: 12, color: 'var(--tm)', lineHeight: 1.6 }}>
+          <p style={{ margin: 0, ...TYPE.caption, color: 'var(--label-2)', lineHeight: '18px' }}>
             Reads VIN, serial number, hardware ID, operating system ID, every calibration
             segment ID and its revision level, the broadcast code, oil life, and the
             manufacturer enable counter.

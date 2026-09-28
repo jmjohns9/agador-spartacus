@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useAppStore } from '../store/appStore';
 import { LogLevel } from '../../shared/types';
-import { Badge, Button, ScrollPane, SectionHeader, Card } from '../components/layout/UIComponents';
+import { Badge, Button } from '../components/layout/UIComponents';
+import { TYPE, NUMERIC } from '../theme/theme';
 
 // ─── Level metadata ───────────────────────────────────────────────────────────
 
@@ -13,12 +14,12 @@ const LEVEL_VARIANT: Record<LogLevel, 'ok' | 'info' | 'warn' | 'crit' | 'muted'>
   otel: 'muted',
 };
 
-const LEVEL_COLOR: Record<LogLevel, string> = {
-  ok:    'var(--sg)',
-  info:  'var(--gb)',
-  warn:  'var(--sa)',
-  error: 'var(--sr)',
-  otel:  'var(--tm)',
+const LEVEL_LABEL: Record<LogLevel, string> = {
+  ok:    'OK',
+  info:  'Info',
+  warn:  'Warn',
+  error: 'Error',
+  otel:  'OBD',
 };
 
 // ─── LogsScreen ───────────────────────────────────────────────────────────────
@@ -32,7 +33,6 @@ export function LogsScreen(): React.ReactElement {
   const [searchText,  setSearchText]  = useState('');
   const [markerText,  setMarkerText]  = useState('');
   const [autoScroll,  setAutoScroll]  = useState(true);
-  const [showStats,   setShowStats]   = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Level counts
@@ -111,19 +111,14 @@ export function LogsScreen(): React.ReactElement {
 
       {/* Toolbar */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px',
-        background: 'var(--bg2)', borderBottom: '2px solid var(--br)', flexShrink: 0,
-        flexWrap: 'wrap',
+        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+        background: 'var(--grouped)', boxShadow: 'inset 0 -1px 0 var(--separator)',
+        flexShrink: 0, flexWrap: 'wrap',
       }}>
         <select
           value={filterLevel}
           onChange={e => setFilterLevel(e.target.value as LogLevel | 'ALL')}
-          style={{
-            padding: '4px 6px', fontSize: 11, height: 28,
-            background: 'var(--bg3)', border: '2px solid var(--br)', borderRadius: 0,
-            color: 'var(--tw)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
-            letterSpacing: 0.4, textTransform: 'uppercase',
-          }}
+          style={{ ...TYPE.caption, height: 24 }}
         >
           <option value="ALL">All ({counts.total})</option>
           <option value="ok">OK ({counts.ok})</option>
@@ -138,11 +133,7 @@ export function LogsScreen(): React.ReactElement {
           placeholder="Search logs…"
           value={searchText}
           onChange={e => setSearchText(e.target.value)}
-          style={{
-            padding: '4px 8px', fontSize: 11, width: 160, height: 28,
-            background: 'var(--bg3)', border: '2px solid var(--br)', borderRadius: 0,
-            color: 'var(--tw)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
-          }}
+          style={{ ...TYPE.caption, width: 160, height: 24 }}
         />
 
         <div style={{ flex: 1 }} />
@@ -153,17 +144,13 @@ export function LogsScreen(): React.ReactElement {
           value={markerText}
           onChange={e => setMarkerText(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') handleAddMarker(); }}
-          style={{
-            padding: '4px 8px', fontSize: 11, width: 150, height: 28,
-            background: 'var(--bg3)', border: '2px solid var(--br)', borderRadius: 0,
-            color: 'var(--tw)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
-          }}
+          style={{ ...TYPE.caption, width: 150, height: 24 }}
         />
         <Button size="sm" icon="ti-flag" onClick={handleAddMarker} disabled={!markerText.trim()}>
           Mark
         </Button>
 
-        <div style={{ width: 1, height: 20, background: 'var(--br)' }} />
+        <div style={{ width: 1, height: 20, background: 'var(--separator)' }} />
 
         <Button size="sm" icon="ti-download" onClick={handleExportTxt} disabled={log.length === 0}>
           TXT
@@ -172,25 +159,19 @@ export function LogsScreen(): React.ReactElement {
           CSV
         </Button>
 
-        <div style={{ width: 1, height: 20, background: 'var(--br)' }} />
+        <div style={{ width: 1, height: 20, background: 'var(--separator)' }} />
 
-        <button
+        <Button
+          size="sm"
+          variant={autoScroll ? 'primary' : 'secondary'}
+          icon={autoScroll ? 'ti-arrow-bar-to-down' : 'ti-player-pause'}
           onClick={() => setAutoScroll(!autoScroll)}
-          title={autoScroll ? 'Auto-scroll ON — click to pause' : 'Auto-scroll OFF — click to resume'}
-          style={{
-            padding: '3px 8px', fontSize: 10, height: 28,
-            background: autoScroll ? 'rgba(255,87,34,0.08)' : 'var(--bg3)',
-            border: `1px solid ${autoScroll ? 'var(--pp)' : 'var(--br)'}`,
-            borderRadius: 0, color: autoScroll ? 'var(--pp)' : 'var(--tm)',
-            cursor: 'pointer', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
-            fontWeight: 600, letterSpacing: 0.5,
-          }}
+          title={autoScroll ? 'Auto-scroll on — click to pause' : 'Auto-scroll off — click to resume'}
         >
-          <i className={`ti ${autoScroll ? 'ti-arrow-bar-to-down' : 'ti-player-pause'}`} style={{ fontSize: 12, marginRight: 4 }} />
-          {autoScroll ? 'TAIL' : 'PAUSED'}
-        </button>
+          {autoScroll ? 'Tail' : 'Paused'}
+        </Button>
 
-        <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--tm)' }}>
+        <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)' }}>
           {filtered.length}{filtered.length !== log.length ? `/${log.length}` : ''} entries
         </span>
       </div>
@@ -199,64 +180,61 @@ export function LogsScreen(): React.ReactElement {
       {counts.error > 0 && (
         <div style={{
           display: 'flex', gap: 12, padding: '4px 12px',
-          background: 'rgba(255,59,80,0.04)', borderBottom: '2px solid var(--br)',
-          fontSize: 10, fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", flexShrink: 0,
+          background: 'var(--crit-tint)', boxShadow: 'inset 0 -1px 0 var(--separator)',
+          flexShrink: 0,
         }}>
-          {counts.error > 0 && <span style={{ color: 'var(--sr)' }}>{counts.error} errors</span>}
-          {counts.warn > 0 && <span style={{ color: 'var(--sa)' }}>{counts.warn} warnings</span>}
-          <span style={{ color: 'var(--tm)' }}>Session: {log.length > 0 ? `${((log[log.length - 1].timestamp - log[0].timestamp) / 60000).toFixed(1)} min` : '—'}</span>
+          {counts.error > 0 && <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--crit-text)' }}>{counts.error} errors</span>}
+          {counts.warn > 0 && <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--warn-text)' }}>{counts.warn} warnings</span>}
+          <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)' }}>
+            Session: {log.length > 0 ? `${((log[log.length - 1].timestamp - log[0].timestamp) / 60000).toFixed(1)} min` : '—'}
+          </span>
         </div>
       )}
 
       {/* Column headers */}
       <div style={{
-        display: 'grid', gridTemplateColumns: '130px 52px 1fr',
-        gap: 10, padding: '5px 12px',
-        background: 'var(--bg3)', borderBottom: '2px solid var(--br)',
+        display: 'grid', gridTemplateColumns: '130px 60px 1fr',
+        gap: 8, padding: '4px 12px',
+        background: 'var(--fill)', boxShadow: 'inset 0 -1px 0 var(--separator)',
         flexShrink: 0,
       }}>
         {['Timestamp', 'Level', 'Message'].map(h => (
-          <span key={h} style={{
-            fontSize: 9, color: 'var(--tm)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
-            letterSpacing: 1.2, textTransform: 'uppercase',
-          }}>
-            {h}
-          </span>
+          <span key={h} style={{ ...TYPE.caption, color: 'var(--label-3)' }}>{h}</span>
         ))}
       </div>
 
       {/* Log entries */}
       <div
         ref={scrollRef}
-        style={{
-          flex: 1, overflowY: 'auto',
-          fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11,
-          scrollbarWidth: 'thin', scrollbarColor: 'var(--br) transparent',
-        }}
+        style={{ flex: 1, overflowY: 'auto' }}
       >
         {filtered.length === 0 ? (
-          <div style={{ padding: '30px 20px', textAlign: 'center', fontSize: 12, color: 'var(--tm)' }}>
+          <div style={{ padding: '32px 20px', textAlign: 'center', ...TYPE.body, color: 'var(--label-2)' }}>
             {log.length === 0 ? 'No log entries — connect the adapter to start recording.' : 'No entries match the current filter.'}
           </div>
         ) : (
           filtered.map((entry, i) => (
-            <div key={i} style={{
-              display: 'grid', gridTemplateColumns: '130px 52px 1fr',
-              gap: 10, padding: '4px 12px', alignItems: 'flex-start',
-              borderBottom: '1px solid var(--bg3)',
-              background: entry.level === 'error' ? 'rgba(255,36,64,0.03)' : entry.level === 'warn' ? 'rgba(255,179,0,0.02)' : 'transparent',
-            }}>
-              <span style={{ color: 'var(--tm)', fontSize: 10, paddingTop: 1, fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace" }}>
+            <div
+              key={i}
+              className="selectable"
+              style={{
+                display: 'grid', gridTemplateColumns: '130px 60px 1fr',
+                gap: 8, padding: '4px 12px', alignItems: 'flex-start',
+                boxShadow: 'inset 0 -1px 0 var(--separator)',
+                background: entry.level === 'error' ? 'var(--crit-tint)' : entry.level === 'warn' ? 'var(--warn-tint)' : 'transparent',
+              }}
+            >
+              <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)', paddingTop: 1 }}>
                 {new Date(entry.timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                <span style={{ color: 'var(--bs)', fontSize: 10 }}>
+                <span style={{ color: 'var(--label-3)' }}>
                   .{String(entry.timestamp % 1000).padStart(3, '0')}
                 </span>
               </span>
-              <Badge label={entry.level.toUpperCase()} variant={LEVEL_VARIANT[entry.level]} />
-              <span style={{ color: 'var(--tw)', lineHeight: 1.5, wordBreak: 'break-word', fontSize: 11 }}>
+              <Badge label={LEVEL_LABEL[entry.level]} variant={LEVEL_VARIANT[entry.level]} />
+              <span style={{ ...TYPE.body, color: 'var(--label)', wordBreak: 'break-word' }}>
                 {entry.message}
-                {entry.pid   && <span style={{ color: 'var(--tm)' }}> [{entry.pid}]</span>}
-                {entry.value !== undefined && <span style={{ color: 'var(--pp)' }}> = {String(entry.value)}</span>}
+                {entry.pid   && <span style={{ ...NUMERIC, color: 'var(--label-2)' }}> [{entry.pid}]</span>}
+                {entry.value !== undefined && <span style={{ ...NUMERIC, color: 'var(--accent-text)' }}> = {String(entry.value)}</span>}
               </span>
             </div>
           ))

@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '../store/appStore';
 import { DataRecording } from '../../shared/types';
+import {
+  ScrollPane, SectionHeader, Card, Button, SegmentedControl, DataRow, EmptyState, AlertBanner,
+} from '../components/layout/UIComponents';
+import { TYPE, NUMERIC } from '../theme/theme';
 
 const KEY_PIDS = ['ATRV','010C','0104','0105','0110','010B','0111','0106','0107','0108','0109','012F'];
 const INTERVALS = [100, 500, 1000, 5000];
+const INTERVAL_OPTIONS = INTERVALS.map(ms => ({ value: String(ms), label: ms < 1000 ? `${ms}ms` : `${ms / 1000}s` }));
 const MAX_RECORDINGS = 10;
 
 function fmtDuration(ms: number): string {
@@ -129,70 +134,48 @@ export function DataLoggerScreen(): React.ReactElement {
     setSelectedPIDs(prev => prev.includes(pid) ? prev.filter(p => p !== pid) : [...prev, pid]);
   };
 
-  const recBtnStyle: React.CSSProperties = {
-    display: 'flex', alignItems: 'center', gap: 8,
-    padding: '8px 18px', fontSize: 12, fontFamily: "'JetBrains Mono','Roboto Mono',monospace", fontWeight: 700,
-    background: isRecording ? 'rgba(248,81,73,0.12)' : 'var(--bg4)',
-    border: `2px solid ${isRecording ? 'var(--sr)' : 'var(--br)'}`,
-    color: isRecording ? 'var(--sr)' : 'var(--tw)', cursor: 'pointer',
-  };
-
-  const intervalBtnStyle = (ms: number): React.CSSProperties => ({
-    padding: '5px 10px', fontSize: 10, fontFamily: "'JetBrains Mono','Roboto Mono',monospace",
-    background: sampleInterval === ms ? 'rgba(33,136,255,0.12)' : 'var(--bg4)',
-    border: `2px solid ${sampleInterval === ms ? 'var(--pp)' : 'var(--br)'}`,
-    color: sampleInterval === ms ? 'var(--pp)' : 'var(--tm)',
-    cursor: isRecording ? 'not-allowed' : 'pointer',
-  });
-
-  const pidBtnStyle = (pid: string): React.CSSProperties => ({
-    padding: '5px 10px', fontSize: 10, fontFamily: "'JetBrains Mono','Roboto Mono',monospace",
-    background: selectedPIDs.includes(pid) ? 'rgba(33,136,255,0.12)' : 'var(--bg4)',
-    border: `2px solid ${selectedPIDs.includes(pid) ? 'var(--pp)' : 'var(--br)'}`,
-    color: selectedPIDs.includes(pid) ? 'var(--pp)' : 'var(--tm)',
-    cursor: isRecording ? 'not-allowed' : 'pointer',
-  });
-
   return (
-    <div style={{ overflowY: 'auto', flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <ScrollPane>
+
       {warnDropped && (
-        <div style={{ padding: '6px 10px', fontSize: 11, color: 'var(--sa)', background: 'rgba(210,153,34,0.08)', border: '2px solid var(--sa)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>Cap ({MAX_RECORDINGS}) reached — oldest recording deleted.</span>
-          <button onClick={() => setWarnDropped(false)} style={{ background: 'none', border: 'none', color: 'var(--tm)', cursor: 'pointer' }}>
-            <i className="ti ti-x" style={{ fontSize: 12 }} />
-          </button>
-        </div>
+        <AlertBanner
+          message={`Cap (${MAX_RECORDINGS}) reached — oldest recording deleted.`}
+          variant="warn"
+          action="Dismiss"
+          onAction={() => setWarnDropped(false)}
+        />
       )}
 
-      {/* Controls */}
-      <div style={{ background: 'var(--bg3)', border: '2px solid var(--br)', padding: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {/* Interval */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, color: 'var(--tm)', minWidth: 100 }}>Sample interval</span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {INTERVALS.map(ms => (
-              <button key={ms} disabled={isRecording} onClick={() => setSampleInterval(ms)} style={intervalBtnStyle(ms)}>
-                {ms < 1000 ? `${ms}ms` : `${ms / 1000}s`}
-              </button>
-            ))}
-          </div>
+      {/* ── Recording controls ─────────────────────────────────────────── */}
+      <Card style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ ...TYPE.caption, color: 'var(--label-2)', minWidth: 100 }}>Sample interval</span>
+          <SegmentedControl
+            ariaLabel="Sample interval"
+            size="sm"
+            options={INTERVAL_OPTIONS}
+            value={String(sampleInterval)}
+            onChange={v => setSampleInterval(Number(v))}
+          />
         </div>
 
-        {/* Record button */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={isRecording ? stopRecording : startRecording} style={recBtnStyle}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: isRecording ? 'var(--sr)' : 'var(--tm)', display: 'inline-block' }} />
+          <Button
+            variant={isRecording ? 'destructive' : 'primary'}
+            icon={isRecording ? 'ti-player-stop' : 'ti-player-record'}
+            onClick={isRecording ? stopRecording : startRecording}
+          >
             {isRecording ? 'Stop' : 'Record'}
-          </button>
+          </Button>
           {isRecording && (
-            <div style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--sr)' }}>
-              ● REC &nbsp; {fmtDuration(elapsedMs)} &nbsp; {sampleCount.toLocaleString()} samples
-              {typeof liveVoltage === 'number' ? `   ${liveVoltage.toFixed(2)} V` : ''}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, ...TYPE.caption, ...NUMERIC, color: 'var(--crit-text)' }}>
+              <span aria-hidden className="pulse" style={{ width: 6, height: 6, borderRadius: 3, background: 'var(--crit)' }} />
+              REC · {fmtDuration(elapsedMs)} · {sampleCount.toLocaleString()} samples
+              {typeof liveVoltage === 'number' ? ` · ${liveVoltage.toFixed(2)} V` : ''}
             </div>
           )}
         </div>
 
-        {/* Marker */}
         {isRecording && (
           <div style={{ display: 'flex', gap: 8 }}>
             <input
@@ -200,58 +183,59 @@ export function DataLoggerScreen(): React.ReactElement {
               onChange={e => setMarkerText(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') addMarker(); }}
               placeholder="Add marker (Enter to insert)…"
-              style={{ flex: 1, background: 'var(--bg4)', border: '1px solid var(--br)', color: 'var(--tw)', padding: '5px 8px', fontSize: 11, fontFamily: 'monospace', outline: 'none' }}
+              style={{ flex: 1 }}
             />
-            <button onClick={addMarker} disabled={!markerText.trim()} style={{ padding: '4px 10px', background: 'var(--bg4)', border: '1px solid var(--br)', color: 'var(--tm)', fontSize: 11, cursor: markerText.trim() ? 'pointer' : 'not-allowed' }}>
-              Insert
-            </button>
+            <Button size="sm" onClick={addMarker} disabled={!markerText.trim()}>Insert</Button>
           </div>
         )}
-      </div>
+      </Card>
 
-      {/* PID selector */}
-      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.0, textTransform: 'uppercase', color: 'var(--tm)', padding: '6px 0 2px' }}>PIDs to record</div>
-      <div style={{ background: 'var(--bg3)', border: '2px solid var(--br)', padding: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {/* ── PID selector ──────────────────────────────────────────────── */}
+      <SectionHeader>PIDs to record</SectionHeader>
+      <Card style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {KEY_PIDS.map(pid => (
-          <button key={pid} disabled={isRecording} onClick={() => togglePID(pid)} style={pidBtnStyle(pid)}>{pid}</button>
+          <Button
+            key={pid}
+            size="sm"
+            variant={selectedPIDs.includes(pid) ? 'primary' : 'secondary'}
+            disabled={isRecording}
+            onClick={() => togglePID(pid)}
+          >
+            <span style={NUMERIC}>{pid}</span>
+          </Button>
         ))}
-      </div>
+      </Card>
 
-      {/* Recordings list */}
-      {recordings.length > 0 && (
-        <>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.0, textTransform: 'uppercase', color: 'var(--tm)', padding: '6px 0 2px' }}>
-            Saved recordings — {recordings.length} / {MAX_RECORDINGS}
-          </div>
+      {/* ── Recordings list ──────────────────────────────────────────── */}
+      <SectionHeader>{`Saved recordings — ${recordings.length} / ${MAX_RECORDINGS}`}</SectionHeader>
+      {recordings.length === 0 ? (
+        <Card>
+          <EmptyState icon="ti-activity" title="No recordings" message="Choose PIDs and press Record." />
+        </Card>
+      ) : (
+        <Card padding={0}>
           {recordings.map(rec => (
-            <div key={rec.id} style={{ background: 'var(--bg3)', border: '2px solid var(--br)', padding: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                <i className="ti ti-activity" style={{ fontSize: 14, color: 'var(--gb)', flexShrink: 0, marginTop: 2 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, color: 'var(--tw)', fontWeight: 600, marginBottom: 3 }}>{rec.name}</div>
-                  <div style={{ fontSize: 10, color: 'var(--tm)', fontFamily: "'JetBrains Mono','Roboto Mono',monospace", lineHeight: 1.6 }}>
-                    {fmtDuration(rec.durationMs)} · {rec.sampleCount.toLocaleString()} samples · {rec.pids.length} PIDs
-                    {rec.markers.length > 0 ? ` · ${rec.markers.length} markers` : ''} · {fmtBytes(JSON.stringify(rec).length)}
-                  </div>
+            <DataRow
+              key={rec.id}
+              name={rec.name}
+              subtext={
+                `${fmtDuration(rec.durationMs)} · ${rec.sampleCount.toLocaleString()} samples · ${rec.pids.length} PIDs` +
+                (rec.markers.length > 0 ? ` · ${rec.markers.length} markers` : '') +
+                ` · ${fmtBytes(JSON.stringify(rec).length)}`
+              }
+              value=""
+              badge={
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <Button size="sm" icon="ti-file-spreadsheet" title="Export CSV" onClick={() => exportCSV(rec)}>CSV</Button>
+                  <Button size="sm" icon="ti-file-code" title="Export JSON" onClick={() => exportJSON(rec)}>JSON</Button>
+                  <Button size="sm" variant="plain" icon="ti-trash" title="Delete recording" aria-label="Delete recording" onClick={() => deleteRecording(rec.id)} />
                 </div>
-                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                  <button onClick={() => exportCSV(rec)} title="Export CSV" style={{ padding: '5px 10px', background: 'var(--bg4)', border: '2px solid var(--br)', color: 'var(--tm)', fontSize: 10, cursor: 'pointer' }}>
-                    <i className="ti ti-file-spreadsheet" style={{ marginRight: 4 }} />CSV
-                  </button>
-                  <button onClick={() => exportJSON(rec)} title="Export JSON" style={{ padding: '5px 10px', background: 'var(--bg4)', border: '2px solid var(--br)', color: 'var(--tm)', fontSize: 10, cursor: 'pointer' }}>
-                    <i className="ti ti-file-code" style={{ marginRight: 4 }} />JSON
-                  </button>
-                  <button onClick={() => deleteRecording(rec.id)} title="Delete recording" aria-label="Delete recording" style={{ padding: '5px 8px', background: 'none', border: '2px solid transparent', color: 'var(--sr)', cursor: 'pointer', opacity: 0.7 }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--sr)'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '0.7'; (e.currentTarget as HTMLElement).style.borderColor = 'transparent'; }}>
-                    <i className="ti ti-trash" style={{ fontSize: 12 }} />
-                  </button>
-                </div>
-              </div>
-            </div>
+              }
+            />
           ))}
-        </>
+        </Card>
       )}
-    </div>
+
+    </ScrollPane>
   );
 }

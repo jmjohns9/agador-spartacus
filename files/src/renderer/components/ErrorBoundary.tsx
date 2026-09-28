@@ -33,7 +33,7 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
       }}>
         <div style={{ maxWidth: 640, width: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-            <i className="ti ti-alert-octagon" style={{ fontSize: 32, color: 'var(--pp)' }} />
+            <i className="ti ti-alert-octagon" style={{ fontSize: 32, color: 'var(--accent-text)' }} />
             <h1 style={{ margin: 0, fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700, fontSize: 22, letterSpacing: 1.5, textTransform: 'uppercase' }}>
               Project Agador Spartacus crashed
             </h1>
@@ -55,7 +55,7 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
             <button
               onClick={this.reload}
               style={{
-                background: 'rgba(255,87,34,0.08)', border: '1px solid var(--pp)', color: 'var(--pp)',
+                background: 'rgba(255,87,34,0.08)', border: '1px solid var(--accent)', color: 'var(--accent-text)',
                 borderRadius: 0, padding: '10px 20px', cursor: 'pointer',
                 fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontWeight: 700,
                 letterSpacing: 0.5, textTransform: 'uppercase', fontSize: 12,

@@ -2,8 +2,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
 import { DTCCode, DTCType, DTCStatus, FreezeFrame } from '../../shared/types';
 import {
-  ScrollPane, SectionHeader, Card, Badge, AlertBanner, Button,
+  ScrollPane, SectionHeader, Card, Badge, AlertBanner, Button, Divider, EmptyState,
 } from '../components/layout/UIComponents';
+import { TYPE, NUMERIC, WEIGHT } from '../theme/theme';
 
 // ─── DTC type/status metadata ─────────────────────────────────────────────────
 
@@ -14,7 +15,7 @@ const TYPE_LABELS: Record<DTCType, string> = {
 const STATUS_VARIANT: Record<DTCStatus, 'crit' | 'warn' | 'info' | 'muted'> = {
   active:    'crit',
   pending:   'warn',
-  permanent: 'warn',
+  permanent: 'muted',
   historical: 'muted',
 };
 
@@ -60,49 +61,40 @@ function DTCRow({ dtc, expanded, onToggle, hasFreezeFrame, onViewFreezeFrame }: 
     return `${Math.floor(s / 3600)}h ago`;
   };
 
+  const dotColor = dtc.status === 'active' ? 'var(--crit)' : dtc.status === 'pending' ? 'var(--warn)' : 'var(--label-4)';
+  const codeColor = dtc.status === 'active' ? 'var(--crit-text)' : 'var(--label)';
+
   return (
-    <div style={{ borderBottom: '1px solid var(--bg3)' }}>
+    <div>
       {/* Summary row */}
       <div
         onClick={onToggle}
+        className={expanded ? undefined : 'row-hover'}
         style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '10px 12px', cursor: 'pointer',
-          background: expanded ? 'var(--bg3)' : 'transparent',
-          transition: 'background 0.1s, border-color 0.15s',
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 12px', cursor: 'pointer',
+          background: expanded ? 'var(--fill)' : 'transparent',
         }}
-        onMouseEnter={e => { if (!expanded) (e.currentTarget as HTMLElement).style.background = 'var(--bg4)'; }}
-        onMouseLeave={e => { if (!expanded) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
       >
         {/* Status dot */}
-        <div style={{
-          width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-          background: dtc.status === 'active' ? 'var(--sr)'
-            : dtc.status === 'pending' ? 'var(--sa)'
-            : 'var(--tm)',
-          animation: dtc.status === 'active' ? 'blink 2s infinite' : 'none',
-        }} />
+        <span
+          aria-hidden
+          className={dtc.status === 'active' ? 'pulse' : undefined}
+          style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: dotColor }}
+        />
 
-        {/* Code — monospace PID style */}
-        <span style={{
-          fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 13, fontWeight: 500,
-          color: dtc.status === 'active' ? 'var(--sr)' : 'var(--tw)',
-          width: 54, flexShrink: 0,
-        }}>
+        {/* Code */}
+        <span style={{ ...TYPE.body, ...NUMERIC, fontWeight: WEIGHT.medium, color: codeColor, width: 54, flexShrink: 0 }}>
           {dtc.code}
         </span>
 
         {/* Description */}
-        <span style={{ flex: 1, fontSize: 12, color: 'var(--tw)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span style={{ ...TYPE.body, color: 'var(--label)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {dtc.description}
         </span>
 
-        {/* Module — dense Barlow Condensed label */}
-        <span style={{
-          fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-          letterSpacing: 1.2, textTransform: 'uppercase',
-          color: 'var(--tm)', flexShrink: 0,
-        }}>
+        {/* Module */}
+        <span style={{ ...TYPE.caption, color: 'var(--label-3)', width: 40, flexShrink: 0 }}>
           {dtc.module}
         </span>
 
@@ -111,127 +103,92 @@ function DTCRow({ dtc, expanded, onToggle, hasFreezeFrame, onViewFreezeFrame }: 
         <Badge label={dtc.status} variant={STATUS_VARIANT[dtc.status]} />
 
         {/* Last seen */}
-        <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--tm)', width: 50, textAlign: 'right', flexShrink: 0 }}>
+        <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-3)', width: 50, textAlign: 'right', flexShrink: 0 }}>
           {ago(dtc.lastSeen)}
         </span>
 
-        <button
+        <Button
+          variant="plain"
+          size="sm"
+          icon="ti-camera"
           title={hasFreezeFrame ? 'View freeze frame' : 'No freeze frame captured yet'}
-          onClick={e => { e.stopPropagation(); if (hasFreezeFrame) onViewFreezeFrame(); }}
-          style={{
-            background: 'none', border: 'none', padding: '2px 4px',
-            cursor: hasFreezeFrame ? 'pointer' : 'default',
-            color: hasFreezeFrame ? 'var(--gb)' : 'var(--br)',
-            flexShrink: 0,
-          }}
-        >
-          <i className="ti ti-camera" style={{ fontSize: 12 }} />
-        </button>
-        <i className={`ti ti-chevron-${expanded ? 'up' : 'down'}`} style={{ fontSize: 13, color: 'var(--tm)', flexShrink: 0 }} />
+          disabled={!hasFreezeFrame}
+          onClick={e => { e.stopPropagation(); onViewFreezeFrame(); }}
+        />
+        <i className={`ti ti-chevron-${expanded ? 'up' : 'down'}`} style={{ fontSize: 13, color: 'var(--label-3)', flexShrink: 0 }} />
       </div>
 
       {/* Expanded detail panel */}
       {expanded && (
-        <div style={{
-          background: 'var(--bg4)', borderTop: '1px solid var(--bg3)',
-          padding: '12px 16px', display: 'flex', gap: 24,
-        }}>
+        <div style={{ background: 'var(--fill)', padding: '12px 16px', display: 'flex', gap: 24 }}>
 
           {/* Left: causes + repair (CarsXE enriched when available) */}
           <div style={{ flex: 1, minWidth: 0 }}>
             {carsxe.state === 'loading' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--tm)', marginBottom: 10 }}>
-                <i className="ti ti-loader-2" style={{ fontSize: 13, animation: 'spin 1s linear infinite' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, ...TYPE.caption, color: 'var(--label-2)', marginBottom: 8 }}>
+                <i className="ti ti-loader-2" style={{ fontSize: 13 }} />
                 Looking up {dtc.code} via CarsXE…
               </div>
             )}
 
             {carsxe.state === 'ok' && carsxe.description && (
               <>
-                <div style={{
-                  fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-                  letterSpacing: 1.2, textTransform: 'uppercase',
-                  color: 'var(--pp)', marginBottom: 4,
-                }}>
-                  CarsXE definition
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--tw)', marginBottom: 10, lineHeight: 1.6 }}>{carsxe.description}</div>
+                <SectionHeader>CarsXE definition</SectionHeader>
+                <div style={{ ...TYPE.body, color: 'var(--label)', marginTop: 4, marginBottom: 8 }}>{carsxe.description}</div>
               </>
             )}
 
-            <div style={{
-              fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-              letterSpacing: 1.2, textTransform: 'uppercase',
-              color: 'var(--tm)', marginBottom: 8,
-            }}>
+            <SectionHeader>
               {carsxe.state === 'ok' && carsxe.causes.length > 0 ? 'CarsXE — likely causes' : 'Likely causes'}
-            </div>
-            <ol style={{ paddingLeft: 16, margin: 0 }}>
+            </SectionHeader>
+            <ol style={{ paddingLeft: 16, margin: '8px 0 0' }}>
               {(carsxe.state === 'ok' && carsxe.causes.length > 0 ? carsxe.causes : dtc.likelyCauses).map((c, i) => (
-                <li key={i} style={{ fontSize: 12, color: 'var(--tw)', marginBottom: 4, lineHeight: 1.5 }}>{c}</li>
+                <li key={i} style={{ ...TYPE.body, color: 'var(--label)', marginBottom: 4 }}>{c}</li>
               ))}
             </ol>
 
-            <div style={{
-              fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-              letterSpacing: 1.2, textTransform: 'uppercase',
-              color: 'var(--tm)', marginTop: 12, marginBottom: 6,
-            }}>
-              {carsxe.state === 'ok' && carsxe.repair ? 'CarsXE — tech notes' : 'Repair procedure'}
+            <div style={{ marginTop: 12 }}>
+              <SectionHeader>
+                {carsxe.state === 'ok' && carsxe.repair ? 'CarsXE — tech notes' : 'Repair procedure'}
+              </SectionHeader>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--tw)', lineHeight: 1.6 }}>
+            <div style={{ ...TYPE.body, color: 'var(--label)', marginTop: 8 }}>
               {carsxe.state === 'ok' && carsxe.repair ? carsxe.repair : dtc.repairSummary}
             </div>
 
             {carsxe.state === 'no-key' && (
-              <div style={{ marginTop: 10, fontSize: 10, color: 'var(--tm)', fontFamily: "'JetBrains Mono','Roboto Mono',monospace" }}>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginTop: 8 }}>
                 Set CARSXE_API_KEY to enable live DTC lookup
               </div>
             )}
             {carsxe.state === 'error' && (
-              <div style={{ marginTop: 10, fontSize: 10, color: 'var(--sa)' }}>CarsXE: {carsxe.error}</div>
+              <div style={{ ...TYPE.caption, color: 'var(--warn-text)', marginTop: 8 }}>CarsXE: {carsxe.error}</div>
             )}
           </div>
 
           {/* Right: metadata */}
-          <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10, minWidth: 160 }}>
+          <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, minWidth: 160 }}>
             <div>
-              <div style={{
-                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-                letterSpacing: 1.2, textTransform: 'uppercase',
-                color: 'var(--tm)', marginBottom: 3,
-              }}>Code</div>
-              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 15, color: 'var(--pp)' }}>{dtc.code}</span>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Code</div>
+              <span style={{ ...TYPE.headline, ...NUMERIC, color: 'var(--accent-text)' }}>{dtc.code}</span>
             </div>
             <div>
-              <div style={{
-                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-                letterSpacing: 1.2, textTransform: 'uppercase',
-                color: 'var(--tm)', marginBottom: 3,
-              }}>Module</div>
-              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--tw)' }}>{dtc.module}</span>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Module</div>
+              <span style={{ ...TYPE.body, color: 'var(--label)' }}>{dtc.module}</span>
             </div>
             <div>
-              <div style={{
-                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-                letterSpacing: 1.2, textTransform: 'uppercase',
-                color: 'var(--tm)', marginBottom: 3,
-              }}>First seen</div>
-              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--tw)' }}>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>First seen</div>
+              <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label)' }}>
                 {new Date(dtc.firstSeen).toLocaleTimeString()}
               </span>
             </div>
             <div>
-              <div style={{
-                fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-                letterSpacing: 1.2, textTransform: 'uppercase',
-                color: 'var(--tm)', marginBottom: 3,
-              }}>Last seen</div>
-              <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 11, color: 'var(--tw)' }}>
+              <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>Last seen</div>
+              <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label)' }}>
                 {new Date(dtc.lastSeen).toLocaleTimeString()}
               </span>
             </div>
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               <Badge label={TYPE_LABELS[dtc.type]} variant={TYPE_VARIANT[dtc.type]} />
               <Badge label={dtc.status} variant={STATUS_VARIANT[dtc.status]} />
             </div>
@@ -297,35 +254,27 @@ export function DTCScreen(): React.ReactElement {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
-      {/* ── Toolbar — Dash0-style dense header bar ────────────────────────── */}
+      {/* ── Toolbar ───────────────────────────────────────────────────── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: '7px 10px', background: 'var(--bg2)', borderBottom: '2px solid var(--br)',
+        padding: '8px 12px', background: 'var(--grouped)',
+        boxShadow: 'inset 0 -1px 0 var(--separator)',
         flexShrink: 0,
       }}>
         {/* Search */}
         <input
           type="text"
-          placeholder="Search code or description..."
+          placeholder="Search code or description…"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{
-            padding: '4px 8px', fontSize: 11, width: 220, height: 28,
-            background: 'var(--bg4)', border: '2px solid var(--br)', borderRadius: 0,
-            color: 'var(--tw)', fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace",
-            outline: 'none',
-          }}
+          style={{ width: 220, height: 28 }}
         />
 
         {/* Type filter */}
         <select
           value={filterType}
           onChange={e => setFilterType(e.target.value as DTCType | 'ALL')}
-          style={{
-            padding: '4px 6px', fontSize: 11, height: 28,
-            background: 'var(--bg4)', border: '2px solid var(--br)', borderRadius: 0,
-            color: 'var(--tw)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
-          }}
+          style={{ height: 28 }}
         >
           <option value="ALL">All types</option>
           <option value="P">Powertrain (P)</option>
@@ -338,11 +287,7 @@ export function DTCScreen(): React.ReactElement {
         <select
           value={filterStatus}
           onChange={e => setFilterStatus(e.target.value as DTCStatus | 'ALL')}
-          style={{
-            padding: '4px 6px', fontSize: 11, height: 28,
-            background: 'var(--bg4)', border: '2px solid var(--br)', borderRadius: 0,
-            color: 'var(--tw)', fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
-          }}
+          style={{ height: 28 }}
         >
           <option value="ALL">All statuses</option>
           <option value="active">Active</option>
@@ -354,11 +299,11 @@ export function DTCScreen(): React.ReactElement {
         <div style={{ flex: 1 }} />
 
         {/* Counters */}
-        <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 10, color: 'var(--tm)' }}>
+        <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)' }}>
           {filtered.length} of {dtcs.length} codes
         </span>
 
-        {/* Actions — Dash0 Button component */}
+        {/* Actions */}
         <Button
           size="sm"
           icon="ti-refresh"
@@ -368,7 +313,7 @@ export function DTCScreen(): React.ReactElement {
           Scan
         </Button>
         <Button
-          variant="danger"
+          variant="destructive"
           size="sm"
           icon="ti-trash"
           onClick={handleClear}
@@ -411,31 +356,29 @@ export function DTCScreen(): React.ReactElement {
 
         {dtcs.length === 0 ? (
           <Card>
-            <div style={{ padding: '24px 12px', textAlign: 'center' }}>
-              <i className="ti ti-circle-check" style={{ fontSize: 32, color: 'var(--sg)', display: 'block', marginBottom: 10 }} />
-              <div style={{ fontSize: 14, color: 'var(--tw)', fontWeight: 500, marginBottom: 4 }}>No fault codes stored</div>
-              <div style={{ fontSize: 12, color: 'var(--tm)' }}>
-                {connectionStatus === 'connected' ? 'All systems normal. MIL is off.' : 'Connect the OBD adapter and run a scan.'}
-              </div>
-            </div>
+            <EmptyState icon="ti-circle-check" title="No fault codes" message="Run a scan to read stored, pending and permanent codes." />
           </Card>
         ) : filtered.length === 0 ? (
           <Card>
-            <div style={{ padding: '20px 12px', textAlign: 'center', fontSize: 12, color: 'var(--tm)' }}>
-              No codes match the current filter — clear the filter to see all {dtcs.length} codes
-            </div>
+            <EmptyState
+              icon="ti-filter-off"
+              title="No matching codes"
+              message={`No codes match the current filter — clear it to see all ${dtcs.length} codes.`}
+            />
           </Card>
         ) : (
           <Card padding={0}>
-            {filtered.map(dtc => (
-              <DTCRow
-                key={dtc.code}
-                dtc={dtc}
-                expanded={expandedCode === dtc.code}
-                onToggle={() => setExpandedCode(expandedCode === dtc.code ? null : dtc.code)}
-                hasFreezeFrame={freezeFrameCodes.has(dtc.code)}
-                onViewFreezeFrame={() => { setFreezeFrameFilter(dtc.code); setActiveScreen('freezeframes'); }}
-              />
+            {filtered.map((dtc, i) => (
+              <React.Fragment key={dtc.code}>
+                <DTCRow
+                  dtc={dtc}
+                  expanded={expandedCode === dtc.code}
+                  onToggle={() => setExpandedCode(expandedCode === dtc.code ? null : dtc.code)}
+                  hasFreezeFrame={freezeFrameCodes.has(dtc.code)}
+                  onViewFreezeFrame={() => { setFreezeFrameFilter(dtc.code); setActiveScreen('freezeframes'); }}
+                />
+                {i < filtered.length - 1 && <Divider />}
+              </React.Fragment>
             ))}
           </Card>
         )}
@@ -455,29 +398,24 @@ export function DTCScreen(): React.ReactElement {
                 { code: 'P0174', mod: 'PCM',  desc: 'System too lean, Bank 2 — vacuum leak or dirty MAF', type: 'Powertrain', severity: 'warn' as const },
                 { code: 'C0265', mod: 'EBCM', desc: 'EBCM relay circuit — ABS / electronic brake fault', type: 'Chassis', severity: 'warn' as const },
                 { code: 'B0429', mod: 'BCM',  desc: 'Seat heater fault — heated seat circuit open', type: 'Body', severity: 'muted' as const },
-              ].map(({ code, mod, desc, type, severity }, i, arr) => (
-                <div
-                  key={code}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-                    borderBottom: i < arr.length - 1 ? '1px solid var(--bg3)' : 'none',
-                    background: dtcs.find(d => d.code === code) ? 'rgba(255,87,34,0.04)' : 'transparent',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = dtcs.find(d => d.code === code) ? 'rgba(255,87,34,0.06)' : 'var(--bg4)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = dtcs.find(d => d.code === code) ? 'rgba(255,87,34,0.04)' : 'transparent'; }}
-                >
-                  <span style={{ fontFamily: "'JetBrains Mono', 'Roboto Mono', monospace", fontSize: 12, color: 'var(--tm)', width: 44, flexShrink: 0 }}>{code}</span>
-                  <span style={{
-                    fontFamily: "'Inter', 'Roboto', system-ui, sans-serif", fontSize: 9,
-                    letterSpacing: 1.2, textTransform: 'uppercase',
-                    color: 'var(--tm)', width: 32, flexShrink: 0,
-                  }}>{mod}</span>
-                  <span style={{ flex: 1, fontSize: 12, color: 'var(--tw)' }}>{desc}</span>
-                  {dtcs.find(d => d.code === code) && <Badge label="Stored" variant="warn" />}
-                  <Badge label={type} variant={severity} />
-                </div>
-              ))}
+              ].map(({ code, mod, desc, type, severity }, i, arr) => {
+                const stored = dtcs.some(d => d.code === code);
+                return (
+                  <React.Fragment key={code}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                      background: stored ? 'var(--warn-tint)' : 'transparent',
+                    }}>
+                      <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-3)', width: 48, flexShrink: 0 }}>{code}</span>
+                      <span style={{ ...TYPE.caption, color: 'var(--label-3)', width: 36, flexShrink: 0 }}>{mod}</span>
+                      <span style={{ ...TYPE.body, color: 'var(--label)', flex: 1 }}>{desc}</span>
+                      {stored && <Badge label="Stored" variant="warn" />}
+                      <Badge label={type} variant={severity} />
+                    </div>
+                    {i < arr.length - 1 && <Divider />}
+                  </React.Fragment>
+                );
+              })}
             </Card>
           </>
         )}

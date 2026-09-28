@@ -406,3 +406,8 @@ export interface PcmIdentity {
 export type PcmReadResult =
   | { ok: true; identity: PcmIdentity }
   | { ok: false; error: string };
+
+// ─── Appearance ───────────────────────────────────────────────────────────────
+
+/** Window appearance override. 'system' follows macOS. */
+export type Appearance = 'system' | 'light' | 'dark';
