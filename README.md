@@ -10,7 +10,7 @@ The app runs fully offline against a built-in ELM327 simulator, so no vehicle or
 
 ## Screenshots
 
-All captured from the built-in simulator — no vehicle or adapter required to see them.
+All captured from the built-in simulator — no vehicle or adapter required to see them. The app follows macOS light and dark appearance; these are shown in light.
 
 | | |
 |---|---|
@@ -19,6 +19,10 @@ All captured from the built-in simulator — no vehicle or adapter required to s
 | **Diagnostic fault codes** — active/pending/permanent DTCs cross-referenced against the GMT800 known-fault-code table | ![DTC screen](docs/screenshots/dtc.png) |
 | **Parasitic draw analysis** — risk score, active power consumers with estimated draw, and a live battery voltage timeline | ![Parasitic draw screen](docs/screenshots/draw.png) |
 | **Module wake monitor** — per-module address, latency, awake/asleep state, and known draw-risk annotations | ![Modules screen](docs/screenshots/modules.png) |
+| **Connection** — vehicle profile, adapter and protocol status, and Bluetooth signal details, with connect/disconnect from here or the toolbar | ![Connection screen](docs/screenshots/connect.png) |
+| **Engine & fuel** — engine performance gauges, thermal readings, air/fuel delivery, and per-bank short- and long-term fuel trim analysis | ![Engine and fuel screen](docs/screenshots/engine.png) |
+| **EcuBus-Pro** — CAN monitor, UDS client, transmit, signals, scripting, LIN and DoIP tabs (currently shows demo data) | ![EcuBus-Pro screen](docs/screenshots/ecubus.png) |
+| **Settings** — System / Light / Dark appearance, storage backend (local JSON or SQLite), and app info | ![Settings screen](docs/screenshots/settings.png) |
 
 ---
 
