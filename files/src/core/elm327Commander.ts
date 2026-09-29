@@ -14,6 +14,11 @@ const ELM_TIMEOUT  = 2500; // ms per command during init
 // bounding a peripheral that streams without ever sending the '>' prompt.
 const MAX_RECV_BUF = 64 * 1024;
 
+// After a timeout the adapter is usually still working on that command. Its
+// late reply is waited for (up to this long) and discarded before the next
+// command goes out; otherwise it would be taken as the next command's reply.
+const STALE_REPLY_WAIT_MS = 1500;
+
 // The app is read-only: it must never change a control module. Refuse the
 // OBD/UDS/GM services that clear codes, actuate, reset, write or reprogram.
 // AT/ST commands only configure the adapter and are always allowed.
@@ -58,6 +63,8 @@ export class ELM327Commander extends EventEmitter {
   private pendingResolve: ((r: ELM327Response) => void) | null = null;
   private pendingCommand = '';
   private pendingTimer: ReturnType<typeof setTimeout> | null = null;
+  private staleReply = false;                 // a timed-out command's reply is still due
+  private staleDone: (() => void) | null = null;
   private isReady = false;
   private closed = false;
   private adapterInfo: Partial<AdapterInfo> = {};
@@ -82,6 +89,7 @@ export class ELM327Commander extends EventEmitter {
     this.closed = true;
     this.isReady = false;
     this.recvBuf = '';
+    this.staleDone?.();
     this.resolveResponse('', true, 'Closed');
   }
 
@@ -106,6 +114,13 @@ export class ELM327Commander extends EventEmitter {
     if (this.recvBuf.includes(ELM_PROMPT)) {
       const raw = this.recvBuf.replace(/>/g, '').trim();
       this.recvBuf = '';
+      if (!this.pendingResolve) {
+        // No command is waiting: this is a timed-out command's late reply
+        if (this.staleReply) this.log(`Discarded late reply: ${raw.slice(0, 40)}`, 'warn');
+        this.staleReply = false;
+        this.staleDone?.();
+        return;
+      }
       this.resolveResponse(raw);
     }
   }
@@ -221,7 +236,18 @@ export class ELM327Commander extends EventEmitter {
 
   private sendChain: Promise<unknown> = Promise.resolve();
 
-  private dispatch(command: string, timeoutMs: number): Promise<ELM327Response> {
+  // Wait for (and drop) a late reply before writing the next command.
+  private awaitStaleReply(): Promise<void> {
+    if (!this.staleReply || this.closed) return Promise.resolve();
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => { this.staleReply = false; finish(); }, STALE_REPLY_WAIT_MS);
+      const finish = () => { clearTimeout(timer); this.staleDone = null; resolve(); };
+      this.staleDone = finish;
+    });
+  }
+
+  private async dispatch(command: string, timeoutMs: number): Promise<ELM327Response> {
+    await this.awaitStaleReply();
     return new Promise((resolve) => {
       if (this.closed) {
         resolve({ command, raw: '', lines: [], success: false, errorMessage: 'Closed' });
@@ -279,16 +305,19 @@ export class ELM327Commander extends EventEmitter {
   private resolveResponse(raw: string, timedOut = false, failure = 'Timeout'): void {
     if (!this.pendingResolve) return;
 
-    // On timeout, discard any partial bytes so a late-arriving response can't
-    // corrupt the NEXT command's reply.
-    if (timedOut) this.recvBuf = '';
+    // On timeout, discard any partial bytes and remember that the adapter's
+    // reply is still due, so it is dropped rather than given to the next command.
+    if (timedOut) {
+      this.recvBuf = '';
+      this.staleReply = !this.closed;
+    }
 
     if (this.pendingTimer) {
       clearTimeout(this.pendingTimer);
       this.pendingTimer = null;
     }
 
-    const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const lines = raw.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
     const success = !timedOut &&
       !raw.includes(ELM_ERROR) &&
       !raw.includes('?') &&
