@@ -1,4 +1,5 @@
 import { ELM327Commander } from './elm327Commander';
+import { responseMessages } from './obdParsers';
 import { PcmField, PcmFieldGroup, PcmIdentity } from '../shared/types';
 
 // ─── GM PCM identity over J1850 VPW (Mode 3C) ────────────────────────────────
@@ -20,7 +21,7 @@ import { PcmField, PcmFieldGroup, PcmIdentity } from '../shared/types';
 const PCM_HEADER = '6C 10 F0';   // to PCM (0x10) from tool (0xF0)
 const TOOL_ID    = 'F0';
 const MODE_3C    = '3C';
-const RESP_3C    = '7C';
+const RESP_3C    = 0x7C;
 
 // The PCM answers ID blocks fast; a slow reply means "unsupported", not "busy".
 const BLOCK_TIMEOUT_MS = 1200;
@@ -72,27 +73,36 @@ export const PCM_BLOCK_COUNT = BLOCKS.length + COMPOSITE.reduce((n, c) => n + c.
 
 const hex2 = (n: number): string => n.toString(16).toUpperCase().padStart(2, '0');
 
+/** SAE J1850 frame check: CRC-8, polynomial 0x1D, initial 0xFF, inverted. */
+export function j1850Crc(bytes: number[]): number {
+  let crc = 0xFF;
+  for (const b of bytes) {
+    crc ^= b;
+    for (let i = 0; i < 8; i++) crc = crc & 0x80 ? ((crc << 1) ^ 0x1D) & 0xFF : (crc << 1) & 0xFF;
+  }
+  return crc ^ 0xFF;
+}
+
 /**
  * Pull the payload bytes out of a Mode 3C reply.
  * Returns null when the PCM did not answer this block, which is the normal
  * signal that a given ID is unsupported on this calibration.
+ *
+ * With headers on, each line is one frame: 6C F0 10 7C <block> <data> <crc>.
+ * The ELM327 shows the J1850 CRC as the last byte; it is dropped when it
+ * checks out, so a reply shown without one keeps all its data.
  */
 export function parseBlockResponse(block: number, raw: string): number[] | null {
-  const clean = raw.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
-  if (!clean) return null;
-
-  const marker = RESP_3C + hex2(block);
-  const idx = clean.indexOf(marker);
-  if (idx === -1) return null;
-
-  const payload = clean.substring(idx + marker.length);
-  const bytes: number[] = [];
-  for (let i = 0; i + 1 < payload.length; i += 2) {
-    const b = parseInt(payload.substring(i, i + 2), 16);
-    if (Number.isNaN(b)) break;
-    bytes.push(b);
+  for (const frame of responseMessages(raw)) {
+    // The 3-byte header puts the 7C marker at index 3; with headers off it is at 0
+    const at = [3, 0].find(i => frame[i] === RESP_3C && frame[i + 1] === block);
+    if (at === undefined) continue;
+    const last = frame.length - 1;
+    const end = last > at + 1 && frame[last] === j1850Crc(frame.slice(0, last)) ? last : frame.length;
+    const bytes = frame.slice(at + 2, end);
+    return bytes.length ? bytes : null;
   }
-  return bytes.length ? bytes : null;
+  return null;
 }
 
 export function formatBlock(bytes: number[], format: PcmFieldFormat): string {

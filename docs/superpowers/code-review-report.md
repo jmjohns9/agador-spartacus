@@ -96,16 +96,16 @@ Whichever you choose, fix I-12: today a clear is reported as successful on "NO D
 
 | ID | Problem | Where | Source |
 |---|---|---|---|
-| I-1 | **The DTC parser invents codes.** It reads the reply as one flat stream across frames and ECUs. For example, P0300 plus a second ECU with no codes parses as `P0300` + a phantom `C0300`, and 4 codes across 2 frames lose P0446 and add two phantoms. It was reproduced with ts-node. | `core/obdProtocolManager.ts:255-290` | B-01, D-01 |
-| I-2 | **Every CAN DTC decodes wrongly.** The count byte is read as a code (`43 01 01 33` gives P0101 instead of P0133), and the ISO-TP `n:` line prefixes are mixed into the data. | same | B-02 |
-| I-3 | **`readVIN` corrupts every J1850 VIN** (`1GCEK19T54E123456` comes back as `1IGCEKI19T5I4E12I`) and returns null on CAN. The corrupt VIN is saved to the profile and sent to NHTSA, so make/model auto-fill silently fails. | `core/elm327Commander.ts:197-216` | B-03 |
-| I-4 | **A failed DTC scan shows as "no codes."** A timeout or key-off returns `[]`, which wipes the list on screen. A car with a stored P0300, scanned with the key off, shows as clean. | `obdProtocolManager.ts:230-241` | B-04 |
-| I-5 | **PID 0143 absolute load is off by a factor of 257** (39.2% shows as 0.2%), and it is defined twice. | `core/pidCatalog.ts:6,146,385` | B-05 |
-| I-6 | **Wrong PIDs and bytes:** 01A4 decodes the support byte instead of the gear (the root cause of the Transmission gear bug), 0121 is really "distance with MIL on", and 012A is an O2 sensor. Fuel system status therefore always shows "Closed loop". | `pidCatalog.ts:93,339,454` | B-06 |
-| I-7 | **The simulator advertises only part of what it supports.** Its supported-PID mask hides 11 PIDs it answers (MAF, fuel level, oil temp, bank-2 trims, O2, gear), so those tiles stay at "—" in simulator mode forever. | `core/elm327Simulator.ts:62-64` | B-07 |
-| I-8 | **PID discovery stops at 0x60,** so 01A4 is never polled on a real vehicle, and one failed range silently drops RPM, coolant and speed for the whole session. | `obdProtocolManager.ts:53-84,176` | B-08 |
-| I-9 | **Mode 3C PCM values include the J1850 checksum byte,** which corrupts the numeric and text IDs. This is not yet confirmed on hardware. | `core/pcmDiagnostics.ts:80-96` | B-10 |
-| I-10 | **Bank 1 and Bank 2 sides are backwards for the GM V8:** Bank 1 is the driver side. This sends the user to the wrong side of the engine. | `pidCatalog.ts:221-269,435` | B-12 |
+| I-1 | **(Fixed, wave 1.) The DTC parser invents codes.** It reads the reply as one flat stream across frames and ECUs. For example, P0300 plus a second ECU with no codes parses as `P0300` + a phantom `C0300`, and 4 codes across 2 frames lose P0446 and add two phantoms. It was reproduced with ts-node. | `core/obdProtocolManager.ts:255-290` | B-01, D-01 |
+| I-2 | **(Fixed, wave 1.) Every CAN DTC decodes wrongly.** The count byte is read as a code (`43 01 01 33` gives P0101 instead of P0133), and the ISO-TP `n:` line prefixes are mixed into the data. | same | B-02 |
+| I-3 | **(Fixed, wave 1.) `readVIN` corrupts every J1850 VIN** (`1GCEK19T54E123456` comes back as `1IGCEKI19T5I4E12I`) and returns null on CAN. The corrupt VIN is saved to the profile and sent to NHTSA, so make/model auto-fill silently fails. | `core/elm327Commander.ts:197-216` | B-03 |
+| I-4 | **(Fixed, wave 1.) A failed DTC scan shows as "no codes."** A timeout or key-off returns `[]`, which wipes the list on screen. A car with a stored P0300, scanned with the key off, shows as clean. | `obdProtocolManager.ts:230-241` | B-04 |
+| I-5 | **(Fixed, wave 1.) PID 0143 absolute load is off by a factor of 257** (39.2% shows as 0.2%), and it is defined twice. | `core/pidCatalog.ts:6,146,385` | B-05 |
+| I-6 | **(Fixed, wave 1.) Wrong PIDs and bytes:** 01A4 decodes the support byte instead of the gear (the root cause of the Transmission gear bug), 0121 is really "distance with MIL on", and 012A is an O2 sensor. Fuel system status therefore always shows "Closed loop". | `pidCatalog.ts:93,339,454` | B-06 |
+| I-7 | **(Fixed, wave 1.) The simulator advertises only part of what it supports.** Its supported-PID mask hides 11 PIDs it answers (MAF, fuel level, oil temp, bank-2 trims, O2, gear), so those tiles stay at "—" in simulator mode forever. | `core/elm327Simulator.ts:62-64` | B-07 |
+| I-8 | **(Fixed, wave 1.) PID discovery stops at 0x60,** so 01A4 is never polled on a real vehicle, and one failed range silently drops RPM, coolant and speed for the whole session. | `obdProtocolManager.ts:53-84,176` | B-08 |
+| I-9 | **(Fixed, wave 1.) Mode 3C PCM values include the J1850 checksum byte,** which corrupts the numeric and text IDs. This is not yet confirmed on hardware. | `core/pcmDiagnostics.ts:80-96` | B-10 |
+| I-10 | **(Fixed, wave 1.) Bank 1 and Bank 2 sides are backwards for the GM V8:** Bank 1 is the driver side. This sends the user to the wrong side of the engine. | `pidCatalog.ts:221-269,435` | B-12 |
 
 ### Adapter and connection behaviour
 
@@ -250,7 +250,7 @@ Whichever you choose, fix I-12: today a clear is reported as successful on "NO D
 
 ## Suggested fix waves
 
-**Wave 1: correctness of vehicle data.** The app's core promise.
+**Wave 1: correctness of vehicle data.** The app's core promise. **Done 2026-09-29** (commits b203564 and later on `review/code-review`): I-1 to I-10, test gaps 1 to 5. I-9 is fixed defensively (the CRC byte is dropped only when it verifies) and still needs a check against a real P01/P59.
 - I-1 to I-10.
 - The protocol half of I-14.
 - Test gaps 1 to 5.
