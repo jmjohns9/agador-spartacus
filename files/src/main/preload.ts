@@ -12,7 +12,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   connect:      (port: string)                   => ipcRenderer.invoke('obd:connect', { port }),
   disconnect:   ()                               => ipcRenderer.invoke('obd:disconnect'),
   scanDTCs:     ()                               => ipcRenderer.invoke('obd:scan-dtc'),
-  clearDTCs:    ()                               => ipcRenderer.invoke('obd:clear-dtc'),
   checkModules: ()                               => ipcRenderer.invoke('obd:check-modules'),
   readPcmIds:   ()                               => ipcRenderer.invoke('pcm:read-ids') as Promise<PcmReadResult>,
   exportLog:    (filename: string)               => ipcRenderer.invoke('session:export-log', { filename }),

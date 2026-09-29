@@ -289,24 +289,6 @@ export class OBDProtocolManager extends EventEmitter {
     return dtcs;
   }
 
-  // ── Clear all stored DTCs — Mode 04 ──────────────────────────────────────────
-  async clearDTCs(): Promise<boolean> {
-    const wasPolling = this.pollingActive;
-    this.pollingActive = false;
-    await this.sleep(300);
-
-    const resp = await this.elm.send('04', 5000);
-    const success = resp.success && !resp.raw.includes('ERROR');
-    this.log(success ? 'DTC codes cleared successfully' : 'Failed to clear DTC codes');
-
-    if (wasPolling && this.pollingWanted) {
-      this.pollingActive = true;
-      this.runPollLoop();
-    }
-
-    return success;
-  }
-
   // ── Utilities ──────────────────────────────────────────────────────────────────
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));

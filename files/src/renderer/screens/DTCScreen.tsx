@@ -239,13 +239,6 @@ export function DTCScreen(): React.ReactElement {
   const pendingDTCs  = dtcs.filter(d => d.status === 'pending').length;
   const gmDTCs       = dtcs.filter(d => d.type === 'B' || d.type === 'U').length;
 
-  const handleClear = () => {
-    if (!window.electronAPI) return;
-    if (confirm('Clear all diagnostic fault codes? This cannot be undone and will reset readiness monitors.')) {
-      window.electronAPI.clearDTCs();
-    }
-  };
-
   const handleScan = () => {
     if (!window.electronAPI) return;
     window.electronAPI.scanDTCs();
@@ -311,15 +304,6 @@ export function DTCScreen(): React.ReactElement {
           disabled={connectionStatus !== 'connected'}
         >
           Scan
-        </Button>
-        <Button
-          variant="destructive"
-          size="sm"
-          icon="ti-trash"
-          onClick={handleClear}
-          disabled={connectionStatus !== 'connected' || dtcs.length === 0}
-        >
-          Clear all
         </Button>
       </div>
 

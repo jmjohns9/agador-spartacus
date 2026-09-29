@@ -59,6 +59,10 @@ The whole interface was redesigned to look and behave like a native macOS app, i
   - Web fonts were removed, so the app works fully offline.
 - **Consistent spacing.** A 4pt spacing grid and three corner radii (6/10/12px) are used across the app.
 
+### Strictly read-only
+
+The Clear DTCs button has been removed, and the command layer now refuses any request that would clear codes or change a control module. See [Safety](#safety).
+
 ### Bug fixes
 
 - **Crash on disconnect (fixed).** A simulator reply that arrived just after you disconnected hit a null reference in the main process. The app then showed an error dialog and had to be force-quit. Pending simulator replies are now cancelled on disconnect.
@@ -108,7 +112,7 @@ All screenshots were captured from the built-in simulator in light mode, so you 
 - VIN detection and decoding, which fills in the vehicle profile automatically.
 
 **Fault codes**
-- DTC scan and clear across all supported modes, backed by a generated catalog of 371 codes.
+- DTC scan across all supported modes (stored, pending, permanent), backed by a generated catalog of 371 codes. The app reads codes only; it cannot clear them.
 - Freeze-frame capture and a viewer, saved per DTC.
 - Optional CarsXE lookup for code descriptions, likely causes and repair guidance.
 
@@ -382,7 +386,6 @@ These bugs predate the redesign. They are tracked in [`docs/superpowers/code-rev
 - **Compare** snapshot limit never removes old snapshots.
 - **EcuBus-Pro** CAN/UDS tabs show static demo data. The hardware and NRC reference panels exist but can't be reached.
 - **Electrical** battery-voltage chart labels render too large.
-- **Clear DTCs** sends OBD-II Mode 04. This clears codes on the vehicle, and it needs a decision against the "nothing writes to a control module" rule below.
 
 ---
 
@@ -486,7 +489,6 @@ Known open findings are tracked in `eval/security/last-run-summary.md` rather th
 
 Diagnostic work on a vehicle carries real risk.
 - Don't read live data while driving.
-- Clearing DTCs erases freeze-frame data and readiness monitors, so capture a report first.
 - Check any voltage source with a multimeter before connecting it to the OBD-II port.
 
-Apart from the standard Mode 04 clear-codes request, nothing in this app writes to a control module, and it should stay that way.
+The app is strictly read-only: nothing in it writes to a control module, and it should stay that way. There is no Clear DTCs button, and the ELM327 command layer refuses any service that clears codes, resets, actuates, writes or reprograms a module (Mode 04 and 08, and UDS/GM 11, 14, 28, 2E, 2F, 31, 34–37, 3B and 85), so a future feature can't send one by accident. To clear codes, use a dedicated scan tool.

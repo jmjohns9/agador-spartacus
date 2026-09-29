@@ -16,6 +16,19 @@ const MAX_RECV_BUF = 64 * 1024;
 // SAE J853 vehicle identification numbers are exactly 17 characters.
 const VIN_LENGTH = 17;
 
+// The app is read-only: it must never change a control module. Refuse the
+// OBD/UDS/GM services that clear codes, actuate, reset, write or reprogram.
+// AT/ST commands only configure the adapter and are always allowed.
+const WRITE_SERVICES = new Set([
+  '04', '08', '11', '14', '28', '2E', '2F', '31', '34', '35', '36', '37', '3B', '85',
+]);
+
+export function isVehicleWrite(command: string): boolean {
+  const hex = command.replace(/\s+/g, '').toUpperCase();
+  if (!/^[0-9A-F]+$/.test(hex)) return false;
+  return WRITE_SERVICES.has(hex.slice(0, 2));
+}
+
 export type ELM327Event =
   | 'ready'
   | 'protocol'
@@ -234,6 +247,10 @@ export class ELM327Commander extends EventEmitter {
     return new Promise((resolve) => {
       if (this.closed) {
         resolve({ command, raw: '', lines: [], success: false, errorMessage: 'Closed' });
+        return;
+      }
+      if (isVehicleWrite(command)) {
+        resolve({ command, raw: '', lines: [], success: false, errorMessage: 'Refused: the app is read-only' });
         return;
       }
       this.pendingResolve = resolve;

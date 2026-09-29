@@ -10,7 +10,6 @@ export class ELM327Simulator extends EventEmitter {
   private sessionStartMs = Date.now();
   private engineOff = false;
   private engineOffMs = 0;
-  private dtcsCleared = false;   // Mode 04 wipes stored/pending codes
 
   // Simulated sensor state
   private state = {
@@ -56,7 +55,6 @@ export class ELM327Simulator extends EventEmitter {
     if (cmd === 'STI')    return 'OBDLink MX+ v4.9.1\r\r>';
     if (cmd === 'STDI')   return 'OBDLink MX+ (c) 2023 ScanTool.net\r\r>';
     if (cmd === 'ATRV')   return `${this.getBatteryVoltage().toFixed(2)}V\r\r>`;
-    if (cmd === '04')     { this.dtcsCleared = true; return 'OK\r\r>'; }
 
     // PID support bitmasks
     if (cmd === '0100') return '4100BE3EB811\r\r>';
@@ -66,10 +64,10 @@ export class ELM327Simulator extends EventEmitter {
     // DTC words encode type in the top 2 bits of the first nibble:
     // B1982 → 9982, P0300 → 0300, U0100 → C100
     // Mode 03 (stored): B1982 + P0300
-    if (cmd === '03') return this.dtcsCleared ? '430000\r\r>' : '4399820300\r\r>';
+    if (cmd === '03') return '4399820300\r\r>';
 
     // Mode 07 (pending): U0100
-    if (cmd === '07') return this.dtcsCleared ? '470000\r\r>' : '47C1000000\r\r>';
+    if (cmd === '07') return '47C1000000\r\r>';
 
     // Mode 0A (permanent) — none
     if (cmd === '0A') return '4A0000\r\r>';

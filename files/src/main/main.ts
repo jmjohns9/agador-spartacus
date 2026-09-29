@@ -473,11 +473,6 @@ ipcMain.handle('obd:scan-dtc', async () => {
   return dtcs;
 });
 
-ipcMain.handle('obd:clear-dtc', async () => {
-  if (!obd) return false;
-  return await obd.clearDTCs();
-});
-
 ipcMain.handle('pcm:read-ids', async (): Promise<PcmReadResult> => {
   if (!elm) return { ok: false, error: 'Not connected to an adapter.' };
   if (simulatorMode) {

@@ -37,7 +37,6 @@ declare global {
       connect: (port: string) => Promise<void>;
       disconnect: () => Promise<void>;
       scanDTCs: () => Promise<DTCCode[]>;
-      clearDTCs: () => Promise<boolean>;
       checkModules: () => Promise<ModuleState[]>;
       readPcmIds: () => Promise<PcmReadResult>;
       onPcmProgress: (cb: (p: { done: number; total: number }) => void) => () => void;

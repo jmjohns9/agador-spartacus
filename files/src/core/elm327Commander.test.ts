@@ -44,3 +44,22 @@ test('close() resolves a command that is waiting for its reply', async () => {
   assert.equal(resp.success, false);
   assert.equal(resp.errorMessage, 'Closed');
 });
+
+test('send() refuses vehicle-write services without touching the transport', async () => {
+  // The app is read-only: clearing codes, resets, writes and flashing never go out.
+  for (const cmd of ['04', '08 01', '11 01', '14 FF FF FF', '28 00', '2E F1 90', '2F 01', '31 01', '34', '36 01', '3B 01', '85 02']) {
+    const { elm, writes } = simulated();
+    const resp = await elm.send(cmd, 1000);
+    assert.equal(resp.success, false, `${cmd} was not refused`);
+    assert.match(resp.errorMessage ?? '', /read-only/i);
+    assert.equal(writes.length, 0, `${cmd} reached the adapter`);
+  }
+});
+
+test('send() still passes reads and adapter commands', async () => {
+  for (const cmd of ['010C', '03', '07', '0A', '0902', '3C 01', 'ATSH 6C 10 F0', 'STI']) {
+    const { elm, writes } = simulated();
+    await elm.send(cmd, 200);
+    assert.equal(writes.length, 1, `${cmd} was blocked`);
+  }
+});

@@ -60,6 +60,8 @@
 
 Whichever you choose, fix I-12: today a clear is reported as successful on "NO DATA" too, and the list never refreshes.
 
+**Decided 2026-09-29: (b).** Clear DTCs was removed from the UI, IPC, protocol manager and simulator, and `ELM327Commander.send` now refuses vehicle-write services (tested). This resolves I-14.
+
 ---
 
 ## Critical
@@ -112,7 +114,7 @@ Whichever you choose, fix I-12: today a clear is reported as successful on "NO D
 | I-11 | **The PCM read leaves the adapter aimed at the PCM.** `ATSH 6C 10 F0` is never reset, so every later poll, scan and Clear goes physically addressed to the PCM. On CAN this breaks polling until reconnect. The read is also offered on non-J1850 vehicles. | `pcmDiagnostics.ts:128-141`, `PcmScreen.tsx:92-97` | B-09, D-08, B-18 |
 | I-12 | **Nothing prevents two operations from using the adapter at once.** A PCM read, discovery, VIN read, DTC scan or poll can interleave with headers on. For example, polling restarts in the middle of a PCM read, or Clear goes out with the PCM header. | `main/main.ts:372-393,467-513` | A-03, B-18 |
 | I-13 | **A late adapter reply is credited to the next command** after a timeout, so every later reply is out of step with its command. Partly unverified. | `elm327Commander.ts:243-247,320-326` | B-11 |
-| I-14 | **Clear DTCs problems:** it reports success on "NO DATA" (the positive reply is `44`), the list and MIL banner never refresh afterwards, and failures are silent. | `obdProtocolManager.ts:298`, `main.ts:476-479`, `DTCScreen.tsx:242-247` | A-14, B-14, D-02 |
+| I-14 | **(Resolved: Clear DTCs removed, see D-1.) Clear DTCs problems:** it reports success on "NO DATA" (the positive reply is `44`), the list and MIL banner never refresh afterwards, and failures are silent. | `obdProtocolManager.ts:298`, `main.ts:476-479`, `DTCScreen.tsx:242-247` | A-14, B-14, D-02 |
 | I-15 | **"Reload renderer" after a crash shows Disconnected** while main is still connected, because main never re-sends the status. | `ErrorBoundary.tsx`, `main.ts` | C-16 |
 
 ### Data storage
