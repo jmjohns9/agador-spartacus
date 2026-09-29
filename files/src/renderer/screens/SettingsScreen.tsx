@@ -17,6 +17,7 @@ export function SettingsScreen(): React.ReactElement {
   const [info,      setInfo]        = useState<StorageInfo | null>(null);
   const [migrating, setMigrating]   = useState(false);
   const [pending,   setPending]     = useState<'local' | 'sqlite' | null>(null);
+  const [migrateError, setMigrateError] = useState<string | null>(null);
 
   const [appearance, setAppearanceState] = useState<Appearance>('system');
   useEffect(() => { window.electronAPI.getAppearance().then(setAppearanceState).catch(() => {}); }, []);
@@ -45,9 +46,13 @@ export function SettingsScreen(): React.ReactElement {
     if (!pending) return;
     setPending(null);
     setMigrating(true);
+    setMigrateError(null);
     try {
       await window.electronAPI.storage.migrate(pending);
       await reload();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': /, '') : String(err);
+      setMigrateError(`Migration failed, nothing was changed: ${msg}`);
     } finally {
       setMigrating(false);
     }
@@ -75,6 +80,8 @@ export function SettingsScreen(): React.ReactElement {
       </Card>
 
       <SectionHeader>Storage backend</SectionHeader>
+
+      {migrateError && <AlertBanner variant="crit" message={migrateError} />}
 
       {/* Confirmation overlay */}
       {pending && (

@@ -154,9 +154,20 @@ export function App(): React.ReactElement {
   }, []);
 
   // ── Freeze-frame auto-capture on new DTC detection ───────────────────────
+  // Seeded from storage so a relaunch doesn't treat every stored code as new.
+  // Storage also keeps the first frame per code, so a save that races the
+  // seed is harmless.
   const knownDTCCodes = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    window.electronAPI.storage.getFreezeFrames()
+      .then(ffs => ffs.forEach(f => knownDTCCodes.current.add(f.dtcCode)))
+      .catch(() => {/* non-blocking */});
+  }, []);
 
   useEffect(() => {
+    // No live values yet (scan finished before polling started): nothing to
+    // capture. The code stays "new" and is captured on the next result.
+    if (Object.keys(liveData).length === 0) return;
     for (const dtc of dtcs) {
       if (!knownDTCCodes.current.has(dtc.code)) {
         knownDTCCodes.current.add(dtc.code);

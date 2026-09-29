@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "gen:dtcs": "ts-node scripts/gen-dtc-catalog.ts",
     "test": "TS_NODE_TRANSPILE_ONLY=1 node --require ts-node/register --test \"src/**/*.test.ts\" \"scripts/*.test.mjs\"",
-    "lint:styles": "node scripts/check-styles.mjs"
+    "lint:styles": "node scripts/check-styles.mjs",
+    "test:electron": "ELECTRON_RUN_AS_NODE=1 TS_NODE_TRANSPILE_ONLY=1 electron --require ts-node/register --test src/main/storageService.test.ts"
   },
   "build": {
     "appId": "com.silveradodx.obd2",

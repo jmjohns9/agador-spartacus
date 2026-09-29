@@ -78,7 +78,10 @@ let debugSerial = false;           // set true to log every TX/RX byte over IPC
 // poll loop on the next session's adapter.
 let sessionGen = 0;
 
-const storage = new StorageService();
+// Storage problems (e.g. an unreadable storage.json that was moved aside) go
+// to the session log. addLog is a hoisted function declaration.
+const storage = new StorageService(undefined, (message) =>
+  addLog({ timestamp: Date.now(), level: 'error', message }));
 
 // Ring-buffer cap so a long-lived connected session doesn't grow the log
 // array unboundedly (see eval/performance PRF-001 / eval/security SEC-004).

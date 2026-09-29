@@ -10,6 +10,8 @@ const KEY_PIDS = ['ATRV','010C','0104','0105','0110','010B','0111','0106','0107'
 const INTERVALS = [100, 500, 1000, 5000];
 const INTERVAL_OPTIONS = INTERVALS.map(ms => ({ value: String(ms), label: ms < 1000 ? `${ms}ms` : `${ms / 1000}s` }));
 const MAX_RECORDINGS = 10;
+// 1 h at the fastest (100 ms) interval; recording stops and saves at the cap
+const MAX_SAMPLES = 36_000;
 
 function fmtDuration(ms: number): string {
   const s  = Math.floor(ms / 1000);
@@ -30,7 +32,6 @@ function fmtDate(ts: number): string {
 }
 
 export function DataLoggerScreen(): React.ReactElement {
-  const liveData    = useAppStore(s => s.liveData);
   const liveVoltage = useAppStore(s => s.liveData['ATRV']?.value);
 
   const [isRecording,  setIsRecording]  = useState(false);
@@ -42,7 +43,12 @@ export function DataLoggerScreen(): React.ReactElement {
   const [recordings,   setRecordings]   = useState<DataRecording[]>([]);
   const [warnDropped,  setWarnDropped]  = useState(false);
 
-  type RecordingBuf = { startedAt: number; samples: DataRecording['samples']; markers: DataRecording['markers'] };
+  // PIDs and interval are fixed when recording starts, so changing the
+  // controls mid-recording can't mislabel what was captured.
+  type RecordingBuf = {
+    startedAt: number; pids: string[]; intervalMs: number;
+    samples: DataRecording['samples']; markers: DataRecording['markers'];
+  };
   const recRef     = useRef<RecordingBuf | null>(null);
   const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -54,21 +60,67 @@ export function DataLoggerScreen(): React.ReactElement {
 
   useEffect(() => { loadRecordings(); }, []);
 
+  const clearTimers = () => {
+    if (timerRef.current)   clearInterval(timerRef.current);
+    if (elapsedRef.current) clearInterval(elapsedRef.current);
+    timerRef.current = elapsedRef.current = null;
+  };
+
+  // Detach the buffer and persist it. Returns false when there was nothing to save.
+  const persist = async (): Promise<boolean> => {
+    const buf = recRef.current;
+    recRef.current = null;
+    if (!buf || buf.samples.length === 0) return false;
+
+    const endedAt = Date.now();
+    const rec: DataRecording = {
+      id:               `rec_${buf.startedAt}`,
+      name:             `Recording ${fmtDate(buf.startedAt)}`,
+      startedAt:        buf.startedAt,
+      endedAt,
+      durationMs:       endedAt - buf.startedAt,
+      sampleIntervalMs: buf.intervalMs,
+      pids:             buf.pids,
+      sampleCount:      buf.samples.length,
+      markers:          buf.markers,
+      samples:          buf.samples,
+    };
+
+    const existing = await window.electronAPI.storage.getRecordings() as DataRecording[];
+    const dropped = existing.length >= MAX_RECORDINGS;
+    if (dropped) await window.electronAPI.storage.deleteRecording(existing[existing.length - 1].id);
+    await window.electronAPI.storage.saveRecording(rec);
+    return dropped;
+  };
+
+  const stopRecording = async () => {
+    clearTimers();
+    setIsRecording(false);
+    const dropped = await persist();
+    if (dropped) setWarnDropped(true);
+    loadRecordings();
+  };
+
   const startRecording = () => {
-    recRef.current = { startedAt: Date.now(), samples: [], markers: [] };
+    recRef.current = { startedAt: Date.now(), pids: selectedPIDs, intervalMs: sampleInterval, samples: [], markers: [] };
     setSampleCount(0);
     setElapsedMs(0);
     setIsRecording(true);
 
     timerRef.current = setInterval(() => {
-      if (!recRef.current) return;
+      const buf = recRef.current;
+      if (!buf) return;
+      // Read the store at each tick: a value captured in this closure would
+      // be the one from when Record was clicked, repeated in every sample.
+      const live = useAppStore.getState().liveData;
       const values: Record<string, number | string> = {};
-      for (const pid of selectedPIDs) {
-        const r = liveData[pid];
+      for (const pid of buf.pids) {
+        const r = live[pid];
         if (r !== undefined) values[pid] = r.value;
       }
-      recRef.current.samples.push({ timestamp: Date.now(), values });
-      setSampleCount(c => c + 1);
+      buf.samples.push({ timestamp: Date.now(), values });
+      setSampleCount(buf.samples.length);
+      if (buf.samples.length >= MAX_SAMPLES) stopRecording();
     }, sampleInterval);
 
     elapsedRef.current = setInterval(() => {
@@ -76,37 +128,12 @@ export function DataLoggerScreen(): React.ReactElement {
     }, 1000);
   };
 
-  const stopRecording = async () => {
-    if (timerRef.current)   clearInterval(timerRef.current);
-    if (elapsedRef.current) clearInterval(elapsedRef.current);
-    setIsRecording(false);
-
-    if (!recRef.current || recRef.current.samples.length === 0) { recRef.current = null; return; }
-
-    const endedAt = Date.now();
-    const { startedAt, samples, markers } = recRef.current;
-    recRef.current = null;
-
-    const rec: DataRecording = {
-      id:              `rec_${startedAt}`,
-      name:            `Recording ${fmtDate(startedAt)}`,
-      startedAt, endedAt,
-      durationMs:      endedAt - startedAt,
-      sampleIntervalMs: sampleInterval,
-      pids:            selectedPIDs,
-      sampleCount:     samples.length,
-      markers, samples,
-    };
-
-    const existing = await window.electronAPI.storage.getRecordings() as DataRecording[];
-    if (existing.length >= MAX_RECORDINGS) {
-      const oldest = existing[existing.length - 1];
-      await window.electronAPI.storage.deleteRecording(oldest.id);
-      setWarnDropped(true);
-    }
-    await window.electronAPI.storage.saveRecording(rec);
-    loadRecordings();
-  };
+  // Leaving the screen mid-recording: stop the timers and keep what was
+  // recorded rather than sampling into a detached buffer forever.
+  useEffect(() => () => {
+    clearTimers();
+    persist().catch(() => {/* screen is gone; nothing to report to */});
+  }, []);
 
   const addMarker = () => {
     if (!recRef.current || !markerText.trim()) return;
