@@ -247,7 +247,7 @@ export function LiveScreen(): React.ReactElement {
           label="O2 B2 upstream"
           value={fmt('0118', usePID('0118'))}
           subtext="Sweeping 0.1–0.9 V"
-          tooltip={<TipContent name="Oxygen Sensor — Bank 2, Upstream" description="The upstream oxygen sensor on Bank 2 (driver side on this V8). Should oscillate rapidly in closed-loop fuel control." formula="byte A ÷ 200" range="Parameter 0118" />}
+          tooltip={<TipContent name="Oxygen Sensor — Bank 2, Upstream" description="The upstream oxygen sensor on Bank 2 (passenger side on the GM V8). Should oscillate rapidly in closed-loop fuel control." formula="byte A ÷ 200" range="Parameter 0118" />}
         />
         <Metric
           size="compact"
@@ -286,9 +286,9 @@ export function LiveScreen(): React.ReactElement {
         <Metric
           size="compact"
           label="Fuel status"
-          value={typeof usePID('012A') === 'string' ? usePID('012A') as string : 'Closed loop'}
-          subtext="O2 feedback active"
-          tooltip={<TipContent name="Fuel System Status — Bank 1" description="Whether the Engine Control Module is using oxygen sensor feedback (closed loop = normal) or a fixed fuel map (open loop = startup or fault)." formula="Bit-coded status byte" range="Parameter 012A" />}
+          value={fmt('0103', usePID('0103'))}
+          subtext="Closed loop is normal once warm"
+          tooltip={<TipContent name="Fuel System Status" description="Whether the Engine Control Module is using oxygen sensor feedback (closed loop = normal) or a fixed fuel map (open loop: cold start, full throttle, deceleration or a fault)." formula="Byte A, one bit per state" range="Parameter 0103" />}
         />
       </Grid>
 
@@ -305,9 +305,9 @@ export function LiveScreen(): React.ReactElement {
         <Metric
           size="compact"
           label="Selected gear"
-          value={usePID('01A4') as string}
-          subtext="4L60-E · Class II"
-          tooltip={<TipContent name="Transmission Actual Gear" description="Current gear as reported by the Transmission Control Module via the GM Class II bus. Requires OBDLink MX+ SW-CAN passthrough." formula="Enumerated byte via GM Class II bus" range="Parameter 01A4 · Park / Reverse / Neutral / 1st–4th" />}
+          value={fmt('01A4', usePID('01A4'))}
+          subtext="From the TCM"
+          tooltip={<TipContent name="Transmission Actual Gear" description="Current gear as reported by the Transmission Control Module. Many pre-2010 vehicles do not support this parameter." formula="Upper 4 bits of byte B" range="Parameter 01A4 · Neutral / 1st, 2nd…" />}
         />
         <Metric
           size="compact"

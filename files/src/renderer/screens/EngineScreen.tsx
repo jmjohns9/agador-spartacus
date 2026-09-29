@@ -285,8 +285,8 @@ export function EngineScreen(): React.ReactElement {
         <Metric
           size="compact"
           label="Fuel status"
-          value={typeof usePID('012A') === 'string' ? usePID('012A') as string : 'Closed loop'}
-          subtext="O2 feedback active"
+          value={fmt('0103', usePID('0103'))}
+          subtext="Closed loop is normal once warm"
         />
       </Grid>
 

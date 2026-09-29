@@ -56,10 +56,10 @@ export class ELM327Simulator extends EventEmitter {
     if (cmd === 'STDI')   return 'OBDLink MX+ (c) 2023 ScanTool.net\r\r>';
     if (cmd === 'ATRV')   return `${this.getBatteryVoltage().toFixed(2)}V\r\r>`;
 
-    // PID support bitmasks
-    if (cmd === '0100') return '4100BE3EB811\r\r>';
-    if (cmd === '0120') return '4120A005B011\r\r>';
-    if (cmd === '0140') return '4140FED09081\r\r>';
+    // PID support bitmasks, derived from the PIDs answered below so the two
+    // can't drift apart (a hand-written mask once hid 11 of them)
+    const mask = this.supportMask(cmd);
+    if (mask) return mask;
 
     // DTC words encode type in the top 2 bits of the first nibble:
     // B1982 → 9982, P0300 → 0300, U0100 → C100
@@ -75,8 +75,32 @@ export class ELM327Simulator extends EventEmitter {
     // Keep-alive / tester present
     if (cmd === '013E') return '7E00\r\r>';
 
-    // OBD PIDs
-    const pidMap: { [cmd: string]: () => string } = {
+    const fn = this.pidReplies()[cmd];
+    if (fn) {
+      this.jitter();
+      return fn();
+    }
+
+    return 'NO DATA\r\r>';
+  }
+
+  // 0100, 0120 … 01E0: bit n set when PID base+n+1 is answered; the last bit
+  // says the next range exists.
+  private supportMask(cmd: string): string | null {
+    const m = /^01([02468ACE]0)$/.exec(cmd);
+    if (!m) return null;
+    const base = parseInt(m[1], 16);
+    const pids = Object.keys(this.pidReplies()).map(k => parseInt(k.substring(2), 16));
+    if (base > 0 && !pids.some(n => n > base)) return null;
+    let mask = 0;
+    for (const n of pids) if (n > base && n <= base + 0x20) mask |= 1 << (0x20 - (n - base));
+    if (pids.some(n => n > base + 0x20)) mask |= 1;
+    return `41${m[1]}${(mask >>> 0).toString(16).toUpperCase().padStart(8, '0')}\r\r>`;
+  }
+
+  // Mode 01 replies, keyed by request
+  private pidReplies(): { [cmd: string]: () => string } {
+    return {
       '010C': () => this.encodeRPM(),
       '010D': () => `410D${this.hex1(this.state.speed)}\r\r>`,
       '0105': () => `4105${this.hex1(this.state.coolantTempC + 40)}\r\r>`,
@@ -103,16 +127,9 @@ export class ELM327Simulator extends EventEmitter {
       '012D': () => `412D${this.encodeTrim(this.state.egrError)}\r\r>`,
       '0133': () => `4133${this.hex1(101)}\r\r>`,    // 101 kPa ≈ sea level
       '015E': () => `415E${this.encode2(Math.round(0.4 * 20))}\r\r>`,
-      '01A4': () => `41A400\r\r>`,   // Park
+      '0103': () => `41030200\r\r>`,         // closed loop
+      '01A4': () => `41A402000000\r\r>`,     // gear supported, 0 = not in a forward gear (parked)
     };
-
-    const fn = pidMap[cmd];
-    if (fn) {
-      this.jitter();
-      return fn();
-    }
-
-    return 'NO DATA\r\r>';
   }
 
   // ── Slowly drain the battery over time (simulates parasitic draw) ─────────────
