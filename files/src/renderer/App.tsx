@@ -36,7 +36,7 @@ declare global {
       listPorts: () => Promise<Array<{ path: string; manufacturer: string; serialNumber: string; isOBD: boolean }>>;
       connect: (port: string) => Promise<void>;
       disconnect: () => Promise<void>;
-      scanDTCs: () => Promise<DTCCode[]>;
+      scanDTCs: () => Promise<DTCCode[] | null>;
       checkModules: () => Promise<ModuleState[]>;
       readPcmIds: () => Promise<PcmReadResult>;
       onPcmProgress: (cb: (p: { done: number; total: number }) => void) => () => void;

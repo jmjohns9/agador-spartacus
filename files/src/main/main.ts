@@ -468,8 +468,9 @@ ipcMain.handle('obd:scan-dtc', async () => {
   const mgr = obd;
   if (!mgr) return [];
   const dtcs = await mgr.scanDTCs();
-  // Disconnected mid-scan: don't wipe the renderer's list with an empty result
-  if (obd === mgr) sendToRenderer('obd:dtc-result', dtcs);
+  // A failed scan (null) or one that outlived its session must not wipe the
+  // renderer's list: keep showing the last good result.
+  if (dtcs && obd === mgr) sendToRenderer('obd:dtc-result', dtcs);
   return dtcs;
 });
 
@@ -480,7 +481,7 @@ ipcMain.handle('pcm:read-ids', async (): Promise<PcmReadResult> => {
   }
 
   // The read reprograms the adapter's header and turns headers on, which would
-  // corrupt parsePIDResponse mid-flight. Take the bus, then give it back.
+  // corrupt PID parsing mid-flight. Take the bus, then give it back.
   const mgr = obd;
   const wasPolling = mgr !== null;
   mgr?.stopPolling();

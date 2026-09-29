@@ -122,7 +122,7 @@ export class PcmDiagnostics {
 
   /**
    * Put the adapter into raw VPW mode addressed at the PCM. The caller must
-   * have stopped PID polling first: headers-on breaks parsePIDResponse, and the
+   * have stopped PID polling first: headers-on breaks PID parsing, and the
    * request header targets the PCM rather than the broadcast address.
    */
   private async enterIdMode(): Promise<void> {

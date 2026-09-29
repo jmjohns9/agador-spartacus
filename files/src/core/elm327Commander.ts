@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import { parseVIN } from './obdParsers';
 
 // ─── ELM327 Constants ─────────────────────────────────────────────────────────
 
@@ -12,9 +13,6 @@ const ELM_TIMEOUT  = 2500; // ms per command during init
 // is a few hundred bytes, so 64 KB is far above anything real while still
 // bounding a peripheral that streams without ever sending the '>' prompt.
 const MAX_RECV_BUF = 64 * 1024;
-
-// SAE J853 vehicle identification numbers are exactly 17 characters.
-const VIN_LENGTH = 17;
 
 // The app is read-only: it must never change a control module. Refuse the
 // OBD/UDS/GM services that clear codes, actuate, reset, write or reprogram.
@@ -206,27 +204,7 @@ export class ELM327Commander extends EventEmitter {
 
   async readVIN(): Promise<string | null> {
     const resp = await this.send('0902', 5000);
-    if (!resp.success || resp.raw.includes('NO DATA') || resp.raw.includes('ERROR')) return null;
-    const clean = resp.raw.replace(/[\s>]/g, '').toUpperCase();
-    const header = '4902';
-    const idx = clean.indexOf(header);
-    if (idx === -1) return null;
-    let hexPart = clean.substring(idx);
-    // Mode 09 PID 02 returns multiple frames; extract ASCII bytes after each 4902XX header
-    const vinBytes: number[] = [];
-    const framePattern = /4902(\w{2})((?:\w{2})*)/g;
-    let match: RegExpExecArray | null;
-    while ((match = framePattern.exec(hexPart)) !== null) {
-      const data = match[2];
-      for (let i = 0; i < data.length; i += 2) {
-        const byte = parseInt(data.substring(i, i + 2), 16);
-        if (byte >= 0x20 && byte <= 0x7E) vinBytes.push(byte);
-      }
-    }
-    if (vinBytes.length < 11) return null;
-    // A VIN is 17 characters. Truncate before building the string: spreading an
-    // adapter-sized array into String.fromCharCode overflows the argument limit.
-    return vinBytes.slice(0, VIN_LENGTH).map(b => String.fromCharCode(b)).join('').trim();
+    return resp.success ? parseVIN(resp.raw) : null;
   }
 
   // ── Send a raw AT or OBD command and wait for the prompt ─────────────────────
@@ -272,42 +250,6 @@ export class ELM327Commander extends EventEmitter {
       this.log(`WARNING: ${errorMsg} — got: ${resp.raw}`);
     }
     return resp;
-  }
-
-  // ── Parse a PID response into raw data bytes ──────────────────────────────────
-  parsePIDResponse(pid: string, raw: string): number[] | null {
-    // Strip header bytes if present, split on whitespace
-    const clean = raw.replace(/\s+/g, '').toUpperCase();
-
-    // Discard non-hex characters
-    if (!/^[0-9A-F]+$/.test(clean)) return null;
-
-    // OBD-II response header: mode+40 followed by PID
-    // e.g. '410C1AF8' for RPM where mode 01 → response 41
-    const modeNibble = pid.substring(0, 2);
-    const responseMode = (parseInt(modeNibble, 16) + 0x40).toString(16).toUpperCase().padStart(2, '0');
-    const pidHex = pid.substring(2).toUpperCase();
-    const expectedHeader = responseMode + pidHex;
-
-    const idx = clean.indexOf(expectedHeader);
-    if (idx === -1) return null;
-
-    const dataStart = idx + expectedHeader.length;
-    let dataHex = clean.substring(dataStart);
-
-    // Multiple ECUs can answer the same request (e.g. engine + transmission on
-    // J1850). Keep only the first ECU's data — truncate at a repeated header.
-    const nextEcu = dataHex.indexOf(expectedHeader);
-    if (nextEcu !== -1) dataHex = dataHex.substring(0, nextEcu);
-
-    if (dataHex.length % 2 !== 0) return null;
-
-    const bytes: number[] = [];
-    for (let i = 0; i < dataHex.length; i += 2) {
-      bytes.push(parseInt(dataHex.substring(i, i + 2), 16));
-    }
-
-    return bytes;
   }
 
   // ── Request battery voltage directly (ATRV) ────────────────────────────────
