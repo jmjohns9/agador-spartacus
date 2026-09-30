@@ -89,11 +89,16 @@ export function LogsScreen(): React.ReactElement {
     const slug = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join('-')
       .replace(/[^a-zA-Z0-9-]/g, '').toLowerCase() || 'session';
     const filename = `agador-${slug}-log-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.csv`;
+    // Every field quoted; a leading = + - @ is neutralised so a spreadsheet
+    // doesn't run adapter-supplied text as a formula
+    const field = (v: unknown): string => {
+      let t = String(v ?? '');
+      if (/^[=+\-@\t\r]/.test(t) && !/^[-+]?\d+(\.\d+)?$/.test(t)) t = `'${t}`;   // plain numbers like -5.2 stay numbers
+      return `"${t.replace(/"/g, '""')}"`;
+    };
     const rows = ['Timestamp,Level,PID,Value,Message'];
     for (const e of filtered) {
-      const ts = new Date(e.timestamp).toISOString();
-      const msg = `"${(e.message ?? '').replace(/"/g, '""')}"`;
-      rows.push(`${ts},${e.level},${e.pid ?? ''},${e.value ?? ''},${msg}`);
+      rows.push([new Date(e.timestamp).toISOString(), e.level, e.pid, e.value, e.message].map(field).join(','));
     }
     const csv = rows.join('\n');
     if (window.electronAPI?.exportCSV) {
@@ -215,7 +220,7 @@ export function LogsScreen(): React.ReactElement {
         ) : (
           filtered.map((entry, i) => (
             <div
-              key={i}
+              key={entry.seq ?? `${entry.timestamp}-${i}`}
               className="selectable"
               style={{
                 display: 'grid', gridTemplateColumns: '130px 60px 1fr',

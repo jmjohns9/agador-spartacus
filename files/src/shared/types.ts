@@ -108,6 +108,7 @@ export interface LogEntry {
   message: string;
   pid?: string;
   value?: number | string;
+  seq?: number;           // renderer-assigned, stable list key
 }
 
 export interface SessionMarker {

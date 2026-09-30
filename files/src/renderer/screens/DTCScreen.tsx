@@ -32,6 +32,10 @@ type CarsXEResult =
   | { state: 'error'; error: string }
   | { state: 'no-key' };
 
+// CarsXE answers per code; kept for the session so re-opening a row or
+// changing a filter doesn't call the API again
+const carsxeCache = new Map<string, CarsXEResult>();
+
 function DTCRow({ dtc, expanded, onToggle, hasFreezeFrame, onViewFreezeFrame }: {
   dtc: DTCCode;
   expanded: boolean;
@@ -39,7 +43,7 @@ function DTCRow({ dtc, expanded, onToggle, hasFreezeFrame, onViewFreezeFrame }: 
   hasFreezeFrame: boolean;
   onViewFreezeFrame: () => void;
 }): React.ReactElement {
-  const [carsxe, setCarsxe] = React.useState<CarsXEResult>({ state: 'idle' });
+  const [carsxe, setCarsxe] = React.useState<CarsXEResult>(() => carsxeCache.get(dtc.code) ?? { state: 'idle' });
 
   React.useEffect(() => {
     if (!expanded || carsxe.state !== 'idle') return;
@@ -47,9 +51,11 @@ function DTCRow({ dtc, expanded, onToggle, hasFreezeFrame, onViewFreezeFrame }: 
     window.electronAPI.carsxeDecode(dtc.code).then(res => {
       if (!res.ok) {
         if (res.error.includes('CARSXE_API_KEY')) setCarsxe({ state: 'no-key' });
-        else setCarsxe({ state: 'error', error: res.error });
+        else setCarsxe({ state: 'error', error: res.error });   // not cached: retried on next open
       } else {
-        setCarsxe({ state: 'ok', description: res.description, causes: res.causes, repair: res.repair });
+        const ok: CarsXEResult = { state: 'ok', description: res.description, causes: res.causes, repair: res.repair };
+        carsxeCache.set(dtc.code, ok);
+        setCarsxe(ok);
       }
     }).catch(e => setCarsxe({ state: 'error', error: String(e) }));
   }, [expanded]);
@@ -242,9 +248,18 @@ export function DTCScreen(): React.ReactElement {
   const pendingDTCs  = dtcs.filter(d => d.status === 'pending').length;
   const gmDTCs       = dtcs.filter(d => d.type === 'B' || d.type === 'U').length;
 
-  const handleScan = () => {
-    if (!window.electronAPI) return;
-    window.electronAPI.scanDTCs();
+  const [scanning, setScanning] = useState(false);
+  const [scanFailed, setScanFailed] = useState(false);
+  const handleScan = async () => {
+    if (!window.electronAPI || scanning) return;
+    setScanning(true);
+    try {
+      setScanFailed(!(await window.electronAPI.scanDTCs()));
+    } catch {
+      setScanFailed(true);
+    } finally {
+      setScanning(false);
+    }
   };
 
   return (
@@ -304,20 +319,26 @@ export function DTCScreen(): React.ReactElement {
           size="sm"
           icon="ti-refresh"
           onClick={handleScan}
-          disabled={connectionStatus !== 'connected'}
+          disabled={connectionStatus !== 'connected' || scanning}
         >
-          Scan
+          {scanning ? 'Scanning…' : 'Scan'}
         </Button>
       </div>
 
       <ScrollPane>
 
         {/* ── Summary row ──────────────────────────────────────────────── */}
+        {scanFailed && (
+          <AlertBanner
+            variant="warn"
+            message="The last scan got no answer from the vehicle (ignition off, or a bus error). The codes below are from the last scan that worked."
+          />
+        )}
         {(activeDTCs > 0 || pendingDTCs > 0) && (
           <>
             {activeDTCs > 0 && (
               <AlertBanner
-                message={`${activeDTCs} active fault${activeDTCs > 1 ? 's' : ''} — MIL (check engine light) is illuminated`}
+                message={`${activeDTCs} active fault${activeDTCs > 1 ? 's' : ''} stored by the vehicle`}
                 variant="crit"
               />
             )}
@@ -327,13 +348,14 @@ export function DTCScreen(): React.ReactElement {
                 variant="warn"
               />
             )}
-            {gmDTCs > 0 && (
-              <AlertBanner
-                message={`${gmDTCs} GM-specific code${gmDTCs > 1 ? 's' : ''} (B/U type) — body or network fault, check BCM and IPC modules`}
-                variant="info"
-              />
-            )}
           </>
+        )}
+        {/* Shown for any B/U code, including permanent or history-only ones */}
+        {gmDTCs > 0 && (
+          <AlertBanner
+            message={`${gmDTCs} body or network code${gmDTCs > 1 ? 's' : ''} (B/U) — check the BCM and IPC modules`}
+            variant="info"
+          />
         )}
 
         {/* ── DTC list ─────────────────────────────────────────────────── */}

@@ -178,6 +178,10 @@ export function vehicleDisplayName(v: VehicleProfile): string {
 const initialVehicle  = loadVehicle();
 const initialPlatform = resolvePlatform(initialVehicle);
 
+// Gives each log entry a stable key; new entries are prepended, so an index
+// key re-rendered all 1000 rows on every entry
+let logSeq = 0;
+
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
   connectionStatus: 'disconnected',
@@ -311,7 +315,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  setDTCs: (dtcs) => set({ dtcs }),
+  // Keep firstSeen across rescans: every scan builds codes stamped "now"
+  setDTCs: (dtcs) => set((state) => ({
+    dtcs: dtcs.map(d => {
+      const prev = state.dtcs.find(p => p.code === d.code && p.status === d.status);
+      return prev ? { ...d, firstSeen: Math.min(prev.firstSeen, d.firstSeen) } : d;
+    }),
+  })),
 
   updateModule: (module) => {
     set((state) => {
@@ -344,7 +354,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   addLogEntry: (entry) => {
-    set((state) => ({ log: [entry, ...state.log].slice(0, 1000) }));
+    set((state) => ({ log: [{ ...entry, seq: ++logSeq }, ...state.log].slice(0, 1000) }));
   },
 
   addMarker: (label) => {

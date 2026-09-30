@@ -54,3 +54,13 @@ test('starting a new connection clears the previous vehicle\'s live data, histor
   assert.deepEqual(st.history, {});
   assert.deepEqual(st.dtcs, []);
 });
+
+test('a rescan keeps when each code was first seen', () => {
+  const s = useAppStore.getState();
+  s.setDTCs([]);
+  s.setDTCs([{ code: 'P0300', status: 'active', firstSeen: 100, lastSeen: 100 } as never]);
+  s.setDTCs([{ code: 'P0300', status: 'active', firstSeen: 900, lastSeen: 900 } as never]);
+  const d = useAppStore.getState().dtcs[0];
+  assert.equal(d.firstSeen, 100);
+  assert.equal(d.lastSeen, 900);
+});
