@@ -253,6 +253,7 @@ ATRV     Live battery voltage
 │   │           └── ErrorBoundary.tsx
 │   ├── scripts/
 │   │   ├── gen-dtc-catalog.ts         # DTC catalog generator
+│   │   ├── make-icon.mjs              # placeholder app icon → build/icon.icns
 │   │   ├── check-styles.mjs           # screen style linter (npm run lint:styles)
 │   │   └── capture-screens.mjs        # light/dark screenshot harness
 │   ├── docker/                        # Dockerfile + Xvfb/noVNC entrypoint

@@ -2,7 +2,6 @@
 files/node_modules/
 files/dist/
 files/release/
-files/build/
 
 # OS
 .DS_Store
