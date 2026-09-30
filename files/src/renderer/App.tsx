@@ -36,7 +36,7 @@ declare global {
       listPorts: () => Promise<Array<{ path: string; manufacturer: string; serialNumber: string; isOBD: boolean }>>;
       connect: (port: string) => Promise<void>;
       disconnect: () => Promise<void>;
-      scanDTCs: () => Promise<DTCCode[] | null>;
+      scanDTCs: () => Promise<boolean>;
       checkModules: () => Promise<ModuleState[]>;
       readPcmIds: () => Promise<PcmReadResult>;
       onPcmProgress: (cb: (p: { done: number; total: number }) => void) => () => void;
@@ -70,7 +70,6 @@ declare global {
       decodeVIN: (vin: string) => Promise<{ year: string; make: string; model: string; engine: string; trim: string; transmission: string } | null>;
       storage: {
         getConfig:         () => Promise<StorageConfig>;
-        setConfig:         (u: Partial<StorageConfig>) => Promise<boolean>;
         migrate:           (to: 'local' | 'sqlite') => Promise<boolean>;
         getInfo:           () => Promise<StorageInfo>;
         openDataFolder:    () => Promise<void>;

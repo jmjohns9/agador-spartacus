@@ -6,7 +6,7 @@ import { execFile } from 'child_process';
 import { ELM327Commander } from '../core/elm327Commander';
 import { ELM327Simulator } from '../core/elm327Simulator';
 import { OBDProtocolManager } from '../core/obdProtocolManager';
-import { PIDReading, DTCCode, ModuleState, ConnectionStatus, LogEntry, PcmReadResult } from '../shared/types';
+import { PIDReading, ConnectionStatus, LogEntry, PcmReadResult } from '../shared/types';
 import { PcmDiagnostics } from '../core/pcmDiagnostics';
 import { GMT800 } from '../core/platforms/gmt800';
 import { askClaude, loadConfig as loadClaudeConfig, saveConfig as saveClaudeConfig, SessionContext, ChatTurn, CLAUDE_MODELS, DEFAULT_SYSTEM_PROMPT } from './claudeAssistant';
@@ -19,6 +19,13 @@ import { loadAppearance, saveAppearance, parseAppearance } from './appearance';
 const { SerialPort } = require('serialport') as { SerialPort: any };
 
 // ─── Main Window ──────────────────────────────────────────────────────────────
+
+// One data folder for dev and packaged builds. Electron derives userData from
+// package.json's name in dev ("silverado-dx") but from productName when
+// packaged, so the two used different folders and saved sessions and the API
+// key didn't carry over. Pin it to the folder existing installs already use.
+// Must run before anything calls app.getPath('userData').
+app.setPath('userData', path.join(app.getPath('appData'), 'silverado-dx'));
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -93,7 +100,6 @@ let simulatorMode = false;
 let sessionLog: LogEntry[] = [];
 let activePort: any = null;       // currently open SerialPort (if any)
 let isConnecting = false;          // guard against concurrent connect attempts
-let debugSerial = false;           // set true to log every TX/RX byte over IPC
 
 // Session generation. Every connect and disconnect ends the current session
 // by bumping this; async connect/init/discovery chains capture the value they
@@ -265,10 +271,6 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
     activePort = port;
 
     const fakeSend = (data: string): void => {
-      if (debugSerial) {
-        const display = data.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
-        addLog({ timestamp: Date.now(), level: 'info', message: `TX → ${display}` });
-      }
       port.write(data, (err: Error | null | undefined) => {
         if (err) addLog({ timestamp: Date.now(), level: 'error', message: `Serial write error: ${err.message}` });
       });
@@ -279,10 +281,6 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
 
     port.on('data', (chunk: Buffer) => {
       const ascii = chunk.toString('ascii');
-      if (debugSerial) {
-        const display = ascii.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
-        addLog({ timestamp: Date.now(), level: 'info', message: `RX ← ${display}` });
-      }
       commander?.onData(ascii);
     });
     // Port events only speak for the live session. A port we closed ourselves
@@ -327,7 +325,8 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
 
     addLog({ timestamp: Date.now(), level: 'ok', message: `Connected — ${info.firmwareVersion} — Protocol: ${info.protocol} — Battery: ${info.voltage}` });
 
-    startRSSIPolling(gen);
+    // Signal strength only exists for Bluetooth; USB adapters have none
+    if (!/usbserial|usbmodem|ttyUSB|ttyACM/i.test(portPath)) startRSSIPolling(gen);
     startOBDManager(gen, commander);
   } catch (err) {
     commander?.close();
@@ -347,15 +346,19 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
   }
 }
 
-let rssiTimer: ReturnType<typeof setInterval> | null = null;
+let rssiTimer: ReturnType<typeof setTimeout> | null = null;
 
 function startRSSIPolling(gen: number): void {
   stopRSSIPolling();
-  rssiTimer = setInterval(() => {
+  // Re-armed only after each run finishes: system_profiler takes seconds, and
+  // a fixed 3 s interval stacked overlapping runs for the whole session.
+  const poll = (): void => {
+    rssiTimer = null;
     execFile('system_profiler', ['SPBluetoothDataType', '-json'], { timeout: 5000 }, (err, stdout) => {
       // system_profiler takes seconds; drop a result that lands after the
       // session ended, or it would re-post an RSSI that endSession cleared.
       if (gen !== sessionGen) return;
+      rssiTimer = setTimeout(poll, 5000);
       if (err) { sendToRenderer('obd:bt-rssi', null); return; }
       try {
         const data = JSON.parse(stdout);
@@ -376,11 +379,12 @@ function startRSSIPolling(gen: number): void {
         sendToRenderer('obd:bt-rssi', null);
       } catch { sendToRenderer('obd:bt-rssi', null); }
     });
-  }, 3000);
+  };
+  rssiTimer = setTimeout(poll, 1000);
 }
 
 function stopRSSIPolling(): void {
-  if (rssiTimer) { clearInterval(rssiTimer); rssiTimer = null; }
+  if (rssiTimer) { clearTimeout(rssiTimer); rssiTimer = null; }
   sendToRenderer('obd:bt-rssi', null);
 }
 
@@ -501,12 +505,13 @@ handle('obd:disconnect', async () => {
 
 handle('obd:scan-dtc', async () => {
   const mgr = obd;
-  if (!mgr) return [];
+  if (!mgr) return false;
   const dtcs = await mgr.scanDTCs();
   // A failed scan (null) or one that outlived its session must not wipe the
   // renderer's list: keep showing the last good result.
   if (dtcs && obd === mgr) sendToRenderer('obd:dtc-result', dtcs);
-  return dtcs;
+  // The codes arrive through obd:dtc-result; the reply only says whether it worked
+  return dtcs !== null;
 });
 
 handle('pcm:read-ids', async (): Promise<PcmReadResult> => {
@@ -553,8 +558,12 @@ handle('obd:check-modules', async () => {
 });
 
 handle('obd:decode-vin', async (_event, { vin }: { vin: string }) => {
+  if (typeof vin !== 'string' || !/^[A-HJ-NPR-Z0-9]{17}$/i.test(vin)) return null;
   try {
-    const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/${encodeURIComponent(vin)}?format=json`);
+    // Bounded: on a dead or captive network in the field this could hang for minutes
+    const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/${encodeURIComponent(vin)}?format=json`,
+      { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) return null;
     const json: any = await res.json();
     const r = json.Results?.[0];
     if (!r) return null;
@@ -586,8 +595,7 @@ handle('session:export-log', async (_event, { filename, text }: { filename: stri
     return `${ts}\t${e.level.toUpperCase().padEnd(5)}\t${e.message}`;
   }).join('\n');
 
-  fs.writeFileSync(filePath, lines, 'utf-8');
-  addLog({ timestamp: Date.now(), level: 'ok', message: `Session log exported to ${filePath}` });
+  writeExport(filePath, lines, 'Session log');
 });
 
 // ─── Claude assistant ─────────────────────────────────────────────────────────
@@ -648,26 +656,37 @@ handle('claude:export-chat', async (_event, { markdown, filename }: { markdown: 
     filters: [{ name: 'Markdown', extensions: ['md', 'txt'] }],
   });
   if (!filePath) return false;
-  fs.writeFileSync(filePath, markdown, 'utf-8');
-  addLog({ timestamp: Date.now(), level: 'ok', message: `Assistant chat exported to ${filePath}` });
-  return true;
+  return writeExport(filePath, markdown, 'Assistant chat');
 });
 
 handle('session:export-csv', async (_event, { data, filename }: { data: string; filename: string }) => {
+  // The Data Logger's JSON export comes through here too
+  const json = filename.toLowerCase().endsWith('.json');
   const { filePath } = await dialog.showSaveDialog(mainWindow!, {
     defaultPath: filename,
-    filters: [{ name: 'CSV files', extensions: ['csv'] }],
+    filters: [json ? { name: 'JSON files', extensions: ['json'] } : { name: 'CSV files', extensions: ['csv'] }],
   });
 
-  if (!filePath) return;
-  fs.writeFileSync(filePath, data, 'utf-8');
-  addLog({ timestamp: Date.now(), level: 'ok', message: `Session data exported to ${filePath}` });
+  if (!filePath) return false;
+  return writeExport(filePath, data, 'Session data');
 });
+
+// A failed write (read-only volume, full disk) is logged, not thrown: callers
+// fire and forget, so a throw became an unhandled rejection with no message.
+function writeExport(filePath: string, data: string, what: string): boolean {
+  try {
+    fs.writeFileSync(filePath, data, 'utf-8');
+    addLog({ timestamp: Date.now(), level: 'ok', message: `${what} exported to ${filePath}` });
+    return true;
+  } catch (e) {
+    addLog({ timestamp: Date.now(), level: 'error', message: `${what} export to ${filePath} failed: ${e instanceof Error ? e.message : String(e)}` });
+    return false;
+  }
+}
 
 // ─── Storage service ──────────────────────────────────────────────────────────
 
 handle('storage:get-config',  ()                        => storage.getConfig());
-handle('storage:set-config',  (_e: Electron.IpcMainInvokeEvent, u: Partial<import('../shared/types').StorageConfig>) => { storage.setConfig(u); return true; });
 handle('storage:migrate',     (_e: Electron.IpcMainInvokeEvent, { to }: { to: 'local' | 'sqlite' }) => { storage.migrate(to); return true; });
 handle('storage:get-info',    ()                        => storage.getInfo());
 handle('storage:open-data-folder', () => shell.openPath(app.getPath('userData')));
@@ -689,27 +708,25 @@ handle('storage:delete-freeze-frame', (_e: Electron.IpcMainInvokeEvent, { id }: 
 handle('report:generate', async (_event: Electron.IpcMainInvokeEvent, payload: unknown) => {
   const os = require('os') as typeof import('os');
   const outDir = path.join(os.homedir(), 'Documents', 'AgadorSpartacus');
-  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+  await fs.promises.mkdir(outDir, { recursive: true });
 
-  const filename = `diagnostic-report-${new Date().toISOString().split('T')[0]}.pdf`;
-  const outPath  = path.join(outDir, filename);
+  // Date and time, so a second report on the same day doesn't replace the first
+  const stamp = new Date().toISOString().slice(0, 19).replace('T', '-').replace(/:/g, '');
+  const outPath = path.join(outDir, `diagnostic-report-${stamp}.pdf`);
 
-  const win = new BrowserWindow({
-    show: false, width: 900, height: 1200,
-    webPreferences: { contextIsolation: false, nodeIntegration: false },
-  });
-
-  const templatePath = path.join(app.getAppPath(), 'assets', 'report.html');
-  await win.loadFile(templatePath);
-  await win.webContents.executeJavaScript(
-    `window.__REPORT_DATA__ = ${JSON.stringify(payload)}; if (typeof render === 'function') render(window.__REPORT_DATA__);`
-  );
-  await new Promise(r => setTimeout(r, 300));
-
-  const pdfBuffer = await win.webContents.printToPDF({ printBackground: false, pageSize: 'Letter' });
-  win.destroy();
-
-  fs.writeFileSync(outPath, pdfBuffer);
+  const win = new BrowserWindow({ show: false, width: 900, height: 1200, webPreferences: { sandbox: true } });
+  try {
+    const templatePath = path.join(app.getAppPath(), 'assets', 'report.html');
+    await win.loadFile(templatePath);
+    await win.webContents.executeJavaScript(
+      `window.__REPORT_DATA__ = ${JSON.stringify(payload)}; if (typeof render === 'function') render(window.__REPORT_DATA__);`
+    );
+    await new Promise(r => setTimeout(r, 300));
+    const pdfBuffer = await win.webContents.printToPDF({ printBackground: false, pageSize: 'Letter' });
+    await fs.promises.writeFile(outPath, pdfBuffer);
+  } finally {
+    win.destroy();   // a failed load or print used to leak a hidden window
+  }
   shell.openPath(outPath);
   return outPath;
 });
@@ -718,15 +735,16 @@ handle('carsxe:decode', async (_event: Electron.IpcMainInvokeEvent, { code }: { 
   const apiKey = process.env.CARSXE_API_KEY ?? '';
   if (!apiKey) return { ok: false, error: 'CARSXE_API_KEY not set' };
   try {
-    const url = `https://api.carsxe.com/obdcodesdecoder?key=${apiKey}&code=${encodeURIComponent(code)}&source=claude_plugin`;
-    const res  = await fetch(url);
+    const url = `https://api.carsxe.com/obdcodesdecoder?key=${encodeURIComponent(apiKey)}&code=${encodeURIComponent(code)}`;
+    const res  = await fetch(url, { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) return { ok: false, error: `CarsXE HTTP ${res.status}` };
     const d: any = await res.json();
     const description = d.definition ?? d.description ?? d.code_description ?? '';
     const rawCauses   = d.possible_causes ?? d.causes ?? '';
     const causes: string[] = typeof rawCauses === 'string'
-      ? rawCauses.split(/[;,\n]/).map((s: string) => s.trim()).filter(Boolean)
-      : Array.isArray(rawCauses) ? rawCauses : [];
+      // Not on commas: "spark plugs, wires, or coils" is one cause
+      ? rawCauses.split(/[;\n]/).map((s: string) => s.trim()).filter(Boolean)
+      : Array.isArray(rawCauses) ? rawCauses.map(String) : [];
     const repair = d.tech_notes ?? d.tips ?? d.repair ?? '';
     return { ok: true, description, causes, repair };
   } catch (e) {
