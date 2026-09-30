@@ -19,6 +19,9 @@ export function SettingsScreen(): React.ReactElement {
   const [pending,   setPending]     = useState<'local' | 'sqlite' | null>(null);
   const [migrateError, setMigrateError] = useState<string | null>(null);
 
+  const [appInfo, setAppInfo] = useState<{ version: string; electron: string; chrome: string; node: string } | null>(null);
+  useEffect(() => { window.electronAPI.getAppInfo().then(setAppInfo).catch(() => {}); }, []);
+
   const [appearance, setAppearanceState] = useState<Appearance>('system');
   useEffect(() => { window.electronAPI.getAppearance().then(setAppearanceState).catch(() => {}); }, []);
   const changeAppearance = async (a: Appearance) => {
@@ -149,13 +152,11 @@ export function SettingsScreen(): React.ReactElement {
       <SectionHeader>About</SectionHeader>
       <Card style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <Card padding={0}>
-          {infoRow('App', 'Project Agador Spartacus v1.0.0')}
-          {typeof process !== 'undefined' && process.versions?.electron && infoRow('Electron', process.versions.electron)}
-          {typeof process !== 'undefined' && process.versions?.node && infoRow('Node', process.versions.node)}
+          {infoRow('App', `Project Agador Spartacus${appInfo ? ` v${appInfo.version}` : ''}`)}
+          {appInfo && infoRow('Electron', appInfo.electron)}
+          {appInfo && infoRow('Chromium', appInfo.chrome)}
+          {appInfo && infoRow('Node', appInfo.node)}
         </Card>
-        <Button variant="secondary" disabled style={{ alignSelf: 'flex-start' }}>
-          Check for updates
-        </Button>
       </Card>
     </ScrollPane>
   );

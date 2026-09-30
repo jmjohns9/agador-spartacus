@@ -4,14 +4,19 @@ import { clampPercent, isMissing } from './logic';
 import { Sparkline } from './Sparkline';
 import { Tooltip } from './feedback';
 
+// One timeout per reading, fired when it would go stale. A 500 ms interval
+// per metric re-rendered every tile twice a second even while fresh.
 export function useStaleness(staleAt: number | undefined, afterMs = 3000): boolean {
-  const [now, setNow] = useState(() => Date.now());
+  const [stale, setStale] = useState(false);
   useEffect(() => {
-    if (staleAt === undefined) return;
-    const id = setInterval(() => setNow(Date.now()), 500);
-    return () => clearInterval(id);
-  }, [staleAt]);
-  return staleAt !== undefined && now - staleAt > afterMs;
+    if (staleAt === undefined) { setStale(false); return; }
+    const remaining = staleAt + afterMs - Date.now();
+    setStale(remaining <= 0);
+    if (remaining <= 0) return;
+    const id = setTimeout(() => setStale(true), remaining);
+    return () => clearTimeout(id);
+  }, [staleAt, afterMs]);
+  return stale;
 }
 
 export interface MetricProps {

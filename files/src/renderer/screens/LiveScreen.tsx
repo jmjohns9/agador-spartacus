@@ -76,10 +76,10 @@ export function LiveScreen(): React.ReactElement {
       {/* ── Engine Performance — compact arc gauges ─────────────────── */}
       <SectionHeader>Engine performance</SectionHeader>
       <Grid cols={4}>
-        <Gauge size="compact" label="RPM" value={usePIDNum('010C')} max={6000} unit="/ 6,000" />
-        <Gauge size="compact" label="Load" value={usePIDNum('0104')} max={100} unit="of max" />
-        <Gauge size="compact" label="Throttle" value={usePIDNum('0111')} max={100} unit="position" />
-        <Gauge size="compact" label="Timing" value={usePIDNum('010E')} max={60} unit="° BTDC" />
+        <Gauge size="compact" label="RPM" value={usePIDNum('010C', NaN)} max={6000} unit="/ 6,000" />
+        <Gauge size="compact" label="Load" value={usePIDNum('0104', NaN)} max={100} unit="of max" />
+        <Gauge size="compact" label="Throttle" value={usePIDNum('0111', NaN)} max={100} unit="position" />
+        <Gauge size="compact" label="Timing" value={usePIDNum('010E', NaN)} max={60} unit="° BTDC" />
       </Grid>
 
       {/* ── Temperature Sensors ─────────────────────────────────────── */}
@@ -162,7 +162,6 @@ export function LiveScreen(): React.ReactElement {
           size="compact"
           label="MAF rate"
           value={fmt('0110', usePID('0110'))}
-          unit="g/s"
           subtext="Idle 5.3 L: 4–6"
           tooltip={<TipContent name="Mass Air Flow Rate" description="Mass of air entering the intake per second via the hot-wire Mass Air Flow sensor. Core Engine Control Module input for fuel injection calculation." formula="((byte A × 256) + byte B) ÷ 100" range="Parameter 0110 · Idle 5.3 L: 4–6 g/s" />}
         />

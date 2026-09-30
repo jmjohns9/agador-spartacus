@@ -129,6 +129,15 @@ function sendToRenderer(channel: string, data: unknown): void {
 
 handle('obd:get-status', () => lastStatus);
 
+// Version details for Settings and reports; the sandboxed renderer has no
+// process.versions of its own.
+handle('app:get-info', () => ({
+  version:  app.getVersion(),
+  electron: process.versions.electron,
+  chrome:   process.versions.chrome,
+  node:     process.versions.node,
+}));
+
 function addLog(entry: LogEntry): void {
   sessionLog.push(entry);
   if (sessionLog.length > SESSION_LOG_MAX) {
@@ -420,8 +429,11 @@ function startOBDManager(gen: number, commander: ELM327Commander): void {
       if (gen !== sessionGen) return;
       sendToRenderer('obd:connection-status', {
         status: 'connected' as ConnectionStatus,
-        protocol,
-        adapterInfo: commander.getAdapterInfo()?.firmwareVersion ?? '',
+        // Same labels as the first "connected", which the simulator marks
+        protocol: simulatorMode ? `${protocol} (Simulator)` : protocol,
+        adapterInfo: simulatorMode
+          ? `${commander.getAdapterInfo()?.firmwareVersion ?? ''} — SIMULATOR MODE`
+          : commander.getAdapterInfo()?.firmwareVersion ?? '',
       });
     } catch { /* non-fatal */ }
 

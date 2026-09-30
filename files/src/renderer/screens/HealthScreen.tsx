@@ -62,10 +62,13 @@ export function HealthScreen(): React.ReactElement {
   const voltageTrend = useAppStore(selectVoltageTrend);
 
   const [exporting, setExporting] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   const exportReport = async () => {
     setExporting(true);
+    setReportError(null);
     try {
+      const appInfo = await window.electronAPI.getAppInfo().catch(() => null);
       const freezeFrames = await window.electronAPI.storage.getFreezeFrames() as FreezeFrame[];
       const payload: ReportPayload = {
         vehicle: {
@@ -79,18 +82,22 @@ export function HealthScreen(): React.ReactElement {
         },
         batteryVoltage: batteryV,
         voltageHistory: atrvHistory.map(r => r.value as number),
-        milOn:          dtcs.some(d => d.status === 'active'),
+        milOn,
         dtcs,
         modules,
         checklist,
         freezeFrames,
-        log:            (log as LogEntry[]).filter(e => e.level === 'error' || e.level === 'warn').slice(-100),
+        // The log is newest-first: take the 100 newest, then put them in time order
+        log:            (log as LogEntry[]).filter(e => e.level === 'error' || e.level === 'warn').slice(0, 100).reverse(),
         reportDate:     Date.now(),
         adapterInfo:    adapterInfo ?? '',
         protocol:       protocol ?? '',
-        appVersion:     '1.0.0',
+        appVersion:     appInfo?.version ?? '',
       };
       await window.electronAPI.reportGenerate(payload);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': /, '') : String(err);
+      setReportError(`The report could not be generated: ${msg}`);
     } finally {
       setExporting(false);
     }
@@ -104,11 +111,13 @@ export function HealthScreen(): React.ReactElement {
   const permDTCs     = dtcs.filter(d => d.status === 'permanent').length;
   const rogueModules = modules.filter(m => m.status === 'rogue').length;
 
-  // Infer MIL state: active if any active powertrain DTCs exist
-  const milOn = dtcs.some(d => d.status === 'active' && d.type === 'P');
+  // The lamp state the vehicle reports (PID 0101) wins; before it has been
+  // read, infer it from active powertrain codes. Used by the tiles and report.
+  const milOn = readiness ? readiness.milOn : dtcs.some(d => d.status === 'active' && d.type === 'P');
 
   return (
     <ScrollPane>
+      {reportError && <AlertBanner variant="crit" message={reportError} />}
 
       {/* ── Export button ──────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -204,7 +213,7 @@ export function HealthScreen(): React.ReactElement {
           size="compact"
           label="Active faults"
           value={activeDTCs}
-          subtext={activeDTCs > 0 ? 'MIL illuminated' : 'No active faults'}
+          subtext={activeDTCs === 0 ? 'No active faults' : milOn ? 'Check engine light on' : 'Check engine light off'}
           status={activeDTCs > 0 ? 'crit' : 'neutral'}
         />
         <Metric
@@ -318,7 +327,7 @@ export function HealthScreen(): React.ReactElement {
           size="compact"
           label="Adapter firmware"
           value={adapterInfo || '—'}
-          subtext="OBDLink MX+ ELM327 v1.5"
+          subtext="As reported by the adapter"
         />
       </Grid>
 

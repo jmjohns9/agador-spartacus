@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportLog:    (filename: string, text?: string) => ipcRenderer.invoke('session:export-log', { filename, text }),
   exportCSV:    (data: string, filename: string) => ipcRenderer.invoke('session:export-csv', { data, filename }),
   getAppearance: ()                  => ipcRenderer.invoke('app:get-appearance') as Promise<Appearance>,
+  getAppInfo:    ()                  => ipcRenderer.invoke('app:get-info') as Promise<{ version: string; electron: string; chrome: string; node: string }>,
   getStatus:     ()                  => ipcRenderer.invoke('obd:get-status') as Promise<{ status: ConnectionStatus; protocol?: string; adapterInfo?: string }>,
   setAppearance: (a: Appearance)     => ipcRenderer.invoke('app:set-appearance', a) as Promise<Appearance>,
 

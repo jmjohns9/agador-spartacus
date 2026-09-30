@@ -49,6 +49,7 @@ declare global {
       onModuleState: (cb: (m: ModuleState) => void) => () => void;
       onConnectionStatus: (cb: (s: { status: string; protocol?: string; adapterInfo?: string }) => void) => () => void;
       getStatus: () => Promise<{ status: string; protocol?: string; adapterInfo?: string }>;
+      getAppInfo: () => Promise<{ version: string; electron: string; chrome: string; node: string }>;
       onLogEntry: (cb: (e: LogEntry) => void) => () => void;
       onVINDetected: (cb: (vin: string) => void) => () => void;
       claudeAsk: (payload: { question: string; context: unknown; history: unknown }) =>

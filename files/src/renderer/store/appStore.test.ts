@@ -29,3 +29,28 @@ test('selectVoltageTrend does not call an engine shutdown a draw', () => {
   s.updatePIDReading(atrv(11 * MIN, 12.7));
   assert.equal(selectVoltageTrend(useAppStore.getState()), 'stable');
 });
+
+test('a repeated "connected" does not restart the session timer', () => {
+  const s = useAppStore.getState();
+  s.setConnectionStatus('disconnected');
+  s.setConnectionStatus('connected', 'SAE J1850 VPW', 'OBDLink MX+');
+  const started = useAppStore.getState().sessionStartMs;
+  assert.ok(started);
+  useAppStore.setState({ sessionStartMs: started! - 5000 });   // time passes
+  s.setConnectionStatus('connected', 'SAE J1850 VPW', 'OBDLink MX+');
+  assert.equal(useAppStore.getState().sessionStartMs, started! - 5000);
+});
+
+test('starting a new connection clears the previous vehicle\'s live data, history and codes', () => {
+  const s = useAppStore.getState();
+  s.setConnectionStatus('connected');
+  s.updatePIDReading(atrv(1000, 12.6));
+  s.setDTCs([{ code: 'P0300' } as never]);
+  s.setConnectionStatus('disconnected');
+  assert.ok(useAppStore.getState().liveData['ATRV'], 'values stay visible after a disconnect');
+  s.setConnectionStatus('connecting');
+  const st = useAppStore.getState();
+  assert.deepEqual(st.liveData, {});
+  assert.deepEqual(st.history, {});
+  assert.deepEqual(st.dtcs, []);
+});

@@ -125,8 +125,8 @@ export function TransmissionScreen(): React.ReactElement {
       {/* ── Primary gauges ─────────────────────────────────────────────── */}
       <SectionHeader>{isGMT800 ? '4L60-E transmission — live data' : 'Transmission — live data'}</SectionHeader>
       <Grid cols={4}>
-        <Gauge size="compact" label="Speed" value={Math.round(speedMph)} max={120} unit="mph" />
-        <Gauge size="compact" label="RPM" value={rpm} max={6000} unit="/ 6,000" />
+        <Gauge size="compact" label="Speed" value={Math.round(usePIDNum('010D', NaN) * 0.621371)} max={120} unit="mph" />
+        <Gauge size="compact" label="RPM" value={usePIDNum('010C', NaN)} max={6000} unit="/ 6,000" />
         <Metric
           size="compact"
           label="Road speed (raw)"

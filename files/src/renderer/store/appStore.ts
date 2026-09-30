@@ -260,11 +260,26 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Actions ──────────────────────────────────────────────────────────────────
 
   setConnectionStatus: (status, protocol = '', adapterInfo = '') => {
-    set({
-      connectionStatus: status,
-      protocol,
-      adapterInfo,
-      sessionStartMs: status === 'connected' ? Date.now() : null,
+    set((state) => {
+      const prev = state.connectionStatus;
+      // Main reports "connected" again after refreshing the protocol; only a
+      // transition into connected starts the session clock.
+      const sessionStartMs = status !== 'connected' ? null
+        : prev === 'connected' && state.sessionStartMs !== null ? state.sessionStartMs
+        : Date.now();
+      // A new connection attempt may be a different vehicle: drop the last
+      // session's readings, history and codes rather than mixing them in.
+      // (They stay visible after a plain disconnect.)
+      const starting = (status === 'connecting' || status === 'initializing')
+        && prev !== 'connecting' && prev !== 'initializing';
+      return {
+        connectionStatus: status,
+        protocol,
+        // The protocol refresh sends no adapter text; keep the one we have
+        adapterInfo: adapterInfo || (status === 'connected' ? state.adapterInfo : ''),
+        sessionStartMs,
+        ...(starting ? { liveData: {}, history: {}, dtcs: [] } : {}),
+      };
     });
   },
 
