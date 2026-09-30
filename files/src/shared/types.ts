@@ -108,6 +108,7 @@ export interface LogEntry {
   message: string;
   pid?: string;
   value?: number | string;
+  seq?: number;           // renderer-assigned, stable list key
 }
 
 export interface SessionMarker {
@@ -301,7 +302,6 @@ export interface IPCChannels {
   'obd:start-polling': { pids: string[]; intervalMs: number };
   'obd:stop-polling': void;
   'obd:scan-dtc': void;
-  'obd:clear-dtc': void;
   'session:export-csv': { sessionId: string };
   'session:export-log': { sessionId: string };
 

@@ -12,7 +12,7 @@ interface ToolbarProps {
   onOpenConnection: () => void;
 }
 
-export function Toolbar({ sidebarOpen, onToggleSidebar, onOpenDTC, onOpenConnection }: ToolbarProps): React.ReactElement {
+export const Toolbar = React.memo(function Toolbar({ sidebarOpen, onToggleSidebar, onOpenDTC, onOpenConnection }: ToolbarProps): React.ReactElement {
   const vehicle = useAppStore(s => s.vehicle);
   const sessionStartMs = useAppStore(s => s.sessionStartMs);
   const battery = useAppStore(selectBatteryVoltage);
@@ -71,4 +71,4 @@ export function Toolbar({ sidebarOpen, onToggleSidebar, onOpenDTC, onOpenConnect
       </span>
     </header>
   );
-}
+});

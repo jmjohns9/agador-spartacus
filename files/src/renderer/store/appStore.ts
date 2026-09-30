@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { voltageSeries, voltageTrend, dropMvPerMin } from '../logic/verdicts';
 import {
   ConnectionStatus, PIDReading, DTCCode, ModuleState,
   LogEntry, SessionMarker, FuseCircuit, ParasiticChecklistItem,
@@ -93,6 +94,9 @@ export interface AppState {
   // Freeze frame filter (set by DTC screen to pre-filter freeze frame viewer)
   freezeFrameFilter: string | null;
   setFreezeFrameFilter: (code: string | null) => void;
+  // Bumped whenever a freeze frame is saved, so open screens can reload
+  freezeFramesVersion: number;
+  freezeFramesChanged: () => void;
 
   // Actions
   setConnectionStatus: (status: ConnectionStatus, protocol?: string, adapterInfo?: string) => void;
@@ -174,6 +178,10 @@ export function vehicleDisplayName(v: VehicleProfile): string {
 const initialVehicle  = loadVehicle();
 const initialPlatform = resolvePlatform(initialVehicle);
 
+// Gives each log entry a stable key; new entries are prepended, so an index
+// key re-rendered all 1000 rows on every entry
+let logSeq = 0;
+
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
   connectionStatus: 'disconnected',
@@ -220,6 +228,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   btRSSI: null,
   btDistance: null,
   freezeFrameFilter: null,
+  freezeFramesVersion: 0,
 
   addChatMessage: (m) => set((state) => ({ chatMessages: [...state.chatMessages, m] })),
   replaceLastAssistantMessage: (m) => set((state) => {
@@ -255,11 +264,26 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Actions ──────────────────────────────────────────────────────────────────
 
   setConnectionStatus: (status, protocol = '', adapterInfo = '') => {
-    set({
-      connectionStatus: status,
-      protocol,
-      adapterInfo,
-      sessionStartMs: status === 'connected' ? Date.now() : null,
+    set((state) => {
+      const prev = state.connectionStatus;
+      // Main reports "connected" again after refreshing the protocol; only a
+      // transition into connected starts the session clock.
+      const sessionStartMs = status !== 'connected' ? null
+        : prev === 'connected' && state.sessionStartMs !== null ? state.sessionStartMs
+        : Date.now();
+      // A new connection attempt may be a different vehicle: drop the last
+      // session's readings, history and codes rather than mixing them in.
+      // (They stay visible after a plain disconnect.)
+      const starting = (status === 'connecting' || status === 'initializing')
+        && prev !== 'connecting' && prev !== 'initializing';
+      return {
+        connectionStatus: status,
+        protocol,
+        // The protocol refresh sends no adapter text; keep the one we have
+        adapterInfo: adapterInfo || (status === 'connected' ? state.adapterInfo : ''),
+        sessionStartMs,
+        ...(starting ? { liveData: {}, history: {}, dtcs: [] } : {}),
+      };
     });
   },
 
@@ -275,11 +299,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         return {};
       }
 
-      // Append to history ring buffer
+      // Append to history ring buffer. History gets its own copy: liveData's
+      // entry has its timestamp bumped in place on every unchanged reading, and
+      // sharing the object moved the history point's time along with it.
+      const point = { ...reading };
       const prevHistory = state.history[reading.pid] ?? [];
       const newHistory = prevHistory.length >= state.historyMaxPoints
-        ? [...prevHistory.slice(1), reading]
-        : [...prevHistory, reading];
+        ? [...prevHistory.slice(1), point]
+        : [...prevHistory, point];
 
       return {
         liveData: { ...state.liveData, [reading.pid]: reading },
@@ -288,7 +315,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  setDTCs: (dtcs) => set({ dtcs }),
+  // Keep firstSeen across rescans: every scan builds codes stamped "now"
+  setDTCs: (dtcs) => set((state) => ({
+    dtcs: dtcs.map(d => {
+      const prev = state.dtcs.find(p => p.code === d.code && p.status === d.status);
+      return prev ? { ...d, firstSeen: Math.min(prev.firstSeen, d.firstSeen) } : d;
+    }),
+  })),
 
   updateModule: (module) => {
     set((state) => {
@@ -321,7 +354,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   addLogEntry: (entry) => {
-    set((state) => ({ log: [entry, ...state.log].slice(0, 1000) }));
+    set((state) => ({ log: [{ ...entry, seq: ++logSeq }, ...state.log].slice(0, 1000) }));
   },
 
   addMarker: (label) => {
@@ -366,6 +399,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setFreezeFrameFilter: (code) => set({ freezeFrameFilter: code }),
+  freezeFramesChanged: () => set(s => ({ freezeFramesVersion: s.freezeFramesVersion + 1 })),
 
   // ── Export helpers ───────────────────────────────────────────────────────────
 
@@ -404,10 +438,6 @@ export const selectBatteryVoltage = (s: AppState): number => {
   return typeof atrv?.value === 'number' ? atrv.value : 0;
 };
 
-export const selectRPM = (s: AppState): number => {
-  const r = s.liveData['010C'];
-  return typeof r?.value === 'number' ? r.value : 0;
-};
 
 export const selectActiveDTCCount = (s: AppState): number =>
   s.dtcs.filter(d => d.status === 'active').length;
@@ -421,14 +451,9 @@ export const selectParasiteRiskScore = (s: AppState): number => {
   return Math.min(10, (sleepFail * 3) + (voltDrift * 4) + (faultWeight * 1.5) + (Math.abs(ltftB1) > 7 ? 1 : 0));
 };
 
-export const selectVoltageTrend = (s: AppState): 'stable' | 'dropping' | 'critical' => {
-  const readings = s.history['ATRV'] ?? [];
-  if (readings.length < 10) return 'stable';
-  const recent = readings.slice(-10);
-  const first = recent[0].value as number;
-  const last = recent[recent.length - 1].value as number;
-  const dropV = first - last;
-  if (dropV > 0.05) return 'critical';
-  if (dropV > 0.02) return 'dropping';
-  return 'stable';
-};
+export const selectVoltageTrend = (s: AppState): 'stable' | 'dropping' | 'critical' =>
+  voltageTrend(voltageSeries(s.history['ATRV'] ?? [], s.liveData['ATRV']));
+
+/** Resting battery drain in mV/min over the last 30 min; null until measurable. */
+export const selectDropMvPerMin = (s: AppState): number | null =>
+  dropMvPerMin(voltageSeries(s.history['ATRV'] ?? [], s.liveData['ATRV']));

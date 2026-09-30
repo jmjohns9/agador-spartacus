@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import { parseVIN } from './obdParsers';
 
 // ─── ELM327 Constants ─────────────────────────────────────────────────────────
 
@@ -13,16 +14,23 @@ const ELM_TIMEOUT  = 2500; // ms per command during init
 // bounding a peripheral that streams without ever sending the '>' prompt.
 const MAX_RECV_BUF = 64 * 1024;
 
-// SAE J853 vehicle identification numbers are exactly 17 characters.
-const VIN_LENGTH = 17;
+// After a timeout the adapter is usually still working on that command. Its
+// late reply is waited for (up to this long) and discarded before the next
+// command goes out; otherwise it would be taken as the next command's reply.
+const STALE_REPLY_WAIT_MS = 1500;
 
-export type ELM327Event =
-  | 'ready'
-  | 'protocol'
-  | 'raw-response'
-  | 'pid-response'
-  | 'error'
-  | 'disconnected';
+// The app is read-only: it must never change a control module. Refuse the
+// OBD/UDS/GM services that clear codes, actuate, reset, write or reprogram.
+// AT/ST commands only configure the adapter and are always allowed.
+const WRITE_SERVICES = new Set([
+  '04', '08', '11', '14', '28', '2E', '2F', '31', '34', '35', '36', '37', '3B', '85',
+]);
+
+export function isVehicleWrite(command: string): boolean {
+  const hex = command.replace(/\s+/g, '').toUpperCase();
+  if (!/^[0-9A-F]+$/.test(hex)) return false;
+  return WRITE_SERVICES.has(hex.slice(0, 2));
+}
 
 export interface ELM327Response {
   command: string;
@@ -47,6 +55,8 @@ export class ELM327Commander extends EventEmitter {
   private pendingResolve: ((r: ELM327Response) => void) | null = null;
   private pendingCommand = '';
   private pendingTimer: ReturnType<typeof setTimeout> | null = null;
+  private staleReply = false;                 // a timed-out command's reply is still due
+  private staleDone: (() => void) | null = null;
   private isReady = false;
   private closed = false;
   private adapterInfo: Partial<AdapterInfo> = {};
@@ -71,6 +81,7 @@ export class ELM327Commander extends EventEmitter {
     this.closed = true;
     this.isReady = false;
     this.recvBuf = '';
+    this.staleDone?.();
     this.resolveResponse('', true, 'Closed');
   }
 
@@ -95,6 +106,13 @@ export class ELM327Commander extends EventEmitter {
     if (this.recvBuf.includes(ELM_PROMPT)) {
       const raw = this.recvBuf.replace(/>/g, '').trim();
       this.recvBuf = '';
+      if (!this.pendingResolve) {
+        // No command is waiting: this is a timed-out command's late reply
+        if (this.staleReply) this.log(`Discarded late reply: ${raw.slice(0, 40)}`, 'warn');
+        this.staleReply = false;
+        this.staleDone?.();
+        return;
+      }
       this.resolveResponse(raw);
     }
   }
@@ -102,16 +120,18 @@ export class ELM327Commander extends EventEmitter {
   // ── Connectivity probe — returns true only if the adapter sends bytes back ──
   // Tries ATZ then ATI, each with a short timeout. A non-empty, non-error reply
   // means the data path is live. Total worst case ~4.5s instead of ~30s.
-  private async probeAdapter(): Promise<boolean> {
+  // Returns which command answered and the adapter's banner, or null
+  private async probeAdapter(): Promise<{ cmd: string; banner: string } | null> {
     for (const cmd of ['ATZ', 'ATI']) {
       const resp = await this.send(cmd, 2200);
       if (resp.raw && resp.raw.trim().length > 0 && !resp.errorMessage) {
         this.log(`Adapter responded to ${cmd}: ${resp.raw.trim()}`);
-        return true;
+        // Last line: with echo still on, the first line is the command itself
+        return { cmd, banner: resp.lines[resp.lines.length - 1] ?? '' };
       }
       this.log(`No response to ${cmd} — retrying probe`);
     }
-    return false;
+    return null;
   }
 
   // ── Full ELM327 initialization sequence for 2004 Silverado J1850 VPW ───────
@@ -130,8 +150,9 @@ export class ELM327Commander extends EventEmitter {
       throw new Error(msg);
     }
 
-    // 1. Reset adapter — clears all previous state
-    await this.send('ATZ', 3000);
+    // 1. Reset adapter — clears all previous state. Skipped when the probe's
+    //    ATZ already reset it (a second ATZ only cost about a second).
+    if (probe.cmd !== 'ATZ') await this.send('ATZ', 3000);
 
     // 2. Echo off — suppress command echo in responses
     await this.sendExpect('ATE0', ELM_OK, 'Echo off failed');
@@ -161,12 +182,16 @@ export class ELM327Commander extends EventEmitter {
     this.adapterInfo.protocol = dpResp.lines[0] ?? 'Unknown';
 
     // 10. OBDLink-specific: read firmware version (STI command)
+    //     A plain ELM327 or clone answers '?', which used to become the
+    //     adapter name; fall back to the banner from the probe.
     const stiResp = await this.send('STI', 1000);
-    this.adapterInfo.firmwareVersion = stiResp.lines[0] ?? 'Unknown';
+    const sti = stiResp.success ? stiResp.lines[0] : undefined;
+    this.adapterInfo.firmwareVersion = sti || probe.banner || 'Unknown';
 
     // 11. OBDLink-specific: device info (STDI)
     const stdiResp = await this.send('STDI', 1000);
-    this.adapterInfo.deviceInfo = stdiResp.lines[0] ?? 'Unknown';
+    const stdi = stdiResp.success ? stdiResp.lines[0] : undefined;
+    this.adapterInfo.deviceInfo = stdi || probe.banner || 'Unknown';
 
     // 12. Read live battery voltage
     const atrvResp = await this.send('ATRV', 1000);
@@ -193,27 +218,7 @@ export class ELM327Commander extends EventEmitter {
 
   async readVIN(): Promise<string | null> {
     const resp = await this.send('0902', 5000);
-    if (!resp.success || resp.raw.includes('NO DATA') || resp.raw.includes('ERROR')) return null;
-    const clean = resp.raw.replace(/[\s>]/g, '').toUpperCase();
-    const header = '4902';
-    const idx = clean.indexOf(header);
-    if (idx === -1) return null;
-    let hexPart = clean.substring(idx);
-    // Mode 09 PID 02 returns multiple frames; extract ASCII bytes after each 4902XX header
-    const vinBytes: number[] = [];
-    const framePattern = /4902(\w{2})((?:\w{2})*)/g;
-    let match: RegExpExecArray | null;
-    while ((match = framePattern.exec(hexPart)) !== null) {
-      const data = match[2];
-      for (let i = 0; i < data.length; i += 2) {
-        const byte = parseInt(data.substring(i, i + 2), 16);
-        if (byte >= 0x20 && byte <= 0x7E) vinBytes.push(byte);
-      }
-    }
-    if (vinBytes.length < 11) return null;
-    // A VIN is 17 characters. Truncate before building the string: spreading an
-    // adapter-sized array into String.fromCharCode overflows the argument limit.
-    return vinBytes.slice(0, VIN_LENGTH).map(b => String.fromCharCode(b)).join('').trim();
+    return resp.success ? parseVIN(resp.raw) : null;
   }
 
   // ── Send a raw AT or OBD command and wait for the prompt ─────────────────────
@@ -230,10 +235,25 @@ export class ELM327Commander extends EventEmitter {
 
   private sendChain: Promise<unknown> = Promise.resolve();
 
-  private dispatch(command: string, timeoutMs: number): Promise<ELM327Response> {
+  // Wait for (and drop) a late reply before writing the next command.
+  private awaitStaleReply(): Promise<void> {
+    if (!this.staleReply || this.closed) return Promise.resolve();
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => { this.staleReply = false; finish(); }, STALE_REPLY_WAIT_MS);
+      const finish = () => { clearTimeout(timer); this.staleDone = null; resolve(); };
+      this.staleDone = finish;
+    });
+  }
+
+  private async dispatch(command: string, timeoutMs: number): Promise<ELM327Response> {
+    await this.awaitStaleReply();
     return new Promise((resolve) => {
       if (this.closed) {
         resolve({ command, raw: '', lines: [], success: false, errorMessage: 'Closed' });
+        return;
+      }
+      if (isVehicleWrite(command)) {
+        resolve({ command, raw: '', lines: [], success: false, errorMessage: 'Refused: the app is read-only' });
         return;
       }
       this.pendingResolve = resolve;
@@ -257,57 +277,11 @@ export class ELM327Commander extends EventEmitter {
     return resp;
   }
 
-  // ── Parse a PID response into raw data bytes ──────────────────────────────────
-  parsePIDResponse(pid: string, raw: string): number[] | null {
-    // Strip header bytes if present, split on whitespace
-    const clean = raw.replace(/\s+/g, '').toUpperCase();
-
-    // Discard non-hex characters
-    if (!/^[0-9A-F]+$/.test(clean)) return null;
-
-    // OBD-II response header: mode+40 followed by PID
-    // e.g. '410C1AF8' for RPM where mode 01 → response 41
-    const modeNibble = pid.substring(0, 2);
-    const responseMode = (parseInt(modeNibble, 16) + 0x40).toString(16).toUpperCase().padStart(2, '0');
-    const pidHex = pid.substring(2).toUpperCase();
-    const expectedHeader = responseMode + pidHex;
-
-    const idx = clean.indexOf(expectedHeader);
-    if (idx === -1) return null;
-
-    const dataStart = idx + expectedHeader.length;
-    let dataHex = clean.substring(dataStart);
-
-    // Multiple ECUs can answer the same request (e.g. engine + transmission on
-    // J1850). Keep only the first ECU's data — truncate at a repeated header.
-    const nextEcu = dataHex.indexOf(expectedHeader);
-    if (nextEcu !== -1) dataHex = dataHex.substring(0, nextEcu);
-
-    if (dataHex.length % 2 !== 0) return null;
-
-    const bytes: number[] = [];
-    for (let i = 0; i < dataHex.length; i += 2) {
-      bytes.push(parseInt(dataHex.substring(i, i + 2), 16));
-    }
-
-    return bytes;
-  }
-
   // ── Request battery voltage directly (ATRV) ────────────────────────────────
   async readBatteryVoltage(): Promise<number> {
     const resp = await this.send('ATRV', 1000);
     const match = resp.raw.match(/(\d+\.\d+)/);
     return match ? parseFloat(match[1]) : 0;
-  }
-
-  // ── OBDLink sleep timer control (STSLLT) ──────────────────────────────────
-  async setSleepTimer(minutes: number): Promise<void> {
-    await this.send(`STSLLT ${minutes}`, 1000);
-  }
-
-  // ── OBDLink power control (STPC) ─────────────────────────────────────────
-  async setPowerControl(on: boolean): Promise<void> {
-    await this.send(on ? 'STPC 1' : 'STPC 0', 1000);
   }
 
   get ready(): boolean { return this.isReady; }
@@ -320,16 +294,19 @@ export class ELM327Commander extends EventEmitter {
   private resolveResponse(raw: string, timedOut = false, failure = 'Timeout'): void {
     if (!this.pendingResolve) return;
 
-    // On timeout, discard any partial bytes so a late-arriving response can't
-    // corrupt the NEXT command's reply.
-    if (timedOut) this.recvBuf = '';
+    // On timeout, discard any partial bytes and remember that the adapter's
+    // reply is still due, so it is dropped rather than given to the next command.
+    if (timedOut) {
+      this.recvBuf = '';
+      this.staleReply = !this.closed;
+    }
 
     if (this.pendingTimer) {
       clearTimeout(this.pendingTimer);
       this.pendingTimer = null;
     }
 
-    const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const lines = raw.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
     const success = !timedOut &&
       !raw.includes(ELM_ERROR) &&
       !raw.includes('?') &&

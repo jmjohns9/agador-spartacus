@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAppStore } from '../store/appStore';
 import { FreezeFrame } from '../../shared/types';
+import { PID_MAP } from '../../core/pidCatalog';
+
+// Values with their units, formatted the way the rest of the app shows them
+const fmtPID = (pid: string, v: number | string | undefined): string =>
+  v === undefined ? '—' : typeof v === 'number' ? (PID_MAP.get(pid)?.format(v) ?? String(v)) : String(v);
 import {
   ScrollPane, SectionHeader, Card, Button, Divider, EmptyState,
 } from '../components/layout/UIComponents';
@@ -35,10 +40,11 @@ export function FreezeFrameScreen(): React.ReactElement {
       const match = all.find(f => f.dtcCode === freezeFrameFilter);
       if (match) setSelected(match.id);
       setFreezeFrameFilter(null);
-    } else if (all.length > 0 && !selected) {
-      setSelected(all[0].id);
+    } else {
+      // Keep the selection if it still exists (it may just have been deleted)
+      setSelected(cur => (cur && all.some(f => f.id === cur) ? cur : all[0]?.id ?? null));
     }
-  }, [freezeFrameFilter, selected, setFreezeFrameFilter]);
+  }, [freezeFrameFilter, setFreezeFrameFilter]);
 
   useEffect(() => { load(); }, []);
 
@@ -98,7 +104,7 @@ export function FreezeFrameScreen(): React.ReactElement {
 
           {frame && (
             <>
-              <SectionHeader>{`PID values at fault — ${frame.dtcCode}`}</SectionHeader>
+              <SectionHeader>{`Live values when ${frame.dtcCode} was first read`}</SectionHeader>
               <Card padding={0}>
                 {/* Battery voltage hero row */}
                 {frame.liveData['ATRV'] && (
@@ -117,7 +123,7 @@ export function FreezeFrameScreen(): React.ReactElement {
                 {/* Column headers */}
                 <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '4px 12px', background: 'var(--fill)' }}>
                   <span style={{ ...TYPE.caption, color: 'var(--label-3)' }}>Parameter</span>
-                  <span style={{ ...TYPE.caption, color: 'var(--teal)', textAlign: 'right' }}>At fault</span>
+                  <span style={{ ...TYPE.caption, color: 'var(--teal)', textAlign: 'right' }}>First read</span>
                   <span style={{ ...TYPE.caption, color: 'var(--accent-text)', textAlign: 'right' }}>Live now</span>
                   <span style={{ ...TYPE.caption, color: 'var(--label-3)', textAlign: 'right' }}>Δ</span>
                 </div>
@@ -132,8 +138,8 @@ export function FreezeFrameScreen(): React.ReactElement {
                     <React.Fragment key={pid}>
                       <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '4px 12px', alignItems: 'center' }}>
                         <span style={{ ...TYPE.body, color: 'var(--label-2)' }}>{PID_LABELS[pid] ?? pid}</span>
-                        <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--teal)', textAlign: 'right' }}>{fv !== undefined ? String(fv) : '—'}</span>
-                        <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--accent-text)', textAlign: 'right' }}>{lv !== undefined ? String(lv) : '—'}</span>
+                        <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--teal)', textAlign: 'right' }}>{fmtPID(pid, fv)}</span>
+                        <span style={{ ...TYPE.body, ...NUMERIC, color: 'var(--accent-text)', textAlign: 'right' }}>{fmtPID(pid, lv)}</span>
                         <span style={{
                           ...TYPE.body, ...NUMERIC, textAlign: 'right',
                           color: isNaN(delta) || Math.abs(delta) < 0.05 ? 'var(--label-2)' : delta > 0 ? 'var(--ok-text)' : 'var(--warn-text)',

@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import { useAppStore, selectBatteryVoltage, selectVoltageTrend, selectParasiteRiskScore, selectActiveDTCCount } from '../store/appStore';
+import React, { useState } from 'react';
+import { useAppStore, selectBatteryVoltage, selectVoltageTrend, selectParasiteRiskScore, selectActiveDTCCount, selectDropMvPerMin } from '../store/appStore';
+import { dischargeStatus } from '../logic/verdicts';
 import {
-  ScrollPane, SectionHeader, Grid, Card, Metric, Gauge, Badge, AlertBanner, Button, DataRow, EmptyState, Divider,
+  ScrollPane, SectionHeader, Grid, Card, Metric, Gauge, Badge, AlertBanner, Button, DataRow, EmptyState, Divider, VoltageTimeline,
 } from '../components/layout/UIComponents';
 import { TYPE, WEIGHT, NUMERIC, STATUS_TEXT, STATUS_FILL } from '../theme/theme';
 import type { Status } from '../theme/theme';
@@ -40,72 +41,6 @@ const FUSE_STATUS_VARIANT: Record<FuseStatus, 'ok' | 'warn' | 'crit' | 'muted'> 
   confirmed:   'crit',
   unknown:     'muted',
 };
-
-// ─── Voltage Timeline ────────────────────────────────────────────────────────
-
-const REFS: Array<{ v: number; label: string; status: Status; dim?: boolean }> = [
-  { v: 12.6, label: '12.6 Full', status: 'ok' },
-  { v: 12.4, label: '12.4 50%',  status: 'warn' },
-  { v: 12.0, label: '12.0 Crit', status: 'crit' },
-  { v: 11.8, label: '11.8 Dead', status: 'crit', dim: true },
-];
-
-function VoltageTimeline(): React.ReactElement {
-  const history = useAppStore(s => s.history['ATRV'] ?? []);
-  const recent  = history.slice(-120);
-
-  const W = 500, H = 100;
-  const V_MIN = 11.6, V_MAX = 13.0;
-  const yOf = (v: number) => H - ((v - V_MIN) / (V_MAX - V_MIN)) * H;
-
-  if (recent.length < 2) {
-    return (
-      <EmptyState icon="ti-chart-dots" title="Collecting voltage history" message="Gathering battery voltage samples — check back in a moment." />
-    );
-  }
-
-  const values = recent.map(r => typeof r.value === 'number' ? r.value : 12.6);
-  const pts    = values.map((v, i) => `${(i / (values.length - 1)) * W},${yOf(v)}`).join(' ');
-  const lastV  = values[values.length - 1];
-  const firstV = values[0];
-  const drift  = lastV - firstV;
-  const lineColor = lastV < 12.0 ? 'var(--crit)' : lastV < 12.4 ? 'var(--warn)' : 'var(--purple)';
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <svg width="100%" viewBox={`-40 -8 ${W + 100} ${H + 20}`} style={{ overflow: 'visible' }}>
-        {REFS.map(({ v, label, status, dim }) => (
-          <g key={v}>
-            <line
-              x1={0} y1={yOf(v)} x2={W} y2={yOf(v)}
-              stroke={STATUS_FILL[status]} strokeOpacity={dim ? 0.4 : 0.8}
-              strokeWidth="0.7" strokeDasharray="4,3"
-            />
-            <text x={W + 4} y={yOf(v) + 4} style={{ ...NUMERIC, ...TYPE.caption, fill: STATUS_TEXT[status] }} opacity={dim ? 0.6 : 1}>
-              {label}
-            </text>
-          </g>
-        ))}
-        <polyline points={pts} fill="none" stroke={lineColor} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
-        {values.length > 0 && (
-          <circle cx={W} cy={yOf(lastV)} r="4" fill={lineColor} stroke="var(--grouped)" strokeWidth="1.5" />
-        )}
-        {[11.6, 11.8, 12.0, 12.2, 12.4, 12.6, 12.8, 13.0].map(v => (
-          <text key={v} x={-4} y={yOf(v) + 3} style={{ ...NUMERIC, ...TYPE.caption, fill: 'var(--label-3)' }} textAnchor="end">{v}</text>
-        ))}
-      </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>
-          {recent.length} samples · {Math.round(recent.length * 0.5 / 60)} min window
-        </span>
-        <span style={{ ...TYPE.caption, ...NUMERIC, color: drift < -0.05 ? STATUS_TEXT.crit : drift < -0.02 ? STATUS_TEXT.warn : 'var(--label-2)' }}>
-          Drift: {drift >= 0 ? '+' : ''}{drift.toFixed(3)} V
-        </span>
-        <span style={{ ...TYPE.caption, ...NUMERIC, color: lineColor }}>Current: {lastV.toFixed(3)} V</span>
-      </div>
-    </div>
-  );
-}
 
 // ─── Fuse Panel ──────────────────────────────────────────────────────────────
 
@@ -368,7 +303,8 @@ function PowerConsumers(): React.ReactElement {
     // Live-detected subsystems
     const hasCoolant = typeof liveData['0105']?.value === 'number';
     const hasMAF = typeof liveData['0110']?.value === 'number';
-    if (hasCoolant) consumers.push({ name: 'ECM', draw: rpm > 0 ? '0.5–2 A' : '3–8 mA', status: rpm > 0 ? 'active' : 'sleep', source: 'PID 0105 responding' });
+    // A module that answers requests is awake, engine running or not
+    if (hasCoolant) consumers.push({ name: 'ECM', draw: rpm > 0 ? '0.5–2 A' : 'awake (engine off)', status: 'active', source: 'PID 0105 responding' });
     if (hasMAF) consumers.push({ name: 'MAF sensor', draw: rpm > 0 ? '50–100 mA' : '0 mA', status: rpm > 0 ? 'active' : 'sleep', source: 'PID 0110 responding' });
   }
 
@@ -413,7 +349,7 @@ export function ParasiteScreen(): React.ReactElement {
   const modules      = useAppStore(s => s.modules);
   const ipfbFuses    = useAppStore(s => s.ipfbFuses);
   const uhfrcFuses   = useAppStore(s => s.uhfrcFuses);
-  const history      = useAppStore(s => s.history['ATRV'] ?? []);
+  const dropMv       = useAppStore(selectDropMvPerMin);
   const platform     = useAppStore(s => s.platform);
   const isGMT800     = platform.id === 'gmt800';
 
@@ -422,13 +358,7 @@ export function ParasiteScreen(): React.ReactElement {
   const confirmedFuses = [...ipfbFuses, ...uhfrcFuses].filter(f => f.status === 'confirmed').length;
   const suspectFuses   = [...ipfbFuses, ...uhfrcFuses].filter(f => f.status === 'suspect').length;
 
-  const voltDropRate = useMemo(() => {
-    if (history.length < 10) return 0;
-    const slice = history.slice(-10);
-    const dt    = (slice[slice.length - 1].timestamp - slice[0].timestamp) / 60000;
-    const dv    = (slice[0].value as number) - (slice[slice.length - 1].value as number);
-    return dt > 0 ? dv / dt : 0;
-  }, [history]);
+  const drainStatus = dischargeStatus(dropMv);
 
   return (
     <ScrollPane>
@@ -438,7 +368,7 @@ export function ParasiteScreen(): React.ReactElement {
         <AlertBanner message={`Parasitic draw risk score: ${riskScore.toFixed(1)}/10 — active investigation recommended.`} variant="crit" />
       )}
       {rogueCount > 0 && (
-        <AlertBanner message={`${rogueCount} rogue module${rogueCount > 1 ? 's' : ''} detected — awake after engine-off. Check Module Wake screen.`} variant="crit" />
+        <AlertBanner message={`${rogueCount} rogue module${rogueCount > 1 ? 's' : ''} detected — awake after engine-off. Check the Module monitor screen.`} variant="crit" />
       )}
       {confirmedFuses > 0 && (
         <AlertBanner message={`${confirmedFuses} fuse circuit${confirmedFuses > 1 ? 's' : ''} confirmed as draw source.`} variant="warn" />
@@ -469,10 +399,10 @@ export function ParasiteScreen(): React.ReactElement {
         <Metric
           size="hero"
           label="Discharge rate"
-          value={voltDropRate > 0 ? `${(voltDropRate * 1000).toFixed(1)}` : '—'}
+          value={dropMv === null ? '—' : Math.max(dropMv, 0).toFixed(1)}
           unit="mV/min"
-          subtext={voltDropRate > 5 ? 'High — active draw' : voltDropRate > 1 ? 'Moderate drain' : 'Normal'}
-          status={voltDropRate > 5 ? 'crit' : voltDropRate > 1 ? 'warn' : 'neutral'}
+          subtext={dropMv === null ? 'Needs 10 min at rest' : drainStatus === 'crit' ? 'High — active draw' : drainStatus === 'warn' ? 'Moderate drain' : 'Normal'}
+          status={drainStatus}
           spark={{ pid: 'ATRV', color: 'var(--warn)' }}
         />
       </div>
@@ -494,7 +424,7 @@ export function ParasiteScreen(): React.ReactElement {
           label="Active DTCs"
           value={activeDTCs}
           status={activeDTCs > 0 ? 'warn' : 'neutral'}
-          subtext="Body (B) & network (U) weighted"
+          subtext="Stored codes the ECU reports as active"
         />
         <Metric
           size="compact"
@@ -520,12 +450,13 @@ export function ParasiteScreen(): React.ReactElement {
       <ChecklistSection />
 
       {/* ── Fuse panel — IPFB ─────────────────────────────────────────── */}
-      <SectionHeader>Instrument panel fuse block (IPFB)</SectionHeader>
-      <FusePanel fuses={ipfbFuses} />
+      {/* GM fuse layouts only exist for platforms that define them */}
+      {ipfbFuses.length > 0 && <SectionHeader>Instrument panel fuse block (IPFB)</SectionHeader>}
+      {ipfbFuses.length > 0 && <FusePanel fuses={ipfbFuses} />}
 
       {/* ── Fuse panel — UHFRC ────────────────────────────────────────── */}
-      <SectionHeader>Under-hood fuse relay center (UHFRC)</SectionHeader>
-      <FusePanel fuses={uhfrcFuses} />
+      {uhfrcFuses.length > 0 && <SectionHeader>Under-hood fuse relay center (UHFRC)</SectionHeader>}
+      {uhfrcFuses.length > 0 && <FusePanel fuses={uhfrcFuses} />}
 
       {/* ── Known culprits — platform-specific ───────────────────────── */}
       {isGMT800 && (

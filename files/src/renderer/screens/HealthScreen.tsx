@@ -1,27 +1,15 @@
 import React, { useState } from 'react';
 import { useAppStore, selectBatteryVoltage, selectActiveDTCCount, selectParasiteRiskScore, selectVoltageTrend } from '../store/appStore';
-import { FreezeFrame, ReportPayload, LogEntry } from '../../shared/types';
+import { FreezeFrame, ReportPayload, LogEntry, PIDReading } from '../../shared/types';
 import {
   ScrollPane, SectionHeader, Grid, Card, Metric, Gauge, Badge, AlertBanner, Button, DataRow, EmptyState,
 } from '../components/layout/UIComponents';
 import { connectionTone } from '../components/shell/shellLogic';
+import { readinessMonitors, isReading, batterySoC } from '../logic/verdicts';
 import { TYPE, NUMERIC, STATUS_TEXT } from '../theme/theme';
 import type { Status } from '../theme/theme';
 
-// ─── Readiness monitor definitions ────────────────────────────────────────────
-
-const READINESS_MONITORS = [
-  { id: '0101_mis', name: 'Misfire monitor',              pid: '0101', bit: 0 },
-  { id: '0101_fuel', name: 'Fuel system monitor',         pid: '0101', bit: 1 },
-  { id: '0101_comp', name: 'Comprehensive components',    pid: '0101', bit: 2 },
-  { id: '0101_cat',  name: 'Catalytic converter',         pid: '0101', bit: 6 },
-  { id: '0101_hcat', name: 'Heated catalytic converter',  pid: '0101', bit: 7 },
-  { id: '0101_evap', name: 'Evaporative system (EVAP)',   pid: '0101', bit: 8 },
-  { id: '0101_air',  name: 'Secondary air system',        pid: '0101', bit: 9 },
-  { id: '0101_o2s',  name: 'O2 sensor',                   pid: '0101', bit: 11 },
-  { id: '0101_o2sh', name: 'O2 sensor heater',            pid: '0101', bit: 12 },
-  { id: '0101_egr',  name: 'Exhaust Gas Recirculation',   pid: '0101', bit: 13 },
-];
+const NO_READINGS: PIDReading[] = [];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -30,14 +18,7 @@ function usePIDNum(pid: string, fallback = 0): number {
   return typeof v === 'number' ? v : fallback;
 }
 
-function voltageLabel(v: number): string {
-  if (v <= 0)   return '—';
-  if (v >= 12.6) return 'Fully charged';
-  if (v >= 12.4) return '75% charge';
-  if (v >= 12.2) return '50% charge';
-  if (v >= 12.0) return '25% charge';
-  return 'Low — check for draw';
-}
+const voltageLabel = batterySoC;
 
 function riskLabel(score: number): string {
   if (score <= 2)  return 'Low risk';
@@ -58,6 +39,9 @@ export function HealthScreen(): React.ReactElement {
   const dtcs         = useAppStore(s => s.dtcs);
   const modules      = useAppStore(s => s.modules);
   const connectionStatus = useAppStore(s => s.connectionStatus);
+  const readinessRaw = useAppStore(s => s.liveData['0101']?.raw);
+  // Only trust readiness read in this session
+  const readiness = connectionStatus === 'connected' && readinessRaw ? readinessMonitors(readinessRaw) : null;
   const adapterInfo  = useAppStore(s => s.adapterInfo);
   const protocol     = useAppStore(s => s.protocol);
   const vehicle      = useAppStore(s => s.vehicle);
@@ -65,7 +49,8 @@ export function HealthScreen(): React.ReactElement {
   const isGMT800     = platform.id === 'gmt800';
   const checklist    = useAppStore(s => s.checklist);
   const log          = useAppStore(s => s.log);
-  const atrvHistory  = useAppStore(s => s.history['ATRV'] ?? []);
+  // A shared empty array: a new [] per call made every store update re-render
+  const atrvHistory  = useAppStore(s => s.history['ATRV'] ?? NO_READINGS);
 
   const batteryV     = useAppStore(selectBatteryVoltage);
   const activeDTCs   = useAppStore(selectActiveDTCCount);
@@ -73,10 +58,13 @@ export function HealthScreen(): React.ReactElement {
   const voltageTrend = useAppStore(selectVoltageTrend);
 
   const [exporting, setExporting] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   const exportReport = async () => {
     setExporting(true);
+    setReportError(null);
     try {
+      const appInfo = await window.electronAPI.getAppInfo().catch(() => null);
       const freezeFrames = await window.electronAPI.storage.getFreezeFrames() as FreezeFrame[];
       const payload: ReportPayload = {
         vehicle: {
@@ -90,24 +78,28 @@ export function HealthScreen(): React.ReactElement {
         },
         batteryVoltage: batteryV,
         voltageHistory: atrvHistory.map(r => r.value as number),
-        milOn:          dtcs.some(d => d.status === 'active'),
+        milOn,
         dtcs,
         modules,
         checklist,
         freezeFrames,
-        log:            (log as LogEntry[]).filter(e => e.level === 'error' || e.level === 'warn').slice(-100),
+        // The log is newest-first: take the 100 newest, then put them in time order
+        log:            (log as LogEntry[]).filter(e => e.level === 'error' || e.level === 'warn').slice(0, 100).reverse(),
         reportDate:     Date.now(),
         adapterInfo:    adapterInfo ?? '',
         protocol:       protocol ?? '',
-        appVersion:     '1.0.0',
+        appVersion:     appInfo?.version ?? '',
       };
       await window.electronAPI.reportGenerate(payload);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': /, '') : String(err);
+      setReportError(`The report could not be generated: ${msg}`);
     } finally {
       setExporting(false);
     }
   };
 
-  const coolantF     = usePIDNum('0105', 0);
+  const coolantF     = usePIDNum('0105', NaN);
   const rpm          = usePIDNum('010C', 0);
   const engineOn     = rpm > 200;
 
@@ -115,11 +107,13 @@ export function HealthScreen(): React.ReactElement {
   const permDTCs     = dtcs.filter(d => d.status === 'permanent').length;
   const rogueModules = modules.filter(m => m.status === 'rogue').length;
 
-  // Infer MIL state: active if any active powertrain DTCs exist
-  const milOn = dtcs.some(d => d.status === 'active' && d.type === 'P');
+  // The lamp state the vehicle reports (PID 0101) wins; before it has been
+  // read, infer it from active powertrain codes. Used by the tiles and report.
+  const milOn = readiness ? readiness.milOn : dtcs.some(d => d.status === 'active' && d.type === 'P');
 
   return (
     <ScrollPane>
+      {reportError && <AlertBanner variant="crit" message={reportError} />}
 
       {/* ── Export button ──────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -204,7 +198,7 @@ export function HealthScreen(): React.ReactElement {
           size="compact"
           label="Engine status"
           value={connectionStatus !== 'connected' ? '—' : engineOn ? `${rpm.toLocaleString()} rpm` : 'Off'}
-          subtext={connectionStatus === 'connected' ? (engineOn ? `Coolant: ${coolantF > 0 ? coolantF + ' °F' : '—'}` : 'Engine not running') : 'Adapter not connected'}
+          subtext={connectionStatus === 'connected' ? (engineOn ? `Coolant: ${isReading(coolantF) ? coolantF + ' °F' : '—'}` : 'Engine not running') : 'Adapter not connected'}
         />
       </Grid>
 
@@ -215,7 +209,7 @@ export function HealthScreen(): React.ReactElement {
           size="compact"
           label="Active faults"
           value={activeDTCs}
-          subtext={activeDTCs > 0 ? 'MIL illuminated' : 'No active faults'}
+          subtext={activeDTCs === 0 ? 'No active faults' : milOn ? 'Check engine light on' : 'Check engine light off'}
           status={activeDTCs > 0 ? 'crit' : 'neutral'}
         />
         <Metric
@@ -256,29 +250,32 @@ export function HealthScreen(): React.ReactElement {
         </Card>
       )}
 
-      {/* ── Readiness monitors ─────────────────────────────────────────────── */}
+      {/* ── Readiness monitors (Mode 01 PID 01) ─────────────────────────── */}
       <SectionHeader>I/M readiness monitors</SectionHeader>
-      <Card padding={0}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)' }}>
-          {READINESS_MONITORS.map(m => {
-            // Without live 0101 data use a placeholder state
-            const ready = connectionStatus === 'connected';
-            return (
+      {readiness === null ? (
+        <Card>
+          <EmptyState
+            icon="ti-clipboard-check"
+            title={connectionStatus === 'connected' ? 'Readiness not read yet' : 'Not connected'}
+            message={connectionStatus === 'connected'
+              ? 'Monitor status (PID 0101) is read every few seconds once polling is running.'
+              : 'Connect to the vehicle to read which emissions monitors have completed.'}
+          />
+        </Card>
+      ) : (
+        <Card padding={0}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)' }}>
+            {readiness.monitors.map(m => (
               <DataRow
-                key={m.id}
+                key={m.name}
                 name={m.name}
                 value=""
-                badge={
-                  <Badge
-                    label={connectionStatus !== 'connected' ? 'N/A' : ready ? 'Ready' : 'Not ready'}
-                    variant={connectionStatus !== 'connected' ? 'muted' : ready ? 'ok' : 'warn'}
-                  />
-                }
+                badge={<Badge label={m.status === 'ready' ? 'Ready' : 'Not ready'} variant={m.status === 'ready' ? 'ok' : 'warn'} />}
               />
-            );
-          })}
-        </div>
-      </Card>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* ── Module status ──────────────────────────────────────────────────── */}
       <SectionHeader>Module status</SectionHeader>
@@ -326,7 +323,7 @@ export function HealthScreen(): React.ReactElement {
           size="compact"
           label="Adapter firmware"
           value={adapterInfo || '—'}
-          subtext="OBDLink MX+ ELM327 v1.5"
+          subtext="As reported by the adapter"
         />
       </Grid>
 

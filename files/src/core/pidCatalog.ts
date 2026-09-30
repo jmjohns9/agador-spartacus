@@ -3,7 +3,7 @@ import { PIDDefinition } from '../shared/types';
 // ─── SAE J1979 Formula helpers ─────────────────────────────────────────────────
 
 const pct1   = (b: number[]) => parseFloat(((b[0] / 255) * 100).toFixed(1));
-const pct2   = (b: number[]) => parseFloat((((b[0] * 256 + b[1]) / 65535) * 100).toFixed(1));
+const pct2   = (b: number[]) => parseFloat((((b[0] * 256 + b[1]) * 100) / 255).toFixed(1));
 const trim   = (b: number[]) => parseFloat((((b[0] - 128) / 128) * 100).toFixed(1));
 const tempC  = (b: number[]) => b[0] - 40;
 const tempF  = (b: number[]) => parseFloat(((b[0] - 40) * 9 / 5 + 32).toFixed(1));
@@ -91,8 +91,8 @@ export const PID_CATALOG: PIDDefinition[] = [
     format: (v) => `${v}%`,
   },
   {
-    pid: '0121',
-    name: 'Redundant Throttle Position (Sensor B)',
+    pid: '0147',
+    name: 'Absolute Throttle Position B (Redundant Sensor)',
     shortName: 'TPS-B',
     category: 'engine',
     unit: '%',
@@ -137,7 +137,7 @@ export const PID_CATALOG: PIDDefinition[] = [
     category: 'engine',
     unit: 'psi',
     min: 0,
-    max: 36.75,
+    max: 36.99,
     formula: 'byte A × 0.14504 (kilopascal to psi)',
     description: 'Absolute pressure inside the intake manifold. Low at idle due to vacuum; rises toward atmospheric at wide-open throttle.',
     decode: psi1,
@@ -145,13 +145,13 @@ export const PID_CATALOG: PIDDefinition[] = [
   },
   {
     pid: '0143',
-    name: 'Absolute Throttle Body Air Intake Load',
+    name: 'Absolute Load Value',
     shortName: 'Abs Load',
     category: 'engine',
     unit: '%',
     min: 0,
-    max: 100,
-    formula: '((byte A × 256) + byte B) ÷ 2.55',
+    max: 25700,
+    formula: '((byte A × 256) + byte B) × 100 ÷ 255',
     description: 'Absolute percentage of maximum possible air intake at current conditions, independent of engine speed.',
     decode: pct2,
     format: (v) => `${v}%`,
@@ -218,14 +218,14 @@ export const PID_CATALOG: PIDDefinition[] = [
   // ── Fuel ─────────────────────────────────────────────────────────────────────
   {
     pid: '0106',
-    name: 'Short-Term Fuel Trim — Bank 1 (Right Side, Cylinders 1,3,5,7)',
+    name: 'Short-Term Fuel Trim — Bank 1 (Cylinder 1 Side)',
     shortName: 'STFT Bank 1',
     category: 'fuel',
     unit: '%',
     min: -100,
     max: 99.2,
     formula: '((byte A − 128) ÷ 128) × 100',
-    description: 'Instant Engine Control Module fuel correction for right-side cylinders based on oxygen sensor feedback. Positive = lean (adding fuel).',
+    description: 'Instant Engine Control Module fuel correction for the Bank 1 cylinders based on oxygen sensor feedback. On the GM V8, Bank 1 is the driver side (cylinders 1, 3, 5, 7). Positive = lean (adding fuel).',
     decode: trim,
     format: (v) => { const n = v as number; return `${n > 0 ? '+' : ''}${n}%`; },
     warnLow: -10,
@@ -235,7 +235,7 @@ export const PID_CATALOG: PIDDefinition[] = [
   },
   {
     pid: '0107',
-    name: 'Long-Term Fuel Trim — Bank 1 (Right Side, Cylinders 1,3,5,7)',
+    name: 'Long-Term Fuel Trim — Bank 1 (Cylinder 1 Side)',
     shortName: 'LTFT Bank 1',
     category: 'fuel',
     unit: '%',
@@ -252,14 +252,14 @@ export const PID_CATALOG: PIDDefinition[] = [
   },
   {
     pid: '0108',
-    name: 'Short-Term Fuel Trim — Bank 2 (Left Side, Cylinders 2,4,6,8)',
+    name: 'Short-Term Fuel Trim — Bank 2 (Opposite Cylinder 1)',
     shortName: 'STFT Bank 2',
     category: 'fuel',
     unit: '%',
     min: -100,
     max: 99.2,
     formula: '((byte A − 128) ÷ 128) × 100',
-    description: 'Instant fuel correction for left-side cylinders. Both banks lean simultaneously points to an upstream cause.',
+    description: 'Instant fuel correction for the Bank 2 cylinders. On the GM V8, Bank 2 is the passenger side (cylinders 2, 4, 6, 8). Both banks lean simultaneously points to an upstream cause.',
     decode: trim,
     format: (v) => { const n = v as number; return `${n > 0 ? '+' : ''}${n}%`; },
     warnLow: -10,
@@ -267,7 +267,7 @@ export const PID_CATALOG: PIDDefinition[] = [
   },
   {
     pid: '0109',
-    name: 'Long-Term Fuel Trim — Bank 2 (Left Side, Cylinders 2,4,6,8)',
+    name: 'Long-Term Fuel Trim — Bank 2 (Opposite Cylinder 1)',
     shortName: 'LTFT Bank 2',
     category: 'fuel',
     unit: '%',
@@ -302,7 +302,7 @@ export const PID_CATALOG: PIDDefinition[] = [
     category: 'fuel',
     unit: 'psi',
     min: 0,
-    max: 1160,
+    max: 95050,
     formula: '((byte A × 256) + byte B) × 10 kPa → × 0.14504 for psi',
     description: 'Fuel rail pressure above atmospheric. The 5.3 L Vortec uses a returnless rail controlled by the Engine Control Module. Spec: 55–60 psi.',
     decode: (b) => parseFloat(((b[0] * 256 + b[1]) * 10 * 0.14504).toFixed(1)),
@@ -337,18 +337,25 @@ export const PID_CATALOG: PIDDefinition[] = [
     format: (v) => `${v}°`,
   },
   {
-    pid: '012A',
-    name: 'Fuel System Status — Bank 1 (Closed or Open Loop)',
-    shortName: 'Fuel Sys B1',
+    pid: '0103',
+    name: 'Fuel System Status — System 1 (Closed or Open Loop)',
+    shortName: 'Fuel System',
     category: 'fuel',
     unit: '',
     min: 0,
-    max: 255,
-    formula: 'Bit-coded status byte',
-    description: 'Whether the Engine Control Module is using oxygen sensor feedback (closed loop = normal) or a fixed fuel map (open loop = startup or fault).',
+    max: 16,
+    formula: 'Byte A: one bit set per SAE J1979 (byte B is fuel system 2)',
+    description: 'Whether the Engine Control Module is using oxygen sensor feedback (closed loop = normal) or a fixed fuel map (open loop: cold start, full throttle or deceleration, or a fault).',
     decode: (b) => b[0],
     format: (v) => {
-      const map: { [k: number]: string } = { 1: 'Open loop', 2: 'Closed loop', 4: 'Open loop — fault', 8: 'Closed loop — fault' };
+      const map: { [k: number]: string } = {
+        0: 'Not reported',
+        1: 'Open loop — engine cold',
+        2: 'Closed loop',
+        4: 'Open loop — driving conditions',
+        8: 'Open loop — system fault',
+        16: 'Closed loop — O2 sensor fault',
+      };
       return map[v as number] ?? `Status ${v}`;
     },
   },
@@ -376,24 +383,11 @@ export const PID_CATALOG: PIDDefinition[] = [
     category: 'electrical',
     unit: 'inHg',
     min: 0,
-    max: 36.75,
+    max: 75.3,
     formula: 'byte A × 0.29530 (kilopascal to inches of mercury)',
     description: 'Atmospheric pressure used to compensate Mass Air Flow and altitude-sensitive fuel calculations.',
     decode: (b) => parseFloat((b[0] * 0.29530).toFixed(2)),
     format: (v) => `${v} inHg`,
-  },
-  {
-    pid: '0143',
-    name: 'Absolute Throttle Body Air Intake Load Value',
-    shortName: 'Abs Load',
-    category: 'electrical',
-    unit: '%',
-    min: 0,
-    max: 100,
-    formula: '((byte A × 256) + byte B) ÷ 2.55',
-    description: 'Absolute percentage of maximum possible air intake at current conditions.',
-    decode: pct2,
-    format: (v) => `${v}%`,
   },
 
   // ── Oxygen Sensors ───────────────────────────────────────────────────────────
@@ -432,7 +426,7 @@ export const PID_CATALOG: PIDDefinition[] = [
     min: 0,
     max: 1.275,
     formula: 'byte A ÷ 200',
-    description: 'Upstream oxygen sensor on Bank 2 (driver side). Should oscillate rapidly in closed-loop fuel control.',
+    description: 'Upstream oxygen sensor on Bank 2 (passenger side on the GM V8). Should oscillate rapidly in closed-loop fuel control.',
     decode: o2v,
     format: (v) => `${v} V`,
   },
@@ -453,19 +447,37 @@ export const PID_CATALOG: PIDDefinition[] = [
   // ── Transmission ─────────────────────────────────────────────────────────────
   {
     pid: '01A4',
-    name: 'Transmission Actual Gear — GM Enhanced Parameter',
+    name: 'Transmission Actual Gear',
     shortName: 'Gear',
     category: 'transmission',
     unit: '',
     min: 0,
-    max: 7,
-    formula: 'Enumerated byte via GM Class II bus',
-    description: 'Current gear as reported by the Transmission Control Module via the GM Class II bus. Requires OBDLink MX+ SW-CAN passthrough.',
-    decode: (b) => b[0],
-    format: (v) => ['Park', 'Reverse', 'Neutral', '1st', '2nd', '3rd', '4th'][v as number] ?? `Gear ${v}`,
+    max: 15,
+    formula: 'Upper 4 bits of byte B (byte A = support bits, C·256+D = ratio × 1000)',
+    description: 'Current gear as reported by the Transmission Control Module (SAE J1979 PID A4). Many pre-2010 vehicles do not support it.',
+    decode: (b) => (b.length >= 2 ? b[1] >> 4 : NaN),
+    format: (v) => {
+      const n = v as number;
+      if (!Number.isFinite(n)) return '—';
+      if (n === 0) return 'Neutral';
+      return `${n}${['th', 'st', 'nd', 'rd'][n] ?? 'th'}`;
+    },
   },
 
   // ── Emissions ────────────────────────────────────────────────────────────────
+  {
+    pid: '0101',
+    name: 'Monitor Status Since DTCs Cleared (MIL and I/M Readiness)',
+    shortName: 'Readiness',
+    category: 'emissions',
+    unit: '',
+    min: 0,
+    max: 127,
+    formula: 'A: bit 7 MIL, bits 0-6 stored codes; B-D: monitor available / incomplete bits',
+    description: 'Check-engine lamp state, the number of stored emission codes, and which I/M readiness monitors have completed since codes were last cleared. The Vehicle health screen decodes the monitor bits.',
+    decode: (b) => b[0] & 0x7F,
+    format: (v) => `${v} stored code${v === 1 ? '' : 's'}`,
+  },
   {
     pid: '012C',
     name: 'Exhaust Gas Recirculation Valve — Commanded Position',
@@ -516,10 +528,9 @@ export const PID_MAP: Map<string, PIDDefinition> = new Map(
 );
 
 // ─── Default polling priority queue ───────────────────────────────────────────
-// Fast (100 ms): safety-critical
-// Normal (500 ms): standard telemetry
-// Slow (2000 ms): background
+// The loop has no time base: fast PIDs are read every cycle, normal every 3rd
+// cycle and slow every 10th (see OBDProtocolManager.runPollLoop).
 
 export const POLLING_FAST   = ['010C', '0142'];  // battery voltage (ATRV) is polled separately every cycle
 export const POLLING_NORMAL = ['010D', '0105', '0104', '0111', '010F', '0110', '010B', '0106', '0107', '0108', '0109', '0114', '0115', '0118', '0119'];
-export const POLLING_SLOW   = ['012F', '015C', '0123', '015E', '0133', '010E', '0143', '0146', '012C', '012D', '012E', '01A4'];
+export const POLLING_SLOW   = ['012F', '015C', '0123', '015E', '0133', '010E', '0143', '0146', '012C', '012D', '012E', '01A4', '0103', '0101'];

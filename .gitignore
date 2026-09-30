@@ -1,7 +1,7 @@
 # Build artifacts
 files/node_modules/
 files/dist/
-files/build/
+files/release/
 
 # OS
 .DS_Store

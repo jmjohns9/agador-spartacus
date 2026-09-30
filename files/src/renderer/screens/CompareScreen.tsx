@@ -179,26 +179,36 @@ export function CompareScreen(): React.ReactElement {
   const [snapName,   setSnapName]   = useState('');
   const [saved,      setSaved]      = useState(false);
   const [warnFull,   setWarnFull]   = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
 
+  // Keep the selection if it still exists, else select the newest. Reading
+  // selectedId from a closure left nothing selected after deleting it.
   const loadSnaps = useCallback(async () => {
     const snaps = await (window.electronAPI.storage.getSnapshots() as Promise<SessionSnapshot[]>);
     setSnapshots(snaps);
-    if (!selectedId && snaps.length > 0) setSelectedId(snaps[0].id);
-  }, [selectedId]);
+    setSelectedId(cur => (cur && snaps.some(s => s.id === cur) ? cur : snaps[0]?.id ?? null));
+  }, []);
 
   useEffect(() => { loadSnaps(); }, []);
 
   const selected = useMemo(() => snapshots.find(s => s.id === selectedId) ?? null, [snapshots, selectedId]);
 
   const liveVolt = useMemo(
-    () => (history['ATRV'] ?? []).slice(-120).map(r => typeof r.value === 'number' ? r.value as number : 12.6),
+    // Non-numeric samples are dropped, not replaced with a made-up 12.6 V
+    () => (history['ATRV'] ?? []).slice(-120).flatMap(r => (typeof r.value === 'number' ? [r.value] : [])),
     [history],
   );
 
-  const hasLive = Object.keys(liveData).length > 0;
+  // Values kept after a disconnect are the last session's, not live
+  const hasLive = connStatus === 'connected' && Object.keys(liveData).length > 0;
 
   const saveSnapshot = async () => {
-    if (snapshots.length >= MAX_SNAPS) setWarnFull(true);
+    // Both backends list newest first, so the oldest is last. It is deleted
+    // before saving; the banner used to say so while nothing was removed.
+    if (snapshots.length >= MAX_SNAPS) {
+      await window.electronAPI.storage.deleteSnapshot(snapshots[snapshots.length - 1].id);
+      setWarnFull(true);
+    }
     const snap: SessionSnapshot = {
       id:             `snap_${Date.now()}`,
       name:           snapName.trim() || `Snapshot ${new Date().toLocaleTimeString()}`,
@@ -211,7 +221,13 @@ export function CompareScreen(): React.ReactElement {
       dtcs:           dtcs.map(d => ({ code: d.code, description: d.description, status: d.status, module: d.module })),
       sessionStartMs: sessionMs,
     };
-    await window.electronAPI.storage.saveSnapshot(snap);
+    try {
+      await window.electronAPI.storage.saveSnapshot(snap);
+    } catch {
+      setSaveFailed(true);
+      return;
+    }
+    setSaveFailed(false);
     setSnapName('');
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -226,6 +242,7 @@ export function CompareScreen(): React.ReactElement {
 
   return (
     <ScrollPane>
+      {saveFailed && <AlertBanner variant="crit" message="The snapshot could not be saved." />}
       {warnFull && (
         <AlertBanner
           message={`Cap reached (${MAX_SNAPS}). Oldest snapshot replaced.`}

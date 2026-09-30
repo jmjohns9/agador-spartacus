@@ -49,6 +49,7 @@ function PIDRow({ pid, liveValue, onExpand, expanded }: {
           </>
         }
         onClick={onExpand}
+        expanded={expanded}
       />
 
       {/* Expanded detail */}

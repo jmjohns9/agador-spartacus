@@ -2,80 +2,112 @@ import { EventEmitter } from 'events';
 import { ELM327Commander } from './elm327Commander';
 import { PID_MAP, POLLING_FAST, POLLING_NORMAL, POLLING_SLOW } from './pidCatalog';
 import { DTC_CATALOG } from './dtcCatalog.generated';
-import { PIDReading, DTCCode, DTCType, DTCStatus } from '../shared/types';
+import { parseDTCResponse, parsePIDData, parsePIDMessages } from './obdParsers';
+import { PIDReading, DTCCode, DTCType, DTCStatus, LogLevel } from '../shared/types';
 
 // ─── OBDProtocolManager ───────────────────────────────────────────────────────
 //
 // The ELM327 is a single-command-at-a-time device. This manager runs a sequential
 // polling loop — one PID at a time — with priority-based scheduling.
-// Fast PIDs get polled every cycle, normal every 5th cycle, slow every 20th.
+// Fast PIDs get polled every cycle, normal every 3rd cycle, slow every 10th.
 
 export class OBDProtocolManager extends EventEmitter {
   private elm: ELM327Commander;
   private pollingActive = false;
   private supportedPIDs = new Set<string>();
+  // Support ranges (0x00, 0x20 … 0xE0) whose answer is known. A PID is only
+  // skipped when its range was actually read, so one failed probe can't drop
+  // RPM, coolant and speed for the whole session.
+  private knownRanges = new Set<number>();
   private cycleCount = 0;
   private pollLoopRunning = false;
-  // True between startPolling() and stopPolling(). A DTC scan / VIN read /
-  // clear pauses the loop via pollingActive and only resumes it if polling is
-  // still wanted — otherwise a stopPolling() (disconnect) made mid-operation
+  // True between startPolling() and stopPolling(). An exclusive operation
+  // (see exclusive()) pauses the loop via pollingActive and only resumes it if
+  // polling is still wanted — otherwise a stopPolling() (disconnect) made mid-operation
   // was undone and the loop ran forever on a dead session.
   private pollingWanted = false;
+  // One owner of the adapter at a time. Discovery, VIN read, DTC scan and the
+  // PCM identity read take it; the poll loop stays stopped while it is held.
+  private busLock: Promise<void> = Promise.resolve();
+  private busHeld = false;
 
   constructor(elm: ELM327Commander) {
     super();
     this.elm = elm;
   }
 
+  // Run fn with sole use of the adapter: waits for any other exclusive
+  // operation, stops the poll loop after its in-flight command, and resumes
+  // polling afterwards only if it is still wanted (a stopPolling() made
+  // meanwhile, e.g. a disconnect, is not undone).
+  async exclusive<T>(fn: () => Promise<T>): Promise<T> {
+    const prev = this.busLock;
+    let release!: () => void;
+    this.busLock = new Promise<void>(r => (release = r));
+    await prev;
+    this.busHeld = true;
+    this.pollingActive = false;
+    while (this.pollLoopRunning) await this.sleep(5);
+    try {
+      return await fn();
+    } finally {
+      this.busHeld = false;
+      if (this.pollingWanted) {
+        this.pollingActive = true;
+        this.runPollLoop();
+      }
+      release();
+    }
+  }
+
   async refreshProtocol(): Promise<string> {
+    return this.exclusive(() => this.readProtocol());
+  }
+
+  private async readProtocol(): Promise<string> {
     const protocol = await this.elm.readProtocol();
     this.log(`Protocol refreshed: ${protocol}`);
     return protocol;
   }
 
   async readVIN(): Promise<string | null> {
-    const wasPolling = this.pollingActive;
-    this.pollingActive = false;
-    await this.sleep(300);
-
-    const vin = await this.elm.readVIN();
-    this.log(vin ? `VIN read: ${vin}` : 'VIN not available from ECM');
-
-    if (wasPolling && this.pollingWanted) {
-      this.pollingActive = true;
-      this.runPollLoop();
-    }
-    return vin;
+    return this.exclusive(async () => {
+      const vin = await this.elm.readVIN();
+      this.log(vin ? `VIN read: ${vin}` : 'VIN not available from ECM');
+      return vin;
+    });
   }
 
-  // ── Discover which PIDs the ECM supports ─────────────────────────────────────
+  // ── Discover which PIDs the vehicle supports ─────────────────────────────────
+  // 0100 answers for PIDs 01–20, 0120 for 21–40, and so on up to 01E0. The last
+  // bit of each mask says whether the next range exists. Masks from every ECU
+  // that answers are merged, since the TCM supports PIDs the ECM doesn't.
   async discoverSupportedPIDs(): Promise<Set<string>> {
-    const supportRanges = ['0100', '0120', '0140', '0160'];
+    return this.exclusive(() => this.discover());
+  }
 
-    for (const rangePID of supportRanges) {
-      try {
-        const resp = await this.elm.send(rangePID, 3000);
-        if (!resp.success) continue;
+  private async discover(): Promise<Set<string>> {
+    for (let base = 0x00; base <= 0xE0; base += 0x20) {
+      const rangePID = '01' + hex2(base);
+      const resp = await this.elm.send(rangePID, 3000);
+      const masks = resp.success ? parsePIDMessages(rangePID, resp.raw).filter(b => b.length >= 4) : [];
+      if (masks.length === 0) {
+        // Unknown, not unsupported: PIDs in this range are still polled
+        this.log(`PID support ${rangePID} not answered — polling its PIDs anyway`, 'warn');
+        continue;
+      }
 
-        const bytes = this.elm.parsePIDResponse(rangePID, resp.raw);
-        if (!bytes || bytes.length < 4) continue;
+      const mask = masks.reduce((acc, b) => (acc | (b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]) >>> 0, 0);
+      this.knownRanges.add(base);
+      for (let bit = 0; bit < 32; bit++) {
+        if (mask & (1 << (31 - bit))) this.supportedPIDs.add('01' + hex2(base + bit + 1));
+      }
+      this.log(`PID support ${rangePID}: ${mask.toString(16).padStart(8, '0')} — found ${this.supportedPIDs.size} so far`);
 
-        const bitmask = (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
-        const baseHex = parseInt(rangePID.substring(2), 16);
-
-        for (let bit = 0; bit < 32; bit++) {
-          if (bitmask & (1 << (31 - bit))) {
-            const pid = '01' + (baseHex + bit + 1).toString(16).toUpperCase().padStart(2, '0');
-            this.supportedPIDs.add(pid);
-          }
-        }
-
-        this.log(`PID support ${rangePID}: ${bytes.map(b => b.toString(16).padStart(2, '0')).join('')} — found ${this.supportedPIDs.size} so far`);
-      } catch (err) {
-        // Some ranges may not be supported — continue, but leave a breadcrumb
-        // so a real adapter fault isn't invisible (eval/quality QLT-001).
-        const msg = err instanceof Error ? err.message : String(err);
-        this.log(`PID support range ${rangePID} probe failed: ${msg}`);
+      if (!(mask & 1)) {
+        // No later ranges: everything above is known to be unsupported
+        for (let b = base + 0x20; b <= 0xE0; b += 0x20) this.knownRanges.add(b);
+        break;
       }
     }
 
@@ -83,10 +115,18 @@ export class OBDProtocolManager extends EventEmitter {
     return this.supportedPIDs;
   }
 
+  private isSkippable(pid: string): boolean {
+    if (!pid.startsWith('01')) return false;
+    const n = parseInt(pid.substring(2), 16);
+    const range = ((n - 1) >> 5) << 5;
+    return this.knownRanges.has(range) && !this.supportedPIDs.has(pid);
+  }
+
   // ── Start the sequential polling loop ────────────────────────────────────────
   startPolling(): void {
-    if (this.pollingActive) return;
     this.pollingWanted = true;
+    // Held by an exclusive operation: it starts the loop when it releases
+    if (this.pollingActive || this.busHeld) return;
     this.pollingActive = true;
     this.cycleCount = 0;
     this.log('Sequential polling loop starting');
@@ -173,7 +213,7 @@ export class OBDProtocolManager extends EventEmitter {
   private async pollPIDList(pids: string[]): Promise<void> {
     for (const pid of pids) {
       if (!this.pollingActive) break;
-      if (this.supportedPIDs.size > 0 && !this.supportedPIDs.has(pid)) continue;
+      if (this.isSkippable(pid)) continue;
       await this.pollSinglePID(pid);
     }
   }
@@ -188,8 +228,8 @@ export class OBDProtocolManager extends EventEmitter {
       if (!resp.success) return;
       if (resp.raw.includes('NO DATA') || resp.raw.includes('UNABLE TO CONNECT')) return;
 
-      const bytes = this.elm.parsePIDResponse(pid, resp.raw);
-      if (!bytes || bytes.length === 0) return;
+      const bytes = parsePIDData(pid, resp.raw);
+      if (!bytes) return;
 
       const value = definition.decode(bytes);
 
@@ -211,15 +251,16 @@ export class OBDProtocolManager extends EventEmitter {
   }
 
   // ── DTC Scanning — Mode 03 (stored), Mode 07 (pending), Mode 0A (permanent) ──
-  async scanDTCs(): Promise<DTCCode[]> {
-    // Pause polling during DTC scan to avoid command collision
-    const wasPolling = this.pollingActive;
-    this.pollingActive = false;
+  // Returns null when any mode got no real answer (timeout, key off, bus
+  // error). A failed scan must not be reported as "no codes": that would wipe
+  // the list and show a car with a stored P0300 as clean.
+  async scanDTCs(): Promise<DTCCode[] | null> {
+    return this.exclusive(() => this.scan());
+  }
 
-    // Wait for current poll cycle to finish
-    await this.sleep(300);
-
+  private async scan(): Promise<DTCCode[] | null> {
     const results: DTCCode[] = [];
+    const failed: string[] = [];
 
     const modes: Array<{ mode: string; status: DTCStatus }> = [
       { mode: '03', status: 'active' },
@@ -228,83 +269,35 @@ export class OBDProtocolManager extends EventEmitter {
     ];
 
     for (const { mode, status } of modes) {
-      try {
-        const resp = await this.elm.send(mode, 5000);
-        const dtcs = this.parseDTCResponse(mode, resp.raw, status);
-        results.push(...dtcs);
-      } catch (err) {
-        // Mode may not be supported on this vehicle — breadcrumb so a real
-        // bus fault doesn't look like a missing mode (QLT-001).
-        const msg = err instanceof Error ? err.message : String(err);
-        this.log(`DTC scan mode ${mode} failed: ${msg}`);
+      const resp = await this.elm.send(mode, 5000);
+      const parsed = parseDTCResponse(mode, resp.success ? resp.raw : '');
+      if (!parsed.ok) {
+        failed.push(mode);
+        this.log(`DTC scan mode ${mode} got no answer: ${resp.errorMessage ?? (resp.raw.trim() || 'timeout')}`, 'warn');
+        continue;
       }
+      results.push(...parsed.codes.map(code => this.toDTC(code, status)));
     }
 
-    this.log(`DTC scan complete — ${results.length} codes found`);
+    this.log(failed.length
+      ? `DTC scan failed (no answer to mode ${failed.join(', ')}) — codes on screen left unchanged`
+      : `DTC scan complete — ${results.length} codes found`, failed.length ? 'warn' : 'info');
 
-    // Resume polling
-    if (wasPolling && this.pollingWanted) {
-      this.pollingActive = true;
-      this.runPollLoop();
-    }
-
-    return results;
+    return failed.length ? null : results;
   }
 
-  // ── Parse DTC response bytes into DTCCode objects ─────────────────────────────
-  private parseDTCResponse(mode: string, raw: string, status: DTCStatus): DTCCode[] {
-    const clean = raw.replace(/\s+/g, '').toUpperCase();
-    const dtcs: DTCCode[] = [];
-
-    // Response header is mode + 0x40: mode 03 → 43, mode 07 → 47, mode 0A → 4A
-    const header = (parseInt(mode, 16) + 0x40).toString(16).toUpperCase();
-    const idx = clean.indexOf(header);
-    if (idx === -1) return dtcs;
-
-    const data = clean.substring(idx + 2);
-
-    for (let i = 0; i < data.length - 3; i += 4) {
-      const word = data.substring(i, i + 4);
-      if (word === '0000') continue;
-
-      const firstNibble = parseInt(word[0], 16);
-      const typeMap: { [k: number]: DTCType } = { 0: 'P', 1: 'C', 2: 'B', 3: 'U' };
-      const type: DTCType = typeMap[firstNibble >> 2] ?? 'P';
-      const remaining = ((firstNibble & 0x03).toString() + word.substring(1)).toUpperCase();
-      const code = `${type}${remaining}`;
-
-      dtcs.push({
-        code,
-        type,
-        status,
-        description: this.getDTCDescription(code),
-        likelyCauses: this.getDTCCauses(code),
-        repairSummary: this.getDTCRepair(code),
-        module: this.getDTCModule(code),
-        firstSeen: Date.now(),
-        lastSeen: Date.now(),
-      });
-    }
-
-    return dtcs;
-  }
-
-  // ── Clear all stored DTCs — Mode 04 ──────────────────────────────────────────
-  async clearDTCs(): Promise<boolean> {
-    const wasPolling = this.pollingActive;
-    this.pollingActive = false;
-    await this.sleep(300);
-
-    const resp = await this.elm.send('04', 5000);
-    const success = resp.success && !resp.raw.includes('ERROR');
-    this.log(success ? 'DTC codes cleared successfully' : 'Failed to clear DTC codes');
-
-    if (wasPolling && this.pollingWanted) {
-      this.pollingActive = true;
-      this.runPollLoop();
-    }
-
-    return success;
+  private toDTC(code: string, status: DTCStatus): DTCCode {
+    return {
+      code,
+      type: code[0] as DTCType,
+      status,
+      description: this.getDTCDescription(code),
+      likelyCauses: this.getDTCCauses(code),
+      repairSummary: this.getDTCRepair(code),
+      module: this.getDTCModule(code),
+      firstSeen: Date.now(),
+      lastSeen: Date.now(),
+    };
   }
 
   // ── Utilities ──────────────────────────────────────────────────────────────────
@@ -312,8 +305,8 @@ export class OBDProtocolManager extends EventEmitter {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  private log(msg: string): void {
-    this.emit('log', { timestamp: Date.now(), level: 'info', message: msg });
+  private log(msg: string, level: LogLevel = 'info'): void {
+    this.emit('log', { timestamp: Date.now(), level, message: msg });
   }
 
   // ── Catalog lookups — backed by dtcCatalog.generated.ts ─────────────────────
@@ -338,3 +331,5 @@ export class OBDProtocolManager extends EventEmitter {
     return 'PCM';
   }
 }
+
+const hex2 = (n: number): string => n.toString(16).toUpperCase().padStart(2, '0');

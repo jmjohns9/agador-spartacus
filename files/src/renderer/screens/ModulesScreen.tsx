@@ -36,7 +36,8 @@ export function ModulesScreen(): React.ReactElement {
   const handleScan = () => {
     // Seed the known module map for this platform (empty for generic vehicles —
     // those are discovered from live bus responses), then poll the bus.
-    platform.modules.forEach(m => updateModule(m));
+    // Only add modules not already listed: re-seeding reset every status to "unknown"
+    platform.modules.filter(m => !modules.some(x => x.address === m.address)).forEach(m => updateModule(m));
     if (window.electronAPI) window.electronAPI.checkModules();
   };
 
@@ -132,8 +133,8 @@ export function ModulesScreen(): React.ReactElement {
                     {mod.minutesAwakePostEngineOff > 0 ? `${mod.minutesAwakePostEngineOff.toFixed(0)}m` : '—'}
                   </span>
                   <Badge
-                    label={mod.status === 'rogue' ? 'Rogue' : mod.status === 'alive' ? 'Awake' : 'Asleep'}
-                    variant={mod.status === 'rogue' ? 'crit' : mod.status === 'alive' ? 'ok' : 'muted'}
+                    label={mod.status === 'rogue' ? 'Rogue' : mod.status === 'alive' ? 'Awake' : mod.status === 'sleeping' ? 'Asleep' : mod.status === 'suspect' ? 'Awake?' : 'Unknown'}
+                    variant={mod.status === 'rogue' ? 'crit' : mod.status === 'alive' ? 'ok' : mod.status === 'suspect' ? 'warn' : 'muted'}
                   />
                   <Badge label={STATUS_LABEL[mod.status]} variant={STATUS_VARIANT[mod.status]} />
                 </div>

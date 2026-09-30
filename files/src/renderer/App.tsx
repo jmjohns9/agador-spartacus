@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useAppStore, vehicleDisplayName, selectActiveDTCCount, ScreenId } from './store/appStore';
-import { buildThemeCSS, FONTS, TYPE } from './theme/theme';
-import { GLOBAL_CSS } from './theme/globalStyles';
+import { FONTS, TYPE } from './theme/theme';
 import { Sidebar } from './components/shell/Sidebar';
 import { Toolbar } from './components/shell/Toolbar';
 import { shortcutFor, readSidebarPref, writeSidebarPref } from './components/shell/shellLogic';
@@ -36,12 +35,11 @@ declare global {
       listPorts: () => Promise<Array<{ path: string; manufacturer: string; serialNumber: string; isOBD: boolean }>>;
       connect: (port: string) => Promise<void>;
       disconnect: () => Promise<void>;
-      scanDTCs: () => Promise<DTCCode[]>;
-      clearDTCs: () => Promise<boolean>;
+      scanDTCs: () => Promise<boolean>;
       checkModules: () => Promise<ModuleState[]>;
       readPcmIds: () => Promise<PcmReadResult>;
       onPcmProgress: (cb: (p: { done: number; total: number }) => void) => () => void;
-      exportLog: (filename: string) => Promise<void>;
+      exportLog: (filename: string, text?: string) => Promise<void>;
       exportCSV: (data: string, filename: string) => Promise<void>;
       getAppearance: () => Promise<Appearance>;
       setAppearance: (a: Appearance) => Promise<Appearance>;
@@ -49,6 +47,8 @@ declare global {
       onDTCResult: (cb: (d: DTCCode[]) => void) => () => void;
       onModuleState: (cb: (m: ModuleState) => void) => () => void;
       onConnectionStatus: (cb: (s: { status: string; protocol?: string; adapterInfo?: string }) => void) => () => void;
+      getStatus: () => Promise<{ status: string; protocol?: string; adapterInfo?: string }>;
+      getAppInfo: () => Promise<{ version: string; electron: string; chrome: string; node: string }>;
       onLogEntry: (cb: (e: LogEntry) => void) => () => void;
       onVINDetected: (cb: (vin: string) => void) => () => void;
       claudeAsk: (payload: { question: string; context: unknown; history: unknown }) =>
@@ -70,7 +70,6 @@ declare global {
       decodeVIN: (vin: string) => Promise<{ year: string; make: string; model: string; engine: string; trim: string; transmission: string } | null>;
       storage: {
         getConfig:         () => Promise<StorageConfig>;
-        setConfig:         (u: Partial<StorageConfig>) => Promise<boolean>;
         migrate:           (to: 'local' | 'sqlite') => Promise<boolean>;
         getInfo:           () => Promise<StorageInfo>;
         openDataFolder:    () => Promise<void>;
@@ -106,15 +105,19 @@ const SCREENS: Record<ScreenId, React.ComponentType> = {
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export function App(): React.ReactElement {
-  const {
-    connectionStatus, activeScreen,
-    setConnectionStatus, updatePIDReading, setDTCs,
-    updateModule, addLogEntry, setActiveScreen,
-  } = useAppStore();
+  // Select only what the shell renders. A bare useAppStore() subscribed to
+  // the whole store, so every PID reading re-rendered the shell and the
+  // active screen. Actions are stable references.
+  const connectionStatus    = useAppStore(s => s.connectionStatus);
+  const activeScreen        = useAppStore(s => s.activeScreen);
+  const setConnectionStatus = useAppStore(s => s.setConnectionStatus);
+  const updatePIDReading    = useAppStore(s => s.updatePIDReading);
+  const setDTCs             = useAppStore(s => s.setDTCs);
+  const updateModule        = useAppStore(s => s.updateModule);
+  const addLogEntry         = useAppStore(s => s.addLogEntry);
+  const setActiveScreen     = useAppStore(s => s.setActiveScreen);
   const activeDTCCount = useAppStore(selectActiveDTCCount);
-  const vehicle        = useAppStore(s => s.vehicle);
   const dtcs           = useAppStore(s => s.dtcs);
-  const liveData       = useAppStore(s => s.liveData);
 
   // ── Wire Electron IPC events ───────────────────────────────────────────────
   useEffect(() => {
@@ -151,13 +154,32 @@ export function App(): React.ReactElement {
       }),
     ];
 
+    // A reloaded renderer starts at "disconnected" while main may still be
+    // connected; ask main for the current status once listeners are in place.
+    window.electronAPI.getStatus?.()
+      .then(s => { if (s.status !== 'disconnected') setConnectionStatus(s.status as any, s.protocol, s.adapterInfo); })
+      .catch(() => {/* keep the default */});
+
     return () => cleanups.forEach(fn => fn?.());
   }, []);
 
   // ── Freeze-frame auto-capture on new DTC detection ───────────────────────
+  // Seeded from storage so a relaunch doesn't treat every stored code as new.
+  // Storage also keeps the first frame per code, so a save that races the
+  // seed is harmless.
   const knownDTCCodes = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    window.electronAPI.storage.getFreezeFrames()
+      .then(ffs => ffs.forEach(f => knownDTCCodes.current.add(f.dtcCode)))
+      .catch(() => {/* non-blocking */});
+  }, []);
 
   useEffect(() => {
+    // No live values yet (scan finished before polling started): nothing to
+    // capture. The code stays "new" and is captured on the next result.
+    // Read live data at capture time instead of subscribing to it
+    const { liveData, vehicle } = useAppStore.getState();
+    if (Object.keys(liveData).length === 0) return;
     for (const dtc of dtcs) {
       if (!knownDTCCodes.current.has(dtc.code)) {
         knownDTCCodes.current.add(dtc.code);
@@ -170,7 +192,9 @@ export function App(): React.ReactElement {
             Object.entries(liveData).map(([pid, r]) => [pid, { value: r.value, timestamp: r.timestamp }])
           ),
         };
-        window.electronAPI.storage.saveFreezeFrame(ff).catch(() => {/* non-blocking */});
+        window.electronAPI.storage.saveFreezeFrame(ff)
+          .then(() => useAppStore.getState().freezeFramesChanged())
+          .catch(() => {/* non-blocking */});
       }
     }
   }, [dtcs]);
@@ -202,6 +226,8 @@ export function App(): React.ReactElement {
   }, [toggleSidebar, setActiveScreen]);
 
   const Screen = SCREENS[activeScreen];
+  const openDTC        = React.useCallback(() => setActiveScreen('dtc'), [setActiveScreen]);
+  const openConnection = React.useCallback(() => setActiveScreen('connect'), [setActiveScreen]);
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: FONTS.ui, ...TYPE.body, color: 'var(--label)' }}> {/* style-ok: app root font */}
@@ -217,14 +243,13 @@ export function App(): React.ReactElement {
         <Toolbar
           sidebarOpen={sidebarOpen}
           onToggleSidebar={toggleSidebar}
-          onOpenDTC={() => setActiveScreen('dtc')}
-          onOpenConnection={() => setActiveScreen('connect')}
+          onOpenDTC={openDTC}
+          onOpenConnection={openConnection}
         />
         <main key={activeScreen} className="screen-enter" style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <Screen />
         </main>
       </div>
-      <style>{`${buildThemeCSS()}\n${GLOBAL_CSS}`}</style>
     </div>
   );
 }

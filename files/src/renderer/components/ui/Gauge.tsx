@@ -30,7 +30,12 @@ export function Gauge({
   const valueType = compact ? TYPE.title3 : TYPE.title1;
 
   return (
-    <div className="metric" style={{
+    <div className="metric"
+      role="meter" aria-label={label}
+      aria-valuemin={min} aria-valuemax={max}
+      aria-valuenow={missing ? undefined : value}
+      aria-valuetext={missing ? 'No reading' : `${value} ${unit ?? ''}`.trim()}
+      style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
       padding: compact ? '8px 12px' : '12px 16px', height: '100%',
       background: 'var(--grouped)', border: '1px solid var(--separator)', borderRadius: RADIUS.card,

@@ -5,6 +5,7 @@ import {
 } from '../components/layout/UIComponents';
 import { TYPE, NUMERIC, STATUS_TEXT, STATUS_FILL } from '../theme/theme';
 import type { Status } from '../theme/theme';
+import { mapVerdict, isReading, pidStatus } from '../logic/verdicts';
 import { PID_MAP } from '../../core/pidCatalog';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -71,12 +72,12 @@ function FuelTrimBar({ pid, label }: { pid: string; label: string }): React.Reac
 
 export function EngineScreen(): React.ReactElement {
   const rpm       = usePIDNum('010C');
-  const coolantF  = usePIDNum('0105');
+  const coolantF  = usePIDNum('0105', NaN);
   const oilTempF  = usePIDNum('015C');
   const throttle  = usePIDNum('0111');
   const load      = usePIDNum('0104');
   const maf       = usePIDNum('0110');
-  const map_kpa   = usePIDNum('010B');
+  const mapPsi    = usePIDNum('010B', NaN);   // 010B decodes to psi
 
   const stftB1 = usePIDNum('0106');
   const ltftB1 = usePIDNum('0107');
@@ -123,10 +124,10 @@ export function EngineScreen(): React.ReactElement {
       {/* ── Detailed gauges ─────────────────────────────────────────── */}
       <SectionHeader>Engine performance</SectionHeader>
       <Grid cols={4}>
-        <Gauge size="compact" label="RPM" value={rpm} max={6000} unit="/ 6,000" />
-        <Gauge size="compact" label="Load" value={load} max={100} unit="of max" />
-        <Gauge size="compact" label="Throttle" value={throttle} max={100} unit="position" />
-        <Gauge size="compact" label="Timing" value={usePIDNum('010E')} max={60} unit="° BTDC" />
+        <Gauge size="compact" label="RPM" value={usePIDNum('010C', NaN)} max={6000} unit="/ 6,000" />
+        <Gauge size="compact" label="Load" value={usePIDNum('0104', NaN)} max={100} unit="of max" />
+        <Gauge size="compact" label="Throttle" value={usePIDNum('0111', NaN)} max={100} unit="position" />
+        <Gauge size="compact" label="Timing" value={usePIDNum('010E', NaN)} max={60} unit="° BTDC" />
       </Grid>
 
       {/* ── Temperature gauges ─────────────────────────────────────────── */}
@@ -136,9 +137,9 @@ export function EngineScreen(): React.ReactElement {
           size="compact"
           label="Coolant temp"
           value={fmt('0105', usePID('0105'))}
-          barPercent={((coolantF - 68) / (240 - 68)) * 100}
-          status={coolantF > 230 ? 'crit' : coolantF > 215 ? 'warn' : 'neutral'}
-          subtext={coolantF > 230 ? 'Overheating' : coolantF > 215 ? 'High — monitor closely' : coolantF > 180 ? 'Normal operating range' : coolantF > 0 ? 'Warming up' : '—'}
+          barPercent={isReading(coolantF) ? ((coolantF - 68) / (240 - 68)) * 100 : undefined}
+          status={pidStatus('0105', coolantF)}
+          subtext={pidStatus('0105', coolantF) === 'crit' ? 'Overheating' : pidStatus('0105', coolantF) === 'warn' ? 'High — monitor closely' : coolantF > 180 ? 'Normal operating range' : isReading(coolantF) ? 'Warming up' : '—'}
           tooltip={<TipContent name="Engine Coolant Temperature" description="Temperature at the thermostat housing. Drives fuel enrichment, ignition timing, and cooling fan control." formula="(byte A − 40) × 9 ÷ 5 + 32" range="0105 · Normal: 195–220 °F · Overheat threshold: 240 °F" />}
         />
         <Metric
@@ -146,8 +147,8 @@ export function EngineScreen(): React.ReactElement {
           label="Oil temp"
           value={fmt('015C', usePID('015C'))}
           barPercent={((oilTempF - 68) / (270 - 68)) * 100}
-          status={oilTempF > 260 ? 'crit' : 'neutral'}
-          barStatus={oilTempF > 260 ? 'crit' : oilTempF > 240 ? 'warn' : 'neutral'}
+          status={pidStatus('015C', oilTempF)}
+          barStatus={pidStatus('015C', oilTempF)}
           subtext="Sump temp · Normal: 180–230 °F"
           tooltip={<TipContent name="Engine Oil Temperature" description="Oil sump temperature. High oil temp degrades lubrication film and accelerates wear. Allow warmup before hard acceleration." formula="(byte A − 40) × 9 ÷ 5 + 32" range="015C · Normal: 180–230 °F" />}
         />
@@ -174,7 +175,6 @@ export function EngineScreen(): React.ReactElement {
           size="compact"
           label="MAF rate"
           value={fmt('0110', usePID('0110'))}
-          unit="g/s"
           subtext={`V8 idle: 4–6 g/s · now: ${maf > 0 ? maf + ' g/s' : '—'}`}
           tooltip={<TipContent name="Mass Air Flow Rate" description="Grams of air entering the intake per second. Core ECM input for fuel injection quantity calculation." formula="((A × 256) + B) ÷ 100" range="0110 · Idle: 4–6 g/s · WOT: 100+ g/s" />}
         />
@@ -182,7 +182,7 @@ export function EngineScreen(): React.ReactElement {
           size="compact"
           label="MAP"
           value={fmt('010B', usePID('010B'))}
-          subtext={`${map_kpa > 0 ? (map_kpa < 50 ? 'Low — good vacuum' : 'Rising — under load') : '—'}`}
+          subtext={mapVerdict(mapPsi)}
           tooltip={<TipContent name="Intake Manifold Absolute Pressure" description="Absolute pressure inside the intake manifold. Low at idle due to vacuum; rises toward atmospheric at WOT." formula="byte A × 0.14504 (kPa→psi)" range="010B · Idle: 6–9 psi · WOT: ~14.7 psi" />}
         />
         <Metric
@@ -264,7 +264,7 @@ export function EngineScreen(): React.ReactElement {
           size="compact"
           label="EGR commanded"
           value={fmt('012C', usePID('012C'))}
-          subtext="0% at idle — normal"
+          subtext="Normal at idle: 0%"
           tooltip={<TipContent name="EGR Valve — Commanded Position" description="Exhaust Gas Recirculation valve position commanded by the ECM. Reduces NOx at cruise; 0% at idle." formula="(byte A ÷ 255) × 100" range="012C · Idle: 0% · Cruise: 10–25%" />}
         />
         <Metric
@@ -285,8 +285,8 @@ export function EngineScreen(): React.ReactElement {
         <Metric
           size="compact"
           label="Fuel status"
-          value={typeof usePID('012A') === 'string' ? usePID('012A') as string : 'Closed loop'}
-          subtext="O2 feedback active"
+          value={fmt('0103', usePID('0103'))}
+          subtext="Closed loop is normal once warm"
         />
       </Grid>
 

@@ -43,6 +43,7 @@ export function AlertBanner({ message, variant = 'crit', action, onAction }: {
 }
 
 export function Tooltip({ content }: { content: React.ReactNode }): React.ReactElement {
+  const tipId = React.useId();
   const [visible, setVisible] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
   const [pos, setPos] = useState<{ top?: number; bottom?: string; left: number }>({ left: 0, bottom: 'calc(100% + 8px)' });
@@ -66,6 +67,7 @@ export function Tooltip({ content }: { content: React.ReactNode }): React.ReactE
         type="button"
         className="info-trigger"
         aria-label="More information"
+        aria-describedby={visible ? tipId : undefined}
         onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide}
         onKeyDown={e => { if (e.key === 'Escape') hide(); }}
         style={{ border: 'none', background: 'transparent', padding: 0, display: 'inline-flex', color: 'var(--label-3)' }}
@@ -73,7 +75,7 @@ export function Tooltip({ content }: { content: React.ReactNode }): React.ReactE
         <i className="ti ti-info-circle" style={{ fontSize: 14 }} aria-hidden />
       </button>
       {visible && (
-        <div role="tooltip" style={{
+        <div role="tooltip" id={tipId} style={{
           position: 'absolute', ...pos, zIndex: 200, width: 260, pointerEvents: 'none',
           padding: '8px 12px', borderRadius: 8,
           background: 'var(--elevated)', border: '0.5px solid var(--separator)',
@@ -102,14 +104,20 @@ export function TipContent({ name, description, formula, range }: { name: string
   );
 }
 
-export function DataRow({ pid, name, value, subtext, badge, onClick }: {
+export function DataRow({ pid, name, value, subtext, badge, onClick, pressed, expanded }: {
   pid?: string; name: string; value: string | number; subtext?: string; badge?: React.ReactNode; onClick?: () => void;
+  /** Selection state of a toggle row, announced as aria-pressed */
+  pressed?: boolean;
+  /** Open state of a row that reveals details, announced as aria-expanded */
+  expanded?: boolean;
 }): React.ReactElement {
   const Tag = (onClick ? 'button' : 'div') as 'button';
   return (
     <Tag
       className={onClick ? 'row-hover' : undefined}
       onClick={onClick}
+      aria-pressed={onClick ? pressed : undefined}
+      aria-expanded={onClick ? expanded : undefined}
       style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
         width: '100%', minHeight: 32, padding: '6px 12px', textAlign: 'left',

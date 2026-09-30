@@ -1,11 +1,12 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme } from 'electron';
 import * as path from 'path';
+import { pathToFileURL } from 'url';
 import { EventEmitter } from 'events';
 import { execFile } from 'child_process';
 import { ELM327Commander } from '../core/elm327Commander';
 import { ELM327Simulator } from '../core/elm327Simulator';
 import { OBDProtocolManager } from '../core/obdProtocolManager';
-import { PIDReading, DTCCode, ModuleState, ConnectionStatus, LogEntry, PcmReadResult } from '../shared/types';
+import { PIDReading, ConnectionStatus, LogEntry, PcmReadResult } from '../shared/types';
 import { PcmDiagnostics } from '../core/pcmDiagnostics';
 import { GMT800 } from '../core/platforms/gmt800';
 import { askClaude, loadConfig as loadClaudeConfig, saveConfig as saveClaudeConfig, SessionContext, ChatTurn, CLAUDE_MODELS, DEFAULT_SYSTEM_PROMPT } from './claudeAssistant';
@@ -19,7 +20,35 @@ const { SerialPort } = require('serialport') as { SerialPort: any };
 
 // ─── Main Window ──────────────────────────────────────────────────────────────
 
+// One data folder for dev and packaged builds. Electron derives userData from
+// package.json's name in dev ("silverado-dx") but from productName when
+// packaged, so the two used different folders and saved sessions and the API
+// key didn't carry over. Pin it to the folder existing installs already use.
+// Must run before anything calls app.getPath('userData').
+app.setPath('userData', path.join(app.getPath('appData'), 'silverado-dx'));
+
 let mainWindow: BrowserWindow | null = null;
+
+// ─── Renderer trust boundary ──────────────────────────────────────────────────
+// The only page allowed to use the IPC surface is the app's own index.html in
+// the main window's top frame. Anything else (a navigated-away page, a
+// dropped file, a subframe) is refused before its handler runs.
+const APP_URL = pathToFileURL(path.join(__dirname, '../renderer/index.html')).href;
+
+function isAppSender(e: Electron.IpcMainInvokeEvent): boolean {
+  const frame = e.senderFrame;
+  return !!frame && !!mainWindow && frame === mainWindow.webContents.mainFrame && frame.url.split('#')[0] === APP_URL;
+}
+
+function handle<A extends unknown[], R>(
+  channel: string,
+  fn: (e: Electron.IpcMainInvokeEvent, ...args: A) => R,
+): void {
+  ipcMain.handle(channel, (e, ...args) => {
+    if (!isAppSender(e)) throw new Error(`Refused ${channel}: request did not come from the app window`);
+    return fn(e, ...(args as A));
+  });
+}
 
 function createWindow(): void {
   // Apply the saved override before the window exists so vibrancy and
@@ -41,20 +70,23 @@ function createWindow(): void {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      // The preload only requires 'electron', so it runs sandboxed
+      sandbox: true,
     },
     title: 'Project Agador Spartacus',
   });
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
 
-  // Load renderer
-  if (process.env.NODE_ENV === 'development') {
-    mainWindow.loadURL('http://localhost:3000');
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
-  }
+  // Never leave the app's page: dropping a file or URL onto the window, or a
+  // link in rendered text, would otherwise navigate it, and the new page would
+  // inherit the preload's API. The app opens no windows of its own.
+  mainWindow.webContents.on('will-navigate', (e, url) => {
+    if (url.split('#')[0] !== APP_URL) e.preventDefault();
+  });
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+  mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 
   mainWindow.on('closed', () => { mainWindow = null; });
 }
@@ -68,7 +100,6 @@ let simulatorMode = false;
 let sessionLog: LogEntry[] = [];
 let activePort: any = null;       // currently open SerialPort (if any)
 let isConnecting = false;          // guard against concurrent connect attempts
-let debugSerial = false;           // set true to log every TX/RX byte over IPC
 
 // Session generation. Every connect and disconnect ends the current session
 // by bumping this; async connect/init/discovery chains capture the value they
@@ -78,15 +109,34 @@ let debugSerial = false;           // set true to log every TX/RX byte over IPC
 // poll loop on the next session's adapter.
 let sessionGen = 0;
 
-const storage = new StorageService();
+// Storage problems (e.g. an unreadable storage.json that was moved aside) go
+// to the session log. addLog is a hoisted function declaration.
+const storage = new StorageService(undefined, (message) =>
+  addLog({ timestamp: Date.now(), level: 'error', message }));
 
 // Ring-buffer cap so a long-lived connected session doesn't grow the log
 // array unboundedly (see eval/performance PRF-001 / eval/security SEC-004).
 const SESSION_LOG_MAX = 5000;
 
+// Last connection status sent, so a reloaded renderer (ErrorBoundary's
+// "Reload renderer") can ask for it instead of assuming "disconnected".
+let lastStatus: unknown = { status: 'disconnected' };
+
 function sendToRenderer(channel: string, data: unknown): void {
+  if (channel === 'obd:connection-status') lastStatus = data;
   mainWindow?.webContents.send(channel, data);
 }
+
+handle('obd:get-status', () => lastStatus);
+
+// Version details for Settings and reports; the sandboxed renderer has no
+// process.versions of its own.
+handle('app:get-info', () => ({
+  version:  app.getVersion(),
+  electron: process.versions.electron,
+  chrome:   process.versions.chrome,
+  node:     process.versions.node,
+}));
 
 function addLog(entry: LogEntry): void {
   sessionLog.push(entry);
@@ -230,10 +280,6 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
     activePort = port;
 
     const fakeSend = (data: string): void => {
-      if (debugSerial) {
-        const display = data.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
-        addLog({ timestamp: Date.now(), level: 'info', message: `TX → ${display}` });
-      }
       port.write(data, (err: Error | null | undefined) => {
         if (err) addLog({ timestamp: Date.now(), level: 'error', message: `Serial write error: ${err.message}` });
       });
@@ -244,10 +290,6 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
 
     port.on('data', (chunk: Buffer) => {
       const ascii = chunk.toString('ascii');
-      if (debugSerial) {
-        const display = ascii.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
-        addLog({ timestamp: Date.now(), level: 'info', message: `RX ← ${display}` });
-      }
       commander?.onData(ascii);
     });
     // Port events only speak for the live session. A port we closed ourselves
@@ -292,7 +334,8 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
 
     addLog({ timestamp: Date.now(), level: 'ok', message: `Connected — ${info.firmwareVersion} — Protocol: ${info.protocol} — Battery: ${info.voltage}` });
 
-    startRSSIPolling(gen);
+    // Signal strength only exists for Bluetooth; USB adapters have none
+    if (!/usbserial|usbmodem|ttyUSB|ttyACM/i.test(portPath)) startRSSIPolling(gen);
     startOBDManager(gen, commander);
   } catch (err) {
     commander?.close();
@@ -312,15 +355,19 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
   }
 }
 
-let rssiTimer: ReturnType<typeof setInterval> | null = null;
+let rssiTimer: ReturnType<typeof setTimeout> | null = null;
 
 function startRSSIPolling(gen: number): void {
   stopRSSIPolling();
-  rssiTimer = setInterval(() => {
+  // Re-armed only after each run finishes: system_profiler takes seconds, and
+  // a fixed 3 s interval stacked overlapping runs for the whole session.
+  const poll = (): void => {
+    rssiTimer = null;
     execFile('system_profiler', ['SPBluetoothDataType', '-json'], { timeout: 5000 }, (err, stdout) => {
       // system_profiler takes seconds; drop a result that lands after the
       // session ended, or it would re-post an RSSI that endSession cleared.
       if (gen !== sessionGen) return;
+      rssiTimer = setTimeout(poll, 5000);
       if (err) { sendToRenderer('obd:bt-rssi', null); return; }
       try {
         const data = JSON.parse(stdout);
@@ -341,11 +388,12 @@ function startRSSIPolling(gen: number): void {
         sendToRenderer('obd:bt-rssi', null);
       } catch { sendToRenderer('obd:bt-rssi', null); }
     });
-  }, 3000);
+  };
+  rssiTimer = setTimeout(poll, 1000);
 }
 
 function stopRSSIPolling(): void {
-  if (rssiTimer) { clearInterval(rssiTimer); rssiTimer = null; }
+  if (rssiTimer) { clearTimeout(rssiTimer); rssiTimer = null; }
   sendToRenderer('obd:bt-rssi', null);
 }
 
@@ -381,8 +429,11 @@ function startOBDManager(gen: number, commander: ELM327Commander): void {
       if (gen !== sessionGen) return;
       sendToRenderer('obd:connection-status', {
         status: 'connected' as ConnectionStatus,
-        protocol,
-        adapterInfo: commander.getAdapterInfo()?.firmwareVersion ?? '',
+        // Same labels as the first "connected", which the simulator marks
+        protocol: simulatorMode ? `${protocol} (Simulator)` : protocol,
+        adapterInfo: simulatorMode
+          ? `${commander.getAdapterInfo()?.firmwareVersion ?? ''} — SIMULATOR MODE`
+          : commander.getAdapterInfo()?.firmwareVersion ?? '',
       });
     } catch { /* non-fatal */ }
 
@@ -403,16 +454,16 @@ function startOBDManager(gen: number, commander: ELM327Commander): void {
 
 // ─── Appearance ──────────────────────────────────────────────────────────────
 
-ipcMain.handle('app:get-appearance', () => loadAppearance(app.getPath('userData')));
+handle('app:get-appearance', () => loadAppearance(app.getPath('userData')));
 
-ipcMain.handle('app:set-appearance', (_event, value: unknown) => {
+handle('app:set-appearance', (_event, value: unknown) => {
   const appearance = parseAppearance(value);
   nativeTheme.themeSource = appearance;
   saveAppearance(app.getPath('userData'), appearance);
   return appearance;
 });
 
-ipcMain.handle('obd:list-ports', async () => {
+handle('obd:list-ports', async () => {
   try {
     const ports: Array<{ path: string; manufacturer?: string; serialNumber?: string; vendorId?: string }> = await SerialPort.list();
     return ports
@@ -439,7 +490,7 @@ ipcMain.handle('obd:list-ports', async () => {
   }
 });
 
-ipcMain.handle('obd:connect', async (_event, { port }: { port: string }) => {
+handle('obd:connect', async (_event, { port }: { port: string }) => {
   // Guard: never run two serial connect attempts at once (that causes "Cannot lock port")
   if (port !== 'SIMULATOR' && isConnecting) {
     addLog({ timestamp: Date.now(), level: 'warn', message: 'Connect ignored — a connection attempt is already in progress' });
@@ -456,7 +507,7 @@ ipcMain.handle('obd:connect', async (_event, { port }: { port: string }) => {
   }
 });
 
-ipcMain.handle('obd:disconnect', async () => {
+handle('obd:disconnect', async () => {
   const gen = await endSession();
   addLog({ timestamp: Date.now(), level: 'info', message: 'Session disconnected — port released' });
   // A connect that arrived while the port was closing owns the status now
@@ -464,64 +515,67 @@ ipcMain.handle('obd:disconnect', async () => {
   sendToRenderer('obd:connection-status', { status: 'disconnected' as ConnectionStatus });
 });
 
-ipcMain.handle('obd:scan-dtc', async () => {
+handle('obd:scan-dtc', async () => {
   const mgr = obd;
-  if (!mgr) return [];
+  if (!mgr) return false;
   const dtcs = await mgr.scanDTCs();
-  // Disconnected mid-scan: don't wipe the renderer's list with an empty result
-  if (obd === mgr) sendToRenderer('obd:dtc-result', dtcs);
-  return dtcs;
+  // A failed scan (null) or one that outlived its session must not wipe the
+  // renderer's list: keep showing the last good result.
+  if (dtcs && obd === mgr) sendToRenderer('obd:dtc-result', dtcs);
+  // The codes arrive through obd:dtc-result; the reply only says whether it worked
+  return dtcs !== null;
 });
 
-ipcMain.handle('obd:clear-dtc', async () => {
-  if (!obd) return false;
-  return await obd.clearDTCs();
-});
-
-ipcMain.handle('pcm:read-ids', async (): Promise<PcmReadResult> => {
+handle('pcm:read-ids', async (): Promise<PcmReadResult> => {
   if (!elm) return { ok: false, error: 'Not connected to an adapter.' };
   if (simulatorMode) {
     return { ok: false, error: 'PCM identity is read from the physical module — not available in simulator mode.' };
   }
 
-  // The read reprograms the adapter's header and turns headers on, which would
-  // corrupt parsePIDResponse mid-flight. Take the bus, then give it back.
-  const mgr = obd;
-  const wasPolling = mgr !== null;
-  mgr?.stopPolling();
-  addLog({ timestamp: Date.now(), level: 'info', message: 'PCM identity read starting — PID polling paused' });
-
-  try {
-    const pcm = new PcmDiagnostics(elm);
-    const identity = await pcm.readIdentity((done, total) => {
-      sendToRenderer('pcm:read-progress', { done, total });
-    });
-    const found = identity.fields.filter(f => f.supported).length;
-    addLog({ timestamp: Date.now(), level: 'ok', message: `PCM identity read complete — ${found}/${identity.fields.length} blocks supported` });
-    return { ok: true, identity };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    addLog({ timestamp: Date.now(), level: 'error', message: `PCM identity read failed: ${msg}` });
-    return { ok: false, error: msg };
-  } finally {
-    // Only resume the session we paused — not one that was disconnected meanwhile
-    if (wasPolling && mgr && obd === mgr) {
-      mgr.startPolling();
-      addLog({ timestamp: Date.now(), level: 'info', message: 'PID polling resumed' });
-    }
+  // Mode 3C over Class II exists only on J1850 VPW (GM P01/P59 PCMs). On any
+  // other bus every block would time out (~30 s) for nothing.
+  const protocol = elm.getAdapterInfo().protocol ?? '';
+  if (!/VPW/i.test(protocol)) {
+    return { ok: false, error: `PCM identity needs a GM J1850 VPW vehicle; this one uses ${protocol || 'an unknown protocol'}.` };
   }
+
+  // The read turns headers on and aims the adapter at the PCM, which would
+  // corrupt anything else running on the bus. Take the bus for the whole read:
+  // polling, discovery, the VIN read and DTC scans wait until it is given back.
+  const commander = elm;
+  const run = async (): Promise<PcmReadResult> => {
+    addLog({ timestamp: Date.now(), level: 'info', message: 'PCM identity read starting — other adapter use paused' });
+    try {
+      const pcm = new PcmDiagnostics(commander);
+      const identity = await pcm.readIdentity((done, total) => {
+        sendToRenderer('pcm:read-progress', { done, total });
+      });
+      const found = identity.fields.filter(f => f.supported).length;
+      addLog({ timestamp: Date.now(), level: 'ok', message: `PCM identity read complete — ${found}/${identity.fields.length} blocks supported` });
+      return { ok: true, identity };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      addLog({ timestamp: Date.now(), level: 'error', message: `PCM identity read failed: ${msg}` });
+      return { ok: false, error: msg };
+    }
+  };
+  return obd ? obd.exclusive(run) : run();
 });
 
-ipcMain.handle('obd:check-modules', async () => {
+handle('obd:check-modules', async () => {
   // Runtime wake detection is done by monitoring PID responses. The renderer
   // seeds its module list from the resolved platform profile; for the simulator
   // (a GMT800 vehicle) we return that platform's module map.
   return simulatorMode ? GMT800.modules : [];
 });
 
-ipcMain.handle('obd:decode-vin', async (_event, { vin }: { vin: string }) => {
+handle('obd:decode-vin', async (_event, { vin }: { vin: string }) => {
+  if (typeof vin !== 'string' || !/^[A-HJ-NPR-Z0-9]{17}$/i.test(vin)) return null;
   try {
-    const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/${encodeURIComponent(vin)}?format=json`);
+    // Bounded: on a dead or captive network in the field this could hang for minutes
+    const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/${encodeURIComponent(vin)}?format=json`,
+      { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) return null;
     const json: any = await res.json();
     const r = json.Results?.[0];
     if (!r) return null;
@@ -538,7 +592,9 @@ ipcMain.handle('obd:decode-vin', async (_event, { vin }: { vin: string }) => {
   }
 });
 
-ipcMain.handle('session:export-log', async (_event, { filename }: { filename: string }) => {
+// `text` is the renderer's log (it includes the user's markers, which never
+// reach main); main's own log is the fallback.
+handle('session:export-log', async (_event, { filename, text }: { filename: string; text?: string }) => {
   const { filePath } = await dialog.showSaveDialog(mainWindow!, {
     defaultPath: filename,
     filters: [{ name: 'Log files', extensions: ['log', 'txt'] }],
@@ -546,13 +602,12 @@ ipcMain.handle('session:export-log', async (_event, { filename }: { filename: st
 
   if (!filePath) return;
 
-  const lines = sessionLog.map(e => {
+  const lines = typeof text === 'string' ? text : sessionLog.map(e => {
     const ts = new Date(e.timestamp).toISOString();
     return `${ts}\t${e.level.toUpperCase().padEnd(5)}\t${e.message}`;
   }).join('\n');
 
-  fs.writeFileSync(filePath, lines, 'utf-8');
-  addLog({ timestamp: Date.now(), level: 'ok', message: `Session log exported to ${filePath}` });
+  writeExport(filePath, lines, 'Session log');
 });
 
 // ─── Claude assistant ─────────────────────────────────────────────────────────
@@ -561,7 +616,7 @@ ipcMain.handle('session:export-log', async (_event, { filename }: { filename: st
 // controller is enough. Cancel aborts the fetch mid-stream.
 let activeAskController: AbortController | null = null;
 
-ipcMain.handle('claude:ask', async (_event, { question, context, history }: {
+handle('claude:ask', async (_event, { question, context, history }: {
   question: string; context: SessionContext; history: ChatTurn[];
 }) => {
   activeAskController?.abort();
@@ -577,13 +632,13 @@ ipcMain.handle('claude:ask', async (_event, { question, context, history }: {
   }
 });
 
-ipcMain.handle('claude:cancel', async () => {
+handle('claude:cancel', async () => {
   activeAskController?.abort();
   activeAskController = null;
   return true;
 });
 
-ipcMain.handle('claude:get-config', async () => {
+handle('claude:get-config', async () => {
   const cfg = loadClaudeConfig();
   // Never send the full key back to the renderer — just enough to show status
   return {
@@ -596,7 +651,7 @@ ipcMain.handle('claude:get-config', async () => {
   };
 });
 
-ipcMain.handle('claude:set-config', async (_event, { apiKey, model, customSystemPrompt }: {
+handle('claude:set-config', async (_event, { apiKey, model, customSystemPrompt }: {
   apiKey?: string; model?: string; customSystemPrompt?: string;
 }) => {
   const updates: { apiKey?: string; model?: string; customSystemPrompt?: string } = {};
@@ -607,91 +662,101 @@ ipcMain.handle('claude:set-config', async (_event, { apiKey, model, customSystem
   return true;
 });
 
-ipcMain.handle('claude:export-chat', async (_event, { markdown, filename }: { markdown: string; filename: string }) => {
+handle('claude:export-chat', async (_event, { markdown, filename }: { markdown: string; filename: string }) => {
   const { filePath } = await dialog.showSaveDialog(mainWindow!, {
     defaultPath: filename,
     filters: [{ name: 'Markdown', extensions: ['md', 'txt'] }],
   });
   if (!filePath) return false;
-  fs.writeFileSync(filePath, markdown, 'utf-8');
-  addLog({ timestamp: Date.now(), level: 'ok', message: `Assistant chat exported to ${filePath}` });
-  return true;
+  return writeExport(filePath, markdown, 'Assistant chat');
 });
 
-ipcMain.handle('session:export-csv', async (_event, { data, filename }: { data: string; filename: string }) => {
+handle('session:export-csv', async (_event, { data, filename }: { data: string; filename: string }) => {
+  // The Data Logger's JSON export comes through here too
+  const json = filename.toLowerCase().endsWith('.json');
   const { filePath } = await dialog.showSaveDialog(mainWindow!, {
     defaultPath: filename,
-    filters: [{ name: 'CSV files', extensions: ['csv'] }],
+    filters: [json ? { name: 'JSON files', extensions: ['json'] } : { name: 'CSV files', extensions: ['csv'] }],
   });
 
-  if (!filePath) return;
-  fs.writeFileSync(filePath, data, 'utf-8');
-  addLog({ timestamp: Date.now(), level: 'ok', message: `Session data exported to ${filePath}` });
+  if (!filePath) return false;
+  return writeExport(filePath, data, 'Session data');
 });
+
+// A failed write (read-only volume, full disk) is logged, not thrown: callers
+// fire and forget, so a throw became an unhandled rejection with no message.
+function writeExport(filePath: string, data: string, what: string): boolean {
+  try {
+    fs.writeFileSync(filePath, data, 'utf-8');
+    addLog({ timestamp: Date.now(), level: 'ok', message: `${what} exported to ${filePath}` });
+    return true;
+  } catch (e) {
+    addLog({ timestamp: Date.now(), level: 'error', message: `${what} export to ${filePath} failed: ${e instanceof Error ? e.message : String(e)}` });
+    return false;
+  }
+}
 
 // ─── Storage service ──────────────────────────────────────────────────────────
 
-ipcMain.handle('storage:get-config',  ()                        => storage.getConfig());
-ipcMain.handle('storage:set-config',  (_e: Electron.IpcMainInvokeEvent, u: Partial<import('../shared/types').StorageConfig>) => { storage.setConfig(u); return true; });
-ipcMain.handle('storage:migrate',     (_e: Electron.IpcMainInvokeEvent, { to }: { to: 'local' | 'sqlite' }) => { storage.migrate(to); return true; });
-ipcMain.handle('storage:get-info',    ()                        => storage.getInfo());
-ipcMain.handle('storage:open-data-folder', () => shell.openPath(app.getPath('userData')));
+handle('storage:get-config',  ()                        => storage.getConfig());
+handle('storage:migrate',     (_e: Electron.IpcMainInvokeEvent, { to }: { to: 'local' | 'sqlite' }) => { storage.migrate(to); return true; });
+handle('storage:get-info',    ()                        => storage.getInfo());
+handle('storage:open-data-folder', () => shell.openPath(app.getPath('userData')));
 
-ipcMain.handle('storage:save-snapshot',    (_e: Electron.IpcMainInvokeEvent, snap: import('../shared/types').SessionSnapshot) => storage.saveSnapshot(snap));
-ipcMain.handle('storage:get-snapshots',    ()                        => storage.getSnapshots());
-ipcMain.handle('storage:delete-snapshot',  (_e: Electron.IpcMainInvokeEvent, { id }: { id: string }) => { storage.deleteSnapshot(id); return true; });
+handle('storage:save-snapshot',    (_e: Electron.IpcMainInvokeEvent, snap: import('../shared/types').SessionSnapshot) => storage.saveSnapshot(snap));
+handle('storage:get-snapshots',    ()                        => storage.getSnapshots());
+handle('storage:delete-snapshot',  (_e: Electron.IpcMainInvokeEvent, { id }: { id: string }) => { storage.deleteSnapshot(id); return true; });
 
-ipcMain.handle('storage:save-recording',   (_e: Electron.IpcMainInvokeEvent, rec: import('../shared/types').DataRecording) => storage.saveRecording(rec));
-ipcMain.handle('storage:get-recordings',   ()                        => storage.getRecordings());
-ipcMain.handle('storage:delete-recording', (_e: Electron.IpcMainInvokeEvent, { id }: { id: string }) => { storage.deleteRecording(id); return true; });
+handle('storage:save-recording',   (_e: Electron.IpcMainInvokeEvent, rec: import('../shared/types').DataRecording) => storage.saveRecording(rec));
+handle('storage:get-recordings',   ()                        => storage.getRecordings());
+handle('storage:delete-recording', (_e: Electron.IpcMainInvokeEvent, { id }: { id: string }) => { storage.deleteRecording(id); return true; });
 
-ipcMain.handle('storage:save-freeze-frame',   (_e: Electron.IpcMainInvokeEvent, ff: import('../shared/types').FreezeFrame) => storage.saveFreezeFrame(ff));
-ipcMain.handle('storage:get-freeze-frames',   (_e: Electron.IpcMainInvokeEvent, { dtcCode }: { dtcCode?: string } = {}) => storage.getFreezeFrames(dtcCode));
-ipcMain.handle('storage:delete-freeze-frame', (_e: Electron.IpcMainInvokeEvent, { id }: { id: string }) => { storage.deleteFreezeFrame(id); return true; });
+handle('storage:save-freeze-frame',   (_e: Electron.IpcMainInvokeEvent, ff: import('../shared/types').FreezeFrame) => storage.saveFreezeFrame(ff));
+handle('storage:get-freeze-frames',   (_e: Electron.IpcMainInvokeEvent, { dtcCode }: { dtcCode?: string } = {}) => storage.getFreezeFrames(dtcCode));
+handle('storage:delete-freeze-frame', (_e: Electron.IpcMainInvokeEvent, { id }: { id: string }) => { storage.deleteFreezeFrame(id); return true; });
 
 // ─── PDF report ───────────────────────────────────────────────────────────────
 
-ipcMain.handle('report:generate', async (_event: Electron.IpcMainInvokeEvent, payload: unknown) => {
+handle('report:generate', async (_event: Electron.IpcMainInvokeEvent, payload: unknown) => {
   const os = require('os') as typeof import('os');
   const outDir = path.join(os.homedir(), 'Documents', 'AgadorSpartacus');
-  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+  await fs.promises.mkdir(outDir, { recursive: true });
 
-  const filename = `diagnostic-report-${new Date().toISOString().split('T')[0]}.pdf`;
-  const outPath  = path.join(outDir, filename);
+  // Date and time, so a second report on the same day doesn't replace the first
+  const stamp = new Date().toISOString().slice(0, 19).replace('T', '-').replace(/:/g, '');
+  const outPath = path.join(outDir, `diagnostic-report-${stamp}.pdf`);
 
-  const win = new BrowserWindow({
-    show: false, width: 900, height: 1200,
-    webPreferences: { contextIsolation: false, nodeIntegration: false },
-  });
-
-  const templatePath = path.join(app.getAppPath(), 'assets', 'report.html');
-  await win.loadFile(templatePath);
-  await win.webContents.executeJavaScript(
-    `window.__REPORT_DATA__ = ${JSON.stringify(payload)}; if (typeof render === 'function') render(window.__REPORT_DATA__);`
-  );
-  await new Promise(r => setTimeout(r, 300));
-
-  const pdfBuffer = await win.webContents.printToPDF({ printBackground: false, pageSize: 'Letter' });
-  win.destroy();
-
-  fs.writeFileSync(outPath, pdfBuffer);
+  const win = new BrowserWindow({ show: false, width: 900, height: 1200, webPreferences: { sandbox: true } });
+  try {
+    const templatePath = path.join(app.getAppPath(), 'assets', 'report.html');
+    await win.loadFile(templatePath);
+    await win.webContents.executeJavaScript(
+      `window.__REPORT_DATA__ = ${JSON.stringify(payload)}; if (typeof render === 'function') render(window.__REPORT_DATA__);`
+    );
+    await new Promise(r => setTimeout(r, 300));
+    const pdfBuffer = await win.webContents.printToPDF({ printBackground: false, pageSize: 'Letter' });
+    await fs.promises.writeFile(outPath, pdfBuffer);
+  } finally {
+    win.destroy();   // a failed load or print used to leak a hidden window
+  }
   shell.openPath(outPath);
   return outPath;
 });
 
-ipcMain.handle('carsxe:decode', async (_event: Electron.IpcMainInvokeEvent, { code }: { code: string }) => {
+handle('carsxe:decode', async (_event: Electron.IpcMainInvokeEvent, { code }: { code: string }) => {
   const apiKey = process.env.CARSXE_API_KEY ?? '';
   if (!apiKey) return { ok: false, error: 'CARSXE_API_KEY not set' };
   try {
-    const url = `https://api.carsxe.com/obdcodesdecoder?key=${apiKey}&code=${encodeURIComponent(code)}&source=claude_plugin`;
-    const res  = await fetch(url);
+    const url = `https://api.carsxe.com/obdcodesdecoder?key=${encodeURIComponent(apiKey)}&code=${encodeURIComponent(code)}`;
+    const res  = await fetch(url, { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) return { ok: false, error: `CarsXE HTTP ${res.status}` };
     const d: any = await res.json();
     const description = d.definition ?? d.description ?? d.code_description ?? '';
     const rawCauses   = d.possible_causes ?? d.causes ?? '';
     const causes: string[] = typeof rawCauses === 'string'
-      ? rawCauses.split(/[;,\n]/).map((s: string) => s.trim()).filter(Boolean)
-      : Array.isArray(rawCauses) ? rawCauses : [];
+      // Not on commas: "spark plugs, wires, or coils" is one cause
+      ? rawCauses.split(/[;\n]/).map((s: string) => s.trim()).filter(Boolean)
+      : Array.isArray(rawCauses) ? rawCauses.map(String) : [];
     const repair = d.tech_notes ?? d.tips ?? d.repair ?? '';
     return { ok: true, description, causes, repair };
   } catch (e) {

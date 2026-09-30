@@ -2,15 +2,13 @@ import { EventEmitter } from 'events';
 
 // ─── ELM327 Simulator ─────────────────────────────────────────────────────────
 // Emulates a 2004 Silverado 1500 Z71 J1850 VPW session.
-// Battery voltage steps from 12.6 V → 11.8 V over 4 hours.
-// IPC stays awake after engine-off (reproducing the known GMT800 bug).
+// Battery voltage drops from 12.89 V toward 11.8 V (4 mV/min, faster after 15 min).
+// (Module wake behaviour, e.g. the IPC staying awake after engine-off, is not
+// simulated: the app has no module wake detection yet.)
 // Pre-loaded DTCs: B1982, P0300, U0100.
 
 export class ELM327Simulator extends EventEmitter {
   private sessionStartMs = Date.now();
-  private engineOff = false;
-  private engineOffMs = 0;
-  private dtcsCleared = false;   // Mode 04 wipes stored/pending codes
 
   // Simulated sensor state
   private state = {
@@ -56,29 +54,50 @@ export class ELM327Simulator extends EventEmitter {
     if (cmd === 'STI')    return 'OBDLink MX+ v4.9.1\r\r>';
     if (cmd === 'STDI')   return 'OBDLink MX+ (c) 2023 ScanTool.net\r\r>';
     if (cmd === 'ATRV')   return `${this.getBatteryVoltage().toFixed(2)}V\r\r>`;
-    if (cmd === '04')     { this.dtcsCleared = true; return 'OK\r\r>'; }
 
-    // PID support bitmasks
-    if (cmd === '0100') return '4100BE3EB811\r\r>';
-    if (cmd === '0120') return '4120A005B011\r\r>';
-    if (cmd === '0140') return '4140FED09081\r\r>';
+    // PID support bitmasks, derived from the PIDs answered below so the two
+    // can't drift apart (a hand-written mask once hid 11 of them)
+    const mask = this.supportMask(cmd);
+    if (mask) return mask;
 
     // DTC words encode type in the top 2 bits of the first nibble:
     // B1982 → 9982, P0300 → 0300, U0100 → C100
     // Mode 03 (stored): B1982 + P0300
-    if (cmd === '03') return this.dtcsCleared ? '430000\r\r>' : '4399820300\r\r>';
+    if (cmd === '03') return '4399820300\r\r>';
 
     // Mode 07 (pending): U0100
-    if (cmd === '07') return this.dtcsCleared ? '470000\r\r>' : '47C1000000\r\r>';
+    if (cmd === '07') return '47C1000000\r\r>';
 
     // Mode 0A (permanent) — none
     if (cmd === '0A') return '4A0000\r\r>';
 
-    // Keep-alive / tester present
-    if (cmd === '013E') return '7E00\r\r>';
 
-    // OBD PIDs
-    const pidMap: { [cmd: string]: () => string } = {
+    const fn = this.pidReplies()[cmd];
+    if (fn) {
+      this.jitter();
+      return fn();
+    }
+
+    return 'NO DATA\r\r>';
+  }
+
+  // 0100, 0120 … 01E0: bit n set when PID base+n+1 is answered; the last bit
+  // says the next range exists.
+  private supportMask(cmd: string): string | null {
+    const m = /^01([02468ACE]0)$/.exec(cmd);
+    if (!m) return null;
+    const base = parseInt(m[1], 16);
+    const pids = Object.keys(this.pidReplies()).map(k => parseInt(k.substring(2), 16));
+    if (base > 0 && !pids.some(n => n > base)) return null;
+    let mask = 0;
+    for (const n of pids) if (n > base && n <= base + 0x20) mask |= 1 << (0x20 - (n - base));
+    if (pids.some(n => n > base + 0x20)) mask |= 1;
+    return `41${m[1]}${(mask >>> 0).toString(16).toUpperCase().padStart(8, '0')}\r\r>`;
+  }
+
+  // Mode 01 replies, keyed by request
+  private pidReplies(): { [cmd: string]: () => string } {
+    return {
       '010C': () => this.encodeRPM(),
       '010D': () => `410D${this.hex1(this.state.speed)}\r\r>`,
       '0105': () => `4105${this.hex1(this.state.coolantTempC + 40)}\r\r>`,
@@ -105,16 +124,12 @@ export class ELM327Simulator extends EventEmitter {
       '012D': () => `412D${this.encodeTrim(this.state.egrError)}\r\r>`,
       '0133': () => `4133${this.hex1(101)}\r\r>`,    // 101 kPa ≈ sea level
       '015E': () => `415E${this.encode2(Math.round(0.4 * 20))}\r\r>`,
-      '01A4': () => `41A400\r\r>`,   // Park
+      '0103': () => `41030200\r\r>`,         // closed loop
+      // MIL on, 2 stored codes; misfire/fuel/components complete; catalyst, EVAP,
+      // O2, O2 heater and EGR supported, EVAP not yet complete
+      '0101': () => `41018207E504\r\r>`,
+      '01A4': () => `41A402000000\r\r>`,     // gear supported, 0 = not in a forward gear (parked)
     };
-
-    const fn = pidMap[cmd];
-    if (fn) {
-      this.jitter();
-      return fn();
-    }
-
-    return 'NO DATA\r\r>';
   }
 
   // ── Slowly drain the battery over time (simulates parasitic draw) ─────────────
@@ -125,18 +140,6 @@ export class ELM327Simulator extends EventEmitter {
     return Math.max(11.8, 12.89 - drift + this.noise(0.005));
   }
 
-  setEngineOff(): void {
-    this.engineOff = true;
-    this.engineOffMs = Date.now();
-    this.state.rpm = 0;
-    this.state.speed = 0;
-  }
-
-  setEngineOn(): void {
-    this.engineOff = false;
-    this.state.rpm = 820;
-  }
-
   // ── Encoding helpers ──────────────────────────────────────────────────────────
   private hex1(v: number): string { return Math.min(255, Math.max(0, Math.round(v))).toString(16).toUpperCase().padStart(2, '0'); }
   private encode2(v: number): string { const n = Math.min(65535, Math.max(0, Math.round(v))); return ((n >> 8) & 0xFF).toString(16).toUpperCase().padStart(2, '0') + (n & 0xFF).toString(16).toUpperCase().padStart(2, '0'); }
@@ -145,10 +148,12 @@ export class ELM327Simulator extends EventEmitter {
   private encodeVolt(v: number): string { return this.encode2(Math.round(v * 1000)); }
   private encodeRPM(): string { const raw = Math.round(this.state.rpm * 4); return `410C${this.encode2(raw)}\r\r>`; }
 
+  // Noise pulls back toward the idle values; plain random walks drifted RPM by
+  // thousands and pushed the trims into warning over a long demo session.
   private jitter(): void {
-    this.state.rpm = Math.max(0, this.state.rpm + this.noise(20));
-    this.state.stftB1 += this.noise(0.2);
-    this.state.ltftB1 = Math.min(25, this.state.ltftB1 + this.noise(0.05));
+    this.state.rpm = Math.max(0, this.state.rpm + this.noise(20) + (820 - this.state.rpm) * 0.05);
+    this.state.stftB1 = Math.max(-25, Math.min(25, this.state.stftB1 + this.noise(0.2) + (4.7 - this.state.stftB1) * 0.05));
+    this.state.ltftB1 = Math.max(-25, Math.min(25, this.state.ltftB1 + this.noise(0.05) + (8.2 - this.state.ltftB1) * 0.05));
     this.state.o2B1S1 = Math.max(0.1, Math.min(0.9, this.state.o2B1S1 + this.noise(0.08)));
   }
 

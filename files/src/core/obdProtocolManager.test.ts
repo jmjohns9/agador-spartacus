@@ -55,3 +55,90 @@ test('a DTC scan still resumes polling that was running and not stopped', async 
   await sleep(200);
   assert.ok(sent() > before, 'polling did not resume after the scan');
 });
+
+// A commander whose adapter answers from a fixed table; unknown commands time out.
+function scriptedManager(replies: Record<string, string>): { mgr: OBDProtocolManager; writes: string[] } {
+  const writes: string[] = [];
+  const elm: ELM327Commander = new ELM327Commander((data) => {
+    const cmd = data.trim();
+    writes.push(cmd);
+    if (cmd in replies) setTimeout(() => elm.onData(replies[cmd] + '\r\r>'), 1);
+  });
+  return { mgr: new OBDProtocolManager(elm), writes };
+}
+
+test('discovery merges every ECU and follows the next-range bit', async () => {
+  const { mgr, writes } = scriptedManager({
+    '0100': '4100BE3EB811\r410000000001',   // ECM, plus a TCM that only says "0120 exists"
+    '0120': '4120A005B011',
+    '0140': '4140FED09080',                 // last bit clear: nothing above 0x60
+  });
+  const pids = await mgr.discoverSupportedPIDs();
+  assert.deepEqual(writes, ['0100', '0120', '0140']);
+  assert.ok(pids.has('010C') && pids.has('0142'));
+});
+
+test('a failed discovery range does not stop its PIDs being polled', async (t) => {
+  const { mgr, writes } = scriptedManager({
+    '0120': '4120A005B011',
+    '0140': '4140FED09080',
+    '010C': '410C1AF8',
+  });
+  t.after(() => mgr.stopPolling());
+  await mgr.discoverSupportedPIDs();   // 0100 times out
+  const readings: string[] = [];
+  mgr.on('pid-reading', r => readings.push(r.pid));
+  writes.length = 0;
+  mgr.startPolling();
+  await sleep(3500);
+  mgr.stopPolling();
+  assert.ok(writes.includes('010C'), 'RPM was skipped because 0100 did not answer');
+  assert.ok(readings.includes('010C'));
+});
+
+test('a DTC scan with no answer returns null instead of "no codes"', async () => {
+  const { mgr } = scriptedManager({ '03': 'UNABLE TO CONNECT', '07': 'NO DATA', '0A': 'NO DATA' });
+  assert.equal(await mgr.scanDTCs(), null);
+});
+
+test('a DTC scan decodes codes from each mode', async () => {
+  const { mgr } = scriptedManager({ '03': '43030000000000\r43000000000000', '07': 'NO DATA', '0A': '7F0A11' });
+  const dtcs = await mgr.scanDTCs();
+  assert.deepEqual(dtcs?.map(d => `${d.code}:${d.status}`), ['P0300:active']);
+});
+
+test('no poll command goes out while an exclusive operation holds the bus', async (t) => {
+  const log: string[] = [];
+  let inside = false;
+  const sim = new ELM327Simulator();
+  const elm: ELM327Commander = new ELM327Commander((data) => {
+    const cmd = data.trim();
+    log.push(inside ? `IN:${cmd}` : cmd);
+    setTimeout(() => elm.onData(sim.respond(cmd)), 2);
+  });
+  const mgr = new OBDProtocolManager(elm);
+  t.after(() => mgr.stopPolling());
+  mgr.startPolling();
+  await sleep(40);
+  await mgr.exclusive(async () => {
+    inside = true;
+    mgr.startPolling();                   // e.g. discovery finishing on another path
+    await elm.send('ATH1', 100);
+    await sleep(60);                      // a poll loop running now would write here
+    await elm.send('ATH0', 100);
+    inside = false;
+  });
+  const during = log.filter(c => c.startsWith('IN:'));
+  assert.deepEqual(during, ['IN:ATH1', 'IN:ATH0']);
+  const before = log.length;
+  await sleep(100);
+  assert.ok(log.length > before, 'polling did not resume after the exclusive operation');
+});
+
+test('exclusive operations run one at a time', async () => {
+  const { mgr } = simulatedManager();
+  const order: string[] = [];
+  const op = (name: string) => mgr.exclusive(async () => { order.push(`${name}+`); await sleep(20); order.push(`${name}-`); });
+  await Promise.all([op('a'), op('b')]);
+  assert.deepEqual(order, ['a+', 'a-', 'b+', 'b-']);
+});

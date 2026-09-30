@@ -15,12 +15,24 @@ const CONFIG_FILE = (): string => path.join(app.getPath('userData'), 'claude-con
 // Every public Claude model on the Anthropic API as of 2026-06.
 // The label hints at the trade-off so the user can pick without leaving the app.
 export const CLAUDE_MODELS = [
-  { id: 'claude-opus-4-8',         label: 'Opus 4.8 — most capable' },
-  { id: 'claude-opus-4-7',         label: 'Opus 4.7 — balanced flagship' },
-  { id: 'claude-fable-5',          label: 'Fable 5 — latest creative' },
-  { id: 'claude-sonnet-4-6',       label: 'Sonnet 4.6 — fast, strong' },
-  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5 — fastest, cheapest' },
+  { id: 'claude-opus-5-5',         label: 'Opus 5.5 — recommended' },
+  { id: 'claude-fable-5-1',        label: 'Fable 5.1 — most capable, slower, pricier' },
+  { id: 'claude-sonnet-5-5',       label: 'Sonnet 5.5 — fast, strong' },
+  { id: 'claude-haiku-4-5',        label: 'Haiku 4.5 — fastest, cheapest' },
+  { id: 'claude-opus-4-8',         label: 'Opus 4.8 — previous Opus' },
+  { id: 'claude-opus-4-7',         label: 'Opus 4.7' },
+  { id: 'claude-fable-5',          label: 'Fable 5' },
+  { id: 'claude-sonnet-4-6',       label: 'Sonnet 4.6' },
+  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5 (dated ID)' },
 ] as const;
+
+export const DEFAULT_MODEL = 'claude-opus-5-5';
+const isKnownModel = (m: unknown): m is string => CLAUDE_MODELS.some(x => x.id === m);
+
+// On a safety-classifier decline, these models can re-run the request on
+// another model inside the same call (server-side fallback, array form).
+const FALLBACK_MODEL = 'claude-opus-4-8';
+const FALLBACK_ELIGIBLE = new Set(['claude-opus-5-5', 'claude-fable-5-1', 'claude-sonnet-5-5']);
 
 interface ClaudeConfig {
   apiKey: string;
@@ -31,6 +43,18 @@ interface ClaudeConfig {
 // Configs written before encryption was added hold the key in plaintext under
 // `apiKey`. Keep reading that so an upgrade doesn't lose it — the next save
 // rewrites the file in encrypted form and drops the plaintext field.
+// On Linux without a Secret Service, Electron falls back to 'basic_text',
+// whose key is a hard-coded password: not encryption worth claiming.
+function canEncrypt(): boolean {
+  if (!safeStorage.isEncryptionAvailable()) return false;
+  const backend = (safeStorage as { getSelectedStorageBackend?: () => string }).getSelectedStorageBackend?.();
+  return backend !== 'basic_text';
+}
+
+function readRaw(): Record<string, unknown> {
+  try { return JSON.parse(fs.readFileSync(CONFIG_FILE(), 'utf-8')); } catch { return {}; }
+}
+
 function readApiKey(raw: { apiKey?: unknown; apiKeyEnc?: unknown }): string {
   if (typeof raw.apiKeyEnc === 'string' && raw.apiKeyEnc) {
     if (!safeStorage.isEncryptionAvailable()) return '';
@@ -44,24 +68,29 @@ function readApiKey(raw: { apiKey?: unknown; apiKeyEnc?: unknown }): string {
 }
 
 export function loadConfig(): ClaudeConfig {
-  try {
-    const raw = JSON.parse(fs.readFileSync(CONFIG_FILE(), 'utf-8'));
-    return {
-      apiKey:             readApiKey(raw),
-      model:              raw.model  ?? 'claude-opus-4-8',
-      customSystemPrompt: raw.customSystemPrompt ?? '',
-    };
-  } catch {
-    return { apiKey: '', model: 'claude-opus-4-8', customSystemPrompt: '' };
-  }
+  const raw = readRaw();
+  return {
+    apiKey:             readApiKey(raw),
+    model:              isKnownModel(raw.model) ? raw.model : DEFAULT_MODEL,
+    customSystemPrompt: typeof raw.customSystemPrompt === 'string' ? raw.customSystemPrompt : '',
+  };
 }
 
 export function saveConfig(cfg: Partial<ClaudeConfig>): void {
   const { apiKey, ...rest } = { ...loadConfig(), ...cfg };
+  if (!isKnownModel(rest.model)) rest.model = DEFAULT_MODEL;
   const out: Record<string, unknown> = { ...rest };
 
+  // A stored key that can't be decrypted right now (keychain prompt denied,
+  // config copied from another machine) reads back as ''. Unless this save
+  // sets a new key, keep the ciphertext instead of silently deleting it.
+  const raw = readRaw();
+  if (!apiKey && cfg.apiKey === undefined && typeof raw.apiKeyEnc === 'string' && raw.apiKeyEnc) {
+    out.apiKeyEnc = raw.apiKeyEnc;
+  }
+
   if (apiKey) {
-    if (safeStorage.isEncryptionAvailable()) {
+    if (canEncrypt()) {
       out.apiKeyEnc = safeStorage.encryptString(apiKey).toString('base64');
     } else {
       // No OS keychain (some Linux desktops). Storing plaintext is worse than
@@ -188,21 +217,31 @@ export async function askClaude(
   const client = new Anthropic({ apiKey });
 
   try {
-    const stream = client.messages.stream(
-      { model, max_tokens: 1500, system, messages },
+    // Current models think before answering and the thinking counts against
+    // max_tokens, so leave room (1500 truncated answers). Streaming keeps a
+    // large limit clear of HTTP timeouts.
+    const fallback = FALLBACK_ELIGIBLE.has(model)
+      ? { betas: ['server-side-fallback-2026-06-01'], fallbacks: [{ model: FALLBACK_MODEL }] }
+      : {};
+    const stream = client.beta.messages.stream(
+      { model, max_tokens: 16000, system, messages, ...fallback },
       { signal: opts.signal },
     );
     if (opts.onText) stream.on('text', opts.onText);
 
     const final = await stream.finalMessage();
+    // Refusal means every model in the chain declined; there is no answer text
+    if (final.stop_reason === 'refusal') {
+      return { ok: false, error: 'Claude declined to answer this request. Try rephrasing the question.' };
+    }
     const text = final.content
-      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text')
       .map(b => b.text)
       .join('');
     return {
       ok: true,
       text: text || '(empty response)',
-      model,
+      model: final.model,
       usage: {
         input_tokens:  final.usage.input_tokens,
         output_tokens: final.usage.output_tokens,

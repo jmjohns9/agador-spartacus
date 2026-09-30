@@ -44,3 +44,57 @@ test('close() resolves a command that is waiting for its reply', async () => {
   assert.equal(resp.success, false);
   assert.equal(resp.errorMessage, 'Closed');
 });
+
+test('send() refuses vehicle-write services without touching the transport', async () => {
+  // The app is read-only: clearing codes, resets, writes and flashing never go out.
+  for (const cmd of ['04', '08 01', '11 01', '14 FF FF FF', '28 00', '2E F1 90', '2F 01', '31 01', '34', '36 01', '3B 01', '85 02']) {
+    const { elm, writes } = simulated();
+    const resp = await elm.send(cmd, 1000);
+    assert.equal(resp.success, false, `${cmd} was not refused`);
+    assert.match(resp.errorMessage ?? '', /read-only/i);
+    assert.equal(writes.length, 0, `${cmd} reached the adapter`);
+  }
+});
+
+test('send() still passes reads and adapter commands', async () => {
+  for (const cmd of ['010C', '03', '07', '0A', '0902', '3C 01', 'ATSH 6C 10 F0', 'STI']) {
+    const { elm, writes } = simulated();
+    await elm.send(cmd, 200);
+    assert.equal(writes.length, 1, `${cmd} was blocked`);
+  }
+});
+
+test('a reply that arrives after its timeout is not credited to the next command', async () => {
+  // Adapter answers 010C slowly (after the commander gave up) and 010D promptly.
+  let elm: ELM327Commander;
+  const written: string[] = [];
+  elm = new ELM327Commander((data) => {
+    const cmd = data.trim();
+    written.push(cmd);
+    if (cmd === '010C') setTimeout(() => elm.onData('410C1AF8\r\r>'), 120);
+    if (cmd === '010D') setTimeout(() => elm.onData('410D32\r\r>'), 100);
+  });
+  const first = await elm.send('010C', 50);
+  assert.equal(first.success, false);
+  const second = await elm.send('010D', 1000);
+  assert.equal(second.raw, '410D32');
+  assert.deepEqual(written, ['010C', '010D']);
+});
+
+test('a late reply that never comes does not block the next command forever', async () => {
+  const elm = new ELM327Commander((data) => {
+    if (data.trim() === '010D') setTimeout(() => elm.onData('410D32\r\r>'), 5);
+  });
+  await elm.send('010C', 30);            // no answer at all
+  const t0 = Date.now();
+  const second = await elm.send('010D', 1000);
+  assert.equal(second.raw, '410D32');
+  assert.ok(Date.now() - t0 < 2500, 'waited too long for the stale prompt');
+});
+
+test('response lines are split on the ELM327 carriage return', async () => {
+  const elm = new ELM327Commander((data) => {
+    if (data.trim() === 'ATDP') setTimeout(() => elm.onData('SEARCHING...\rSAE J1850 VPW\r\r>'), 1);
+  });
+  assert.deepEqual((await elm.send('ATDP', 500)).lines, ['SEARCHING...', 'SAE J1850 VPW']);
+});

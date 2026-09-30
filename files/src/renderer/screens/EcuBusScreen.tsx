@@ -20,31 +20,19 @@ const SUB_TABS: { id: EcuBusSubTab; icon: string; label: string }[] = [
   { id: 'doip',     icon: 'ti-network',        label: 'DoIP' },
 ];
 
+// Read-only services only. The app never changes a control module, so reset,
+// clear, security access, communication control, write, I/O control, routine
+// control, download/transfer and DTC-setting services are not offered (and
+// ELM327Commander refuses them if anything ever tried to send one).
 const UDS_SERVICES: UDSService[] = [
   { sid: 0x10, name: 'DiagnosticSessionControl', shortName: 'DSC', description: 'Switch ECU diagnostic session',
-    subFunctions: [{ id: 0x01, name: 'Default' }, { id: 0x02, name: 'Programming' }, { id: 0x03, name: 'Extended' }] },
-  { sid: 0x11, name: 'ECUReset', shortName: 'ER', description: 'Reset ECU',
-    subFunctions: [{ id: 0x01, name: 'Hard reset' }, { id: 0x02, name: 'Key off/on' }, { id: 0x03, name: 'Soft reset' }] },
-  { sid: 0x14, name: 'ClearDiagnosticInformation', shortName: 'CDI', description: 'Clear stored DTCs' },
+    subFunctions: [{ id: 0x01, name: 'Default' }, { id: 0x03, name: 'Extended' }] },
   { sid: 0x19, name: 'ReadDTCInformation', shortName: 'RDTCI', description: 'Read DTC info from ECU',
     subFunctions: [{ id: 0x01, name: 'By status mask' }, { id: 0x02, name: 'By DTC mask' }, { id: 0x06, name: 'Extended record' }] },
   { sid: 0x22, name: 'ReadDataByIdentifier', shortName: 'RDBI', description: 'Read data from ECU by DID' },
   { sid: 0x23, name: 'ReadMemoryByAddress', shortName: 'RMBA', description: 'Read ECU memory at address' },
-  { sid: 0x27, name: 'SecurityAccess', shortName: 'SA', description: 'Unlock ECU security level',
-    subFunctions: [{ id: 0x01, name: 'Request seed (L1)' }, { id: 0x02, name: 'Send key (L1)' }, { id: 0x03, name: 'Request seed (L2)' }] },
-  { sid: 0x28, name: 'CommunicationControl', shortName: 'CC', description: 'Enable/disable ECU communication',
-    subFunctions: [{ id: 0x00, name: 'Enable TX/RX' }, { id: 0x01, name: 'Enable RX, disable TX' }, { id: 0x03, name: 'Disable TX/RX' }] },
-  { sid: 0x2E, name: 'WriteDataByIdentifier', shortName: 'WDBI', description: 'Write data to ECU by DID' },
-  { sid: 0x2F, name: 'InputOutputControlByIdentifier', shortName: 'IOCBI', description: 'Control ECU I/O' },
-  { sid: 0x31, name: 'RoutineControl', shortName: 'RC', description: 'Execute ECU routine',
-    subFunctions: [{ id: 0x01, name: 'Start' }, { id: 0x02, name: 'Stop' }, { id: 0x03, name: 'Request results' }] },
-  { sid: 0x34, name: 'RequestDownload', shortName: 'RD', description: 'Initiate firmware download' },
-  { sid: 0x36, name: 'TransferData', shortName: 'TD', description: 'Transfer firmware block' },
-  { sid: 0x37, name: 'RequestTransferExit', shortName: 'RTE', description: 'Complete firmware transfer' },
   { sid: 0x3E, name: 'TesterPresent', shortName: 'TP', description: 'Keep session alive',
     subFunctions: [{ id: 0x00, name: 'With response' }, { id: 0x80, name: 'Without response' }] },
-  { sid: 0x85, name: 'ControlDTCSetting', shortName: 'CDTCS', description: 'Enable/disable DTC storage',
-    subFunctions: [{ id: 0x01, name: 'On' }, { id: 0x02, name: 'Off' }] },
 ];
 
 const NRC_CODES: Record<number, string> = {
@@ -319,36 +307,36 @@ function CANMonitorTab(): React.ReactElement {
 // ─── Sub-tab: UDS Client ─────────────────────────────────────────────────────
 
 function UDSClientTab(): React.ReactElement {
-  const [selectedService, setSelectedService] = useState<UDSService>(UDS_SERVICES[4]); // RDBI
+  const [selectedService, setSelectedService] = useState<UDSService>(() => UDS_SERVICES.find(x => x.sid === 0x22)!); // RDBI (by ID, not index)
   const [txId, setTxId] = useState('7E0');
   const [rxId, setRxId] = useState('7E8');
   const [didInput, setDidInput] = useState('F190');
-  const [subFunc, setSubFunc] = useState(0);
+  const [subFunc, setSubFunc] = useState(() => selectedService.subFunctions?.[0]?.id ?? 0);
   const [payloadHex, setPayloadHex] = useState('');
-  const [history, setHistory] = useState<{ ts: number; req: string; res: string; positive: boolean; service: string }[]>([]);
+  const [history, setHistory] = useState<{ ts: number; req: string; res: string; service: string }[]>([]);
   const [testerPresentActive, setTesterPresentActive] = useState(false);
 
   const handleSend = () => {
     const now = Date.now();
     let reqBytes = [selectedService.sid];
-    if (selectedService.subFunctions && subFunc) reqBytes.push(subFunc);
-    if (selectedService.sid === 0x22 || selectedService.sid === 0x2E) {
+    // Sub-function 0x00 is a real value (e.g. Tester present "with response")
+    if (selectedService.subFunctions) reqBytes.push(subFunc);
+    if (selectedService.sid === 0x22) {
+      if (!/^[0-9A-F]{1,4}$/i.test(didInput.trim())) return;   // not a DID: build nothing
       const d = parseInt(didInput, 16);
       reqBytes.push((d >> 8) & 0xFF, d & 0xFF);
     }
     if (payloadHex.trim()) {
-      payloadHex.trim().split(/[\s,]+/).forEach(h => { const v = parseInt(h, 16); if (!isNaN(v)) reqBytes.push(v & 0xFF); });
+      const parts = payloadHex.trim().split(/[\s,]+/);
+      if (!parts.every(h => /^[0-9A-F]{1,2}$/i.test(h))) return;   // reject rather than drop bad bytes
+      parts.forEach(h => reqBytes.push(parseInt(h, 16)));
     }
     const reqStr = reqBytes.map(hexByte).join(' ');
 
-    // Simulate a positive response
-    const posRes = [selectedService.sid + 0x40, ...reqBytes.slice(1)];
-    if (selectedService.sid === 0x22) {
-      // Simulate some return data
-      posRes.push(...[0x31, 0x47, 0x43, 0x45, 0x4B, 0x31, 0x39, 0x54, 0x30, 0x34, 0x45, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36]);
-    }
-    const resStr = posRes.map(hexByte).join(' ');
-    setHistory(prev => [...prev, { ts: now, req: reqStr, res: resStr, positive: true, service: selectedService.shortName }]);
+    // This tab is not connected to the adapter: record the request only.
+    // It used to invent a positive reply (and a VIN), which read as if the
+    // ECU had answered.
+    setHistory(prev => [...prev, { ts: now, req: reqStr, res: 'Not sent (demo)', service: selectedService.shortName }]);
   };
 
   return (
@@ -444,7 +432,7 @@ function UDSClientTab(): React.ReactElement {
               )}
 
               {/* DID input for RDBI/WDBI */}
-              {(selectedService.sid === 0x22 || selectedService.sid === 0x2E) && (
+              {selectedService.sid === 0x22 && (
                 <div>
                   <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>DID</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -509,9 +497,9 @@ function UDSClientTab(): React.ReactElement {
                       <tr key={i}>
                         <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)' }}>{timestamp(h.ts)}</td>
                         <td style={TD_STYLE}><Badge label={h.service} variant="info" /></td>
-                        <td style={TD_STYLE}><Badge label={h.positive ? 'OK' : 'NRC'} variant={h.positive ? 'ok' : 'crit'} /></td>
+                        <td style={TD_STYLE}><Badge label="Demo" variant="muted" /></td>
                         <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.req}</td>
-                        <td style={{ ...TD_STYLE, ...NUMERIC, color: h.positive ? 'var(--ok-text)' : 'var(--crit-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.res}</td>
+                        <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.res}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -652,8 +640,8 @@ function SignalsTab(): React.ReactElement {
     <>
       <SectionHeader>CAN signal decoder (DBC)</SectionHeader>
       <div style={{ display: 'flex', gap: 8, margin: '8px 0 12px' }}>
-        <Button size="sm" variant="secondary" icon="ti-file-import">Load DBC</Button>
-        <Button size="sm" variant="secondary" icon="ti-plus">Add signal</Button>
+        <Button size="sm" variant="secondary" icon="ti-file-import" disabled title="Not available in the demo">Load DBC</Button>
+        <Button size="sm" variant="secondary" icon="ti-plus" disabled title="Not available in the demo">Add signal</Button>
         <div style={{ flex: 1 }} />
         <Badge label="8 signals" variant="info" />
         <Badge label="4 messages" variant="muted" />
@@ -728,8 +716,8 @@ function ScriptTab(): React.ReactElement {
   return (
     <>
       <div style={{ display: 'flex', gap: 8, margin: '0 0 12px' }}>
-        <Button size="sm" variant="secondary" icon="ti-plus">New script</Button>
-        <Button size="sm" variant="secondary" icon="ti-file-import">Import</Button>
+        <Button size="sm" variant="secondary" icon="ti-plus" disabled title="Not available in the demo">New script</Button>
+        <Button size="sm" variant="secondary" icon="ti-file-import" disabled title="Not available in the demo">Import</Button>
         <div style={{ flex: 1 }} />
         <Badge label="TypeScript" variant="info" />
         <Badge label="CAPL-like API" variant="muted" />
@@ -746,7 +734,7 @@ function ScriptTab(): React.ReactElement {
               </span>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <Button size="sm" variant="primary" icon="ti-player-play" onClick={() => updateScript(script.id, { status: 'running', output: [...script.output, `[${new Date().toLocaleTimeString()}] Script started...`, `[${new Date().toLocaleTimeString()}] VIN: 1GCEK19T04E123456`, `[${new Date().toLocaleTimeString()}] Script completed.`], lastRun: Date.now() })}>
+              <Button size="sm" variant="primary" icon="ti-player-play" onClick={() => updateScript(script.id, { status: 'success', output: [...script.output, `[${new Date().toLocaleTimeString()}] Demo: scripts don't run and nothing is sent to the vehicle.`], lastRun: Date.now() })}>
                 Run
               </Button>
               <Button size="sm" variant="secondary" icon="ti-player-stop" onClick={() => updateScript(script.id, { status: 'idle' })}>Stop</Button>
@@ -821,9 +809,9 @@ function LINTab(): React.ReactElement {
       </div>
 
       <div style={{ display: 'flex', gap: 8, margin: '12px 0' }}>
-        <Button size="sm" variant="secondary" icon="ti-file-import">Load LDF</Button>
-        <Button size="sm" variant="secondary" icon="ti-file-export">Export LDF</Button>
-        <Button size="sm" variant="secondary" icon="ti-test-pipe">Conformance test</Button>
+        <Button size="sm" variant="secondary" icon="ti-file-import" disabled title="Not available in the demo">Load LDF</Button>
+        <Button size="sm" variant="secondary" icon="ti-file-export" disabled title="Not available in the demo">Export LDF</Button>
+        <Button size="sm" variant="secondary" icon="ti-test-pipe" disabled title="Not available in the demo">Conformance test</Button>
         <div style={{ flex: 1 }} />
         <Badge label="LIN 2.1" variant="info" />
         <Badge label="19.2 kbit/s" variant="muted" />
@@ -879,7 +867,7 @@ function DoIPTab(): React.ReactElement {
       </div>
 
       <div style={{ display: 'flex', gap: 8, margin: '12px 0' }}>
-        <Button size="sm" variant="primary" icon="ti-radar">Vehicle discovery</Button>
+        <Button size="sm" variant="primary" icon="ti-radar" disabled title="Not available in the demo">Vehicle discovery</Button>
         <div style={{ flex: 1 }} />
         <Badge label="ISO 13400" variant="info" />
         <Badge label="TCP/UDP" variant="muted" />
@@ -942,8 +930,8 @@ function DoIPTab(): React.ReactElement {
             </div>
           </div>
           <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-            <Button size="sm" variant="primary" icon="ti-plug-connected">Connect</Button>
-            <Button size="sm" variant="secondary" icon="ti-stethoscope">UDS via DoIP</Button>
+            <Button size="sm" variant="primary" icon="ti-plug-connected" disabled title="Not available in the demo">Connect</Button>
+            <Button size="sm" variant="secondary" icon="ti-stethoscope" disabled title="Not available in the demo">UDS via DoIP</Button>
           </div>
         </Card>
       )}
@@ -1007,7 +995,6 @@ const QUICK_ACTIONS: { label: string; tab: EcuBusSubTab; icon: string }[] = [
   { label: 'Scan DTCs', tab: 'uds', icon: 'ti-bug' },
   { label: 'Monitor CAN', tab: 'can', icon: 'ti-route' },
   { label: 'Tester present', tab: 'uds', icon: 'ti-heartbeat' },
-  { label: 'ECU reset', tab: 'uds', icon: 'ti-refresh' },
 ];
 
 export function EcuBusScreen(): React.ReactElement {
@@ -1030,9 +1017,6 @@ export function EcuBusScreen(): React.ReactElement {
           onChange={setSubTab}
         />
         <div style={{ flex: 1 }} />
-        <span style={{ ...TYPE.caption, color: 'var(--label-3)' }}>
-          Powered by EcuBus-Pro · Apache 2.0
-        </span>
       </div>
       <Divider />
 
@@ -1054,14 +1038,12 @@ export function EcuBusScreen(): React.ReactElement {
         </>
       )}
 
-      {connectionStatus !== 'connected' && (
-        <div style={{ padding: '8px 12px 0', flexShrink: 0 }}>
-          <AlertBanner
-            variant="info"
-            message="Connect to an adapter first. EcuBus requires a live connection to send CAN/UDS frames."
-          />
-        </div>
-      )}
+      <div style={{ padding: '8px 12px 0', flexShrink: 0 }}>
+        <AlertBanner
+          variant="info"
+          message="Demo only: these tabs show sample data and never send anything to the vehicle."
+        />
+      </div>
 
       {/* Content */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: 12, gap: 0 }}>

@@ -7,15 +7,23 @@ services:
     container_name: obd-review
     restart: unless-stopped
     ports:
-      # noVNC — open http://<host>:6080/vnc.html in a browser to see the app
-      - "6080:6080"
+      # noVNC — open http://localhost:6080/vnc.html on this machine. Bound to
+      # loopback: the session is full control of the app. To reach it from
+      # another machine, use an SSH tunnel rather than opening the port.
+      - "127.0.0.1:6080:6080"
+    environment:
+      # Password for the noVNC session. Leave unset to have one generated and
+      # printed by `docker compose logs obd-review`.
+      - VNC_PASSWORD
     volumes:
       # Live-mount host /dev so a USB OBD adapter plugged in after startup
-      # (e.g. hot-plugged ttyUSB0/ttyACM0) is visible without a restart.
+      # (e.g. hot-plugged ttyUSB0/ttyACM0) is visible without a restart. The
+      # device_cgroup_rules below still limit what the container can open to
+      # USB-serial and CDC-ACM devices.
       - /dev:/dev
       # App data (storage.db, storage.json) lands in Electron's userData dir,
-      # which resolves to ~/.config/<app name> when running as root.
-      - obd-data:/root/.config
+      # which resolves to ~/.config/<app name> for the container's "node" user.
+      - obd-data:/home/node/.config
     device_cgroup_rules:
       - "c 188:* rmw" # USB-serial adapters (FTDI, CP210x, CH340, ...)
       - "c 166:* rmw" # USB CDC-ACM adapters (Arduino-style, some ELM327 clones)

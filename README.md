@@ -59,6 +59,10 @@ The whole interface was redesigned to look and behave like a native macOS app, i
   - Web fonts were removed, so the app works fully offline.
 - **Consistent spacing.** A 4pt spacing grid and three corner radii (6/10/12px) are used across the app.
 
+### Strictly read-only
+
+The Clear DTCs button has been removed, and the command layer now refuses any request that would clear codes or change a control module. See [Safety](#safety).
+
 ### Bug fixes
 
 - **Crash on disconnect (fixed).** A simulator reply that arrived just after you disconnected hit a null reference in the main process. The app then showed an error dialog and had to be force-quit. Pending simulator replies are now cancelled on disconnect.
@@ -108,7 +112,7 @@ All screenshots were captured from the built-in simulator in light mode, so you 
 - VIN detection and decoding, which fills in the vehicle profile automatically.
 
 **Fault codes**
-- DTC scan and clear across all supported modes, backed by a generated catalog of 371 codes.
+- DTC scan across all supported modes (stored, pending, permanent), backed by a generated catalog of 371 codes. The app reads codes only; it cannot clear them.
 - Freeze-frame capture and a viewer, saved per DTC.
 - Optional CarsXE lookup for code descriptions, likely causes and repair guidance.
 
@@ -249,6 +253,7 @@ ATRV     Live battery voltage
 │   │           └── ErrorBoundary.tsx
 │   ├── scripts/
 │   │   ├── gen-dtc-catalog.ts         # DTC catalog generator
+│   │   ├── make-icon.mjs              # placeholder app icon → build/icon.icns
 │   │   ├── check-styles.mjs           # screen style linter (npm run lint:styles)
 │   │   └── capture-screens.mjs        # light/dark screenshot harness
 │   ├── docker/                        # Dockerfile + Xvfb/noVNC entrypoint
@@ -281,8 +286,7 @@ ATRV     Live battery voltage
 ```bash
 git clone git@github.com:jmjohns9/agador-spartacus.git
 cd agador-spartacus/files
-npm install
-npx electron-rebuild --only better-sqlite3   # match the SQLite module to Electron's ABI
+npm install      # postinstall rebuilds better-sqlite3 and serialport for Electron
 npm run dev
 ```
 
@@ -299,7 +303,6 @@ npm run dev
 The simulator emulates a 2004 Silverado J1850 VPW session:
 
 - Battery voltage steps from 12.89 V down to 11.8 V over four hours, reproducing a parasitic drain.
-- The instrument cluster stays awake after engine-off, reproducing the known GMT800 fault.
 - The DTCs `B1982`, `P0300` and `U0100` are preloaded.
 - Every sensor reading has realistic noise.
 
@@ -308,9 +311,9 @@ The simulator emulates a 2004 Silverado J1850 VPW session:
 | Command | What it does |
 |---|---|
 | `npm run dev` | Watch-mode development with hot reload |
-| `npm run build` | Compile the main process and bundle the renderer |
-| `npm run dist` | Build and package a macOS `.dmg` / `.zip` via electron-builder |
-| `npm run typecheck` | `tsc --noEmit` across the project |
+| `npm run build` | Compile the main process and bundle the renderer (production mode, no source maps) |
+| `npm run dist` | Build and package a macOS `.dmg` / `.zip` into `release/` via electron-builder |
+| `npm run typecheck` | Type-check the renderer and the main process (against its own tsconfig) |
 | `npm test` | Run the `node:test` suites |
 | `npm run lint:styles <files>` | Check screens against the design-system styling rules |
 | `npm run gen:dtcs` | Regenerate `dtcCatalog.generated.ts` |
@@ -338,16 +341,21 @@ The reference adapter is the **OBDLink MX+**: Bluetooth Classic, an ELM327 v1.5 
 The container runs the full Electron GUI under Xvfb and exposes it over noVNC. This is useful for CI, for a headless shop machine, or for driving the app from a browser.
 
 ```bash
-docker compose up --build
-# then open http://<host>:6080/vnc.html
+VNC_PASSWORD=choose-one docker compose up --build
+# then open http://localhost:6080/vnc.html and enter that password
 ```
+
+The noVNC session is full control of the app (the stored Claude API key, saved sessions, a connected vehicle), so:
+
+- It is published on `127.0.0.1` only. To reach it from another machine, use an SSH tunnel (`ssh -L 6080:localhost:6080 host`) rather than opening the port.
+- It always has a password. Without `VNC_PASSWORD`, one is generated and printed by `docker compose logs obd-review`.
+- The app runs as the image's unprivileged `node` user.
 
 Details worth knowing:
 
-- `/dev` is live-mounted, so an adapter plugged in after startup is visible without a restart.
-- `device_cgroup_rules` grant access to USB-serial (`c 188:*`) and CDC-ACM (`c 166:*`) character devices, and the container joins `dialout`.
-- App data (`storage.db`, `storage.json`) persists in the `obd-data` volume, mounted at `/root/.config`.
-- The image rebuilds **only** `better-sqlite3` and `serialport` against Electron's ABI. electron-builder's default full-tree rebuild would also hit `ttf2woff2`, a dev-only dependency of the icon tooling that doesn't compile against Electron 42's V8.
+- `/dev` is live-mounted, so an adapter plugged in after startup is visible without a restart. `device_cgroup_rules` limit the container to USB-serial (`c 188:*`) and CDC-ACM (`c 166:*`) character devices, and the user is in `dialout`.
+- App data (`storage.db`, `storage.json`) persists in the `obd-data` volume, mounted at `/home/node/.config`. A volume created by an earlier image (mounted at `/root/.config`) is not picked up automatically.
+- `npm ci`'s postinstall rebuilds the runtime native modules, `better-sqlite3` and `serialport`, for Electron's ABI. Renderer-only packages are devDependencies, so the icon tooling's `ttf2woff2` addon, which doesn't compile against Electron 42, is not rebuilt.
 
 ---
 
@@ -375,14 +383,11 @@ For visual checks, run `npm run build && node scripts/capture-screens.mjs .scree
 
 ## Known issues
 
-These bugs predate the redesign. They are tracked in [`docs/superpowers/code-review-notes.md`](docs/superpowers/code-review-notes.md) and will be fixed in a follow-up code review.
+Open items from the code review are tracked in [`docs/superpowers/code-review-report.md`](docs/superpowers/code-review-report.md). The main ones that affect what you see:
 
-- **Module monitor** status never leaves "Unknown", because module scan results aren't sent back to the screen.
-- **Transmission** gear indicator compares a raw PID value against gear letters.
-- **Compare** snapshot limit never removes old snapshots.
-- **EcuBus-Pro** CAN/UDS tabs show static demo data. The hardware and NRC reference panels exist but can't be reached.
-- **Electrical** battery-voltage chart labels render too large.
-- **Clear DTCs** sends OBD-II Mode 04. This clears codes on the vehicle, and it needs a decision against the "nothing writes to a control module" rule below.
+- **Module monitor** status never leaves "Unknown": the app has no module wake detection yet, so nothing reports module state back to the screen.
+- **EcuBus-Pro** tabs are a demo. They show sample data, send nothing to the vehicle, and say so on screen.
+- **PCM identity** checksum handling and adapter reset have not yet been checked against a real P01/P59 PCM.
 
 ---
 
@@ -448,7 +453,8 @@ Currently enforced:
 - Input from the adapter is bounded on the ELM327 receive path.
 - Report data is escaped before it reaches `innerHTML`.
 - The session log is a ring buffer capped at 5000 entries, so long sessions don't grow without limit.
-- The Content Security Policy no longer allows any remote font or style origin. The UI loads nothing from the network.
+- The main window is sandboxed, can't navigate away from the app's page or open windows, and every IPC handler refuses requests that don't come from the app's own page.
+- The Content Security Policy allows only the app's own scripts, styles, fonts and images (no `eval`, no remote origins). The UI loads nothing from the network.
 
 Known open findings are tracked in `eval/security/last-run-summary.md` rather than hidden. As of the last run there are 7 medium and 7 low findings. They cover DoS bounds on parsing that the adapter controls, prompt-injection fencing in the assistant context, Electron sandbox hardening, and rate limiting on metered third-party proxies.
 
@@ -486,7 +492,6 @@ Known open findings are tracked in `eval/security/last-run-summary.md` rather th
 
 Diagnostic work on a vehicle carries real risk.
 - Don't read live data while driving.
-- Clearing DTCs erases freeze-frame data and readiness monitors, so capture a report first.
 - Check any voltage source with a multimeter before connecting it to the OBD-II port.
 
-Apart from the standard Mode 04 clear-codes request, nothing in this app writes to a control module, and it should stay that way.
+The app is strictly read-only: nothing in it writes to a control module, and it should stay that way. There is no Clear DTCs button, and the ELM327 command layer refuses any service that clears codes, resets, actuates, writes or reprograms a module (Mode 04 and 08, and UDS/GM 11, 14, 28, 2E, 2F, 31, 34–37, 3B and 85), so a future feature can't send one by accident. To clear codes, use a dedicated scan tool.

@@ -32,6 +32,10 @@ type CarsXEResult =
   | { state: 'error'; error: string }
   | { state: 'no-key' };
 
+// CarsXE answers per code; kept for the session so re-opening a row or
+// changing a filter doesn't call the API again
+const carsxeCache = new Map<string, CarsXEResult>();
+
 function DTCRow({ dtc, expanded, onToggle, hasFreezeFrame, onViewFreezeFrame }: {
   dtc: DTCCode;
   expanded: boolean;
@@ -39,7 +43,7 @@ function DTCRow({ dtc, expanded, onToggle, hasFreezeFrame, onViewFreezeFrame }: 
   hasFreezeFrame: boolean;
   onViewFreezeFrame: () => void;
 }): React.ReactElement {
-  const [carsxe, setCarsxe] = React.useState<CarsXEResult>({ state: 'idle' });
+  const [carsxe, setCarsxe] = React.useState<CarsXEResult>(() => carsxeCache.get(dtc.code) ?? { state: 'idle' });
 
   React.useEffect(() => {
     if (!expanded || carsxe.state !== 'idle') return;
@@ -47,9 +51,11 @@ function DTCRow({ dtc, expanded, onToggle, hasFreezeFrame, onViewFreezeFrame }: 
     window.electronAPI.carsxeDecode(dtc.code).then(res => {
       if (!res.ok) {
         if (res.error.includes('CARSXE_API_KEY')) setCarsxe({ state: 'no-key' });
-        else setCarsxe({ state: 'error', error: res.error });
+        else setCarsxe({ state: 'error', error: res.error });   // not cached: retried on next open
       } else {
-        setCarsxe({ state: 'ok', description: res.description, causes: res.causes, repair: res.repair });
+        const ok: CarsXEResult = { state: 'ok', description: res.description, causes: res.causes, repair: res.repair };
+        carsxeCache.set(dtc.code, ok);
+        setCarsxe(ok);
       }
     }).catch(e => setCarsxe({ state: 'error', error: String(e) }));
   }, [expanded]);
@@ -209,7 +215,10 @@ export function DTCScreen(): React.ReactElement {
   const setActiveScreen      = useAppStore(s => s.setActiveScreen);
   const setFreezeFrameFilter = useAppStore(s => s.setFreezeFrameFilter);
 
-  const [expandedCode, setExpandedCode] = useState<string | null>(null);
+  const freezeFramesVersion = useAppStore(s => s.freezeFramesVersion);
+  // A code can be reported by more than one mode (stored and permanent), so
+  // rows are keyed by code and status.
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [freezeFrameCodes, setFreezeFrameCodes] = useState<Set<string>>(new Set());
   const [filterType,   setFilterType]   = useState<DTCType | 'ALL'>('ALL');
   const [filterStatus, setFilterStatus] = useState<DTCStatus | 'ALL'>('ALL');
@@ -218,8 +227,8 @@ export function DTCScreen(): React.ReactElement {
   useEffect(() => {
     window.electronAPI.storage.getFreezeFrames().then((ffs: unknown) => {
       setFreezeFrameCodes(new Set((ffs as FreezeFrame[]).map((f: FreezeFrame) => f.dtcCode)));
-    });
-  }, []);
+    }).catch(() => {/* button stays disabled */});
+  }, [freezeFramesVersion]);
 
   const filtered = useMemo(() => {
     return dtcs.filter(d => {
@@ -239,16 +248,18 @@ export function DTCScreen(): React.ReactElement {
   const pendingDTCs  = dtcs.filter(d => d.status === 'pending').length;
   const gmDTCs       = dtcs.filter(d => d.type === 'B' || d.type === 'U').length;
 
-  const handleClear = () => {
-    if (!window.electronAPI) return;
-    if (confirm('Clear all diagnostic fault codes? This cannot be undone and will reset readiness monitors.')) {
-      window.electronAPI.clearDTCs();
+  const [scanning, setScanning] = useState(false);
+  const [scanFailed, setScanFailed] = useState(false);
+  const handleScan = async () => {
+    if (!window.electronAPI || scanning) return;
+    setScanning(true);
+    try {
+      setScanFailed(!(await window.electronAPI.scanDTCs()));
+    } catch {
+      setScanFailed(true);
+    } finally {
+      setScanning(false);
     }
-  };
-
-  const handleScan = () => {
-    if (!window.electronAPI) return;
-    window.electronAPI.scanDTCs();
   };
 
   return (
@@ -308,29 +319,26 @@ export function DTCScreen(): React.ReactElement {
           size="sm"
           icon="ti-refresh"
           onClick={handleScan}
-          disabled={connectionStatus !== 'connected'}
+          disabled={connectionStatus !== 'connected' || scanning}
         >
-          Scan
-        </Button>
-        <Button
-          variant="destructive"
-          size="sm"
-          icon="ti-trash"
-          onClick={handleClear}
-          disabled={connectionStatus !== 'connected' || dtcs.length === 0}
-        >
-          Clear all
+          {scanning ? 'Scanning…' : 'Scan'}
         </Button>
       </div>
 
       <ScrollPane>
 
         {/* ── Summary row ──────────────────────────────────────────────── */}
+        {scanFailed && (
+          <AlertBanner
+            variant="warn"
+            message="The last scan got no answer from the vehicle (ignition off, or a bus error). The codes below are from the last scan that worked."
+          />
+        )}
         {(activeDTCs > 0 || pendingDTCs > 0) && (
           <>
             {activeDTCs > 0 && (
               <AlertBanner
-                message={`${activeDTCs} active fault${activeDTCs > 1 ? 's' : ''} — MIL (check engine light) is illuminated`}
+                message={`${activeDTCs} active fault${activeDTCs > 1 ? 's' : ''} stored by the vehicle`}
                 variant="crit"
               />
             )}
@@ -340,13 +348,14 @@ export function DTCScreen(): React.ReactElement {
                 variant="warn"
               />
             )}
-            {gmDTCs > 0 && (
-              <AlertBanner
-                message={`${gmDTCs} GM-specific code${gmDTCs > 1 ? 's' : ''} (B/U type) — body or network fault, check BCM and IPC modules`}
-                variant="info"
-              />
-            )}
           </>
+        )}
+        {/* Shown for any B/U code, including permanent or history-only ones */}
+        {gmDTCs > 0 && (
+          <AlertBanner
+            message={`${gmDTCs} body or network code${gmDTCs > 1 ? 's' : ''} (B/U) — check the BCM and IPC modules`}
+            variant="info"
+          />
         )}
 
         {/* ── DTC list ─────────────────────────────────────────────────── */}
@@ -369,11 +378,11 @@ export function DTCScreen(): React.ReactElement {
         ) : (
           <Card padding={0}>
             {filtered.map((dtc, i) => (
-              <React.Fragment key={dtc.code}>
+              <React.Fragment key={`${dtc.code}-${dtc.status}`}>
                 <DTCRow
                   dtc={dtc}
-                  expanded={expandedCode === dtc.code}
-                  onToggle={() => setExpandedCode(expandedCode === dtc.code ? null : dtc.code)}
+                  expanded={expandedKey === `${dtc.code}-${dtc.status}`}
+                  onToggle={() => { const k = `${dtc.code}-${dtc.status}`; setExpandedKey(expandedKey === k ? null : k); }}
                   hasFreezeFrame={freezeFrameCodes.has(dtc.code)}
                   onViewFreezeFrame={() => { setFreezeFrameFilter(dtc.code); setActiveScreen('freezeframes'); }}
                 />

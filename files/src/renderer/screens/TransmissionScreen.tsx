@@ -31,23 +31,25 @@ function fmt(pid: string, v: number | string): string {
 
 // ─── Gear indicator ──────────────────────────────────────────────────────────
 // Read-only state display, styled like SegmentedControl but not interactive.
+// PID 01A4 reports the forward gear number; 0 means not in a forward gear
+// (park, reverse or neutral are not told apart).
 
-function GearIndicator({ gear }: { gear: string | number }): React.ReactElement {
-  const label = String(gear);
-  const gears = ['P', 'R', 'N', 'D', '3', '2', '1'];
+const GEARS = [0, 1, 2, 3, 4];
+
+function GearIndicator({ gear }: { gear: number | null }): React.ReactElement {
   return (
     <div role="group" aria-label="Current gear" style={{ display: 'inline-flex', gap: 2, padding: 2, background: 'var(--fill)', borderRadius: RADIUS.control + 1 }}>
-      {gears.map(g => {
-        const active = label === g;
+      {GEARS.map(g => {
+        const active = gear === g;
         return (
-          <span key={g} style={{
+          <span key={g} aria-current={active || undefined} style={{
             width: 24, height: 24, borderRadius: RADIUS.control - 1,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             ...TYPE.body, fontWeight: WEIGHT.semibold,
             background: active ? 'var(--accent)' : 'var(--fill)',
             color: active ? 'var(--on-accent)' : 'var(--label-2)',
           }}>
-            {g}
+            {g === 0 ? 'N' : g}
           </span>
         );
       })}
@@ -55,20 +57,36 @@ function GearIndicator({ gear }: { gear: string | number }): React.ReactElement 
   );
 }
 
+// 4L60-E ratios. Engine rpm at 60 mph assumes a 3.73 axle and 31.6-inch
+// tyres: 638 wheel rpm × 3.73 = 2,380 rpm in direct (3rd).
+const RPM_AT_60_DIRECT = 2380;
+const RATIOS = [
+  { gear: '1st',    n: 1, ratio: 3.06, notes: 'Launch; 60 mph is past redline' },
+  { gear: '2nd',    n: 2, ratio: 1.63, notes: 'Second gear' },
+  { gear: '3rd',    n: 3, ratio: 1.00, notes: 'Direct drive' },
+  { gear: '4th/OD', n: 4, ratio: 0.70, notes: 'Overdrive — TCC locks above ~45 mph' },
+];
+
 // ─── TransmissionScreen ───────────────────────────────────────────────────────
 
 export function TransmissionScreen(): React.ReactElement {
   const speed   = usePIDNum('010D');
   const rpm     = usePIDNum('010C');
-  const gear    = usePID('01A4');
-  const load    = usePIDNum('0104');
+  const gearRaw = usePID('01A4');
+  const gear    = typeof gearRaw === 'number' && Number.isFinite(gearRaw) ? gearRaw : null;
+  const isGMT800 = useAppStore(s => s.platform.id === 'gmt800');
 
-  // Estimated TCC (Torque Converter Clutch) slip — crude estimate from speed vs RPM
-  // At highway speed in 4th, RPM/MPH ratio ≈ 30:1 for 4L60-E with 3.73 gears
+  // TCC slip: engine rpm above what a locked converter would turn in
+  // overdrive at this road speed. Only meaningful in 4th on a known driveline.
   const speedMph = speed * 0.621371;
-  const tccSlip  = speedMph > 30 && rpm > 0
-    ? Math.max(0, rpm - speedMph * 30)
-    : 0;
+  const lockedRpm = (speedMph / 60) * RPM_AT_60_DIRECT * 0.70;
+  const tccSlip: number | null = isGMT800 && gear === 4 && speedMph > 40 && rpm > 0
+    ? Math.max(0, rpm - lockedRpm)
+    : null;
+  const tccWhy = !isGMT800 ? 'Needs a known transmission'
+    : gear === null ? 'Gear not reported'
+    : gear !== 4 ? 'Only estimated in 4th'
+    : 'Needs more than 40 mph';
 
   return (
     <ScrollPane>
@@ -105,10 +123,10 @@ export function TransmissionScreen(): React.ReactElement {
       </div>
 
       {/* ── Primary gauges ─────────────────────────────────────────────── */}
-      <SectionHeader>4L60-E transmission — live data</SectionHeader>
+      <SectionHeader>{isGMT800 ? '4L60-E transmission — live data' : 'Transmission — live data'}</SectionHeader>
       <Grid cols={4}>
-        <Gauge size="compact" label="Speed" value={Math.round(speedMph)} max={120} unit="mph" />
-        <Gauge size="compact" label="RPM" value={rpm} max={6000} unit="/ 6,000" />
+        <Gauge size="compact" label="Speed" value={Math.round(usePIDNum('010D', NaN) * 0.621371)} max={120} unit="mph" />
+        <Gauge size="compact" label="RPM" value={usePIDNum('010C', NaN)} max={6000} unit="/ 6,000" />
         <Metric
           size="compact"
           label="Road speed (raw)"
@@ -124,18 +142,18 @@ export function TransmissionScreen(): React.ReactElement {
       </Grid>
 
       {/* ── Gear selector ──────────────────────────────────────────────── */}
-      <SectionHeader>Gear selection (GM Class II enhanced)</SectionHeader>
+      <SectionHeader>Gear</SectionHeader>
       <Grid cols={2}>
         <Card>
-          <SectionHeader>Current gear — TCM via Class II bus</SectionHeader>
+          <SectionHeader>Current gear — reported by the TCM</SectionHeader>
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
             <GearIndicator gear={gear} />
           </div>
           <div style={{ textAlign: 'center', marginTop: 8, ...TYPE.title3, ...NUMERIC, color: 'var(--accent-text)' }}>
-            {String(gear) !== '—' ? String(gear) : '—'}
+            {fmt('01A4', gearRaw)}
           </div>
           <div style={{ textAlign: 'center', ...TYPE.caption, color: 'var(--label-2)', marginTop: 4 }}>
-            4L60-E 4-speed automatic · TCM address 0x60
+            {gear === null ? 'Not reported — many pre-2010 vehicles do not support PID A4' : 'N = not in a forward gear (park, reverse or neutral)'}
           </div>
         </Card>
 
@@ -145,32 +163,31 @@ export function TransmissionScreen(): React.ReactElement {
             <Metric
               size="compact"
               label="TCC slip est"
-              value={tccSlip > 0 ? `~${Math.round(tccSlip)} rpm` : '—'}
-              subtext={tccSlip > 200 ? 'High slip — TCC may be unlocked' : tccSlip > 0 ? 'Normal converter slip' : 'Requires hwy speed'}
-              status={tccSlip > 200 ? 'warn' : 'neutral'}
+              value={tccSlip === null ? '—' : `~${Math.round(tccSlip)} rpm`}
+              subtext={tccSlip === null ? tccWhy : tccSlip > 200 ? 'High slip — TCC may be unlocked' : 'Converter locked or near'}
+              status={tccSlip !== null && tccSlip > 200 ? 'warn' : 'neutral'}
             />
           </div>
         </Card>
       </Grid>
 
+      {isGMT800 && (
+        <>
       {/* ── 4L60-E reference ───────────────────────────────────────────── */}
-      <SectionHeader>4L60-E gear ratio reference</SectionHeader>
+      <SectionHeader>4L60-E gear ratios · rpm at 60 mph with 3.73 axle, 31.6″ tyres</SectionHeader>
       <Card padding={0}>
         {[
-          { gear: '1st',     ratio: '3.06:1', rpm_at_60: '~2800', notes: 'First gear, manual range or low speed' },
-          { gear: '2nd',     ratio: '1.63:1', rpm_at_60: '~1500', notes: 'Second gear' },
-          { gear: '3rd',     ratio: '1.00:1', rpm_at_60: '~900',  notes: 'Third gear (direct drive)' },
-          { gear: '4th/OD',  ratio: '0.70:1', rpm_at_60: '~650',  notes: 'Overdrive — TCC locks above ~45 mph' },
-          { gear: 'Reverse', ratio: '2.29:1', rpm_at_60: 'N/A',   notes: 'Reverse — do not exceed 35 mph' },
-        ].map(({ gear: g, ratio, rpm_at_60, notes }, i, arr) => (
+          ...RATIOS.map(r => ({ ...r, ratioText: `${r.ratio.toFixed(2)}:1`, rpm_at_60: `~${Math.round(RPM_AT_60_DIRECT * r.ratio).toLocaleString()}` })),
+          { gear: 'Reverse', n: -1, ratio: 2.29, ratioText: '2.29:1', rpm_at_60: 'N/A', notes: 'Reverse' },
+        ].map(({ gear: g, n, ratioText, rpm_at_60, notes }, i, arr) => (
           <React.Fragment key={g}>
             <div style={{
               display: 'grid', gridTemplateColumns: '60px 70px 80px 1fr',
               gap: 8, padding: '8px 12px',
-              background: String(gear) === g.split('/')[0] ? 'var(--accent-tint)' : 'transparent',
+              background: gear === n ? 'var(--accent-tint)' : 'transparent',
             }}>
               <span style={{ ...TYPE.body, fontWeight: WEIGHT.semibold, color: 'var(--label)' }}>{g}</span>
-              <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label)' }}>{ratio}</span>
+              <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label)' }}>{ratioText}</span>
               <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)' }}>{rpm_at_60}</span>
               <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>{notes}</span>
             </div>
@@ -199,6 +216,9 @@ export function TransmissionScreen(): React.ReactElement {
           />
         ))}
       </Card>
+
+        </>
+      )}
 
     </ScrollPane>
   );
