@@ -24,6 +24,33 @@ function VehicleEditor(): React.ReactElement {
   const [editing, setEditing] = useState(() => vehicleDisplayName(vehicle) === 'No vehicle set');
   const [draft, setDraft] = useState<VehicleProfile>(vehicle);
   const [decoding, setDecoding] = useState(false);
+  const [vinError, setVinError] = useState<string | null>(null);
+
+  // The VIN read after connecting (and NHTSA's make/model for it) can land
+  // while the form is open. Fold it into the fields left empty, so Save
+  // doesn't write the stale draft back over the detected values.
+  useEffect(() => {
+    if (!editing) return;
+    setDraft(d => ({
+      ...d,
+      vin:    d.vin    || vehicle.vin,
+      year:   d.year   || vehicle.year,
+      make:   d.make   || vehicle.make,
+      model:  d.model  || vehicle.model,
+      engine: d.engine || vehicle.engine,
+    }));
+  }, [vehicle.vin, vehicle.year, vehicle.make, vehicle.model, vehicle.engine]);
+
+  const save = () => {
+    const vin = (draft.vin ?? '').trim().toUpperCase();
+    if (vin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) {
+      setVinError('A VIN is 17 letters and digits, without I, O or Q.');
+      return;
+    }
+    setVinError(null);
+    setVehicle({ ...draft, vin });
+    setEditing(false);
+  };
 
   const decodeVIN = async () => {
     if (!draft.vin || draft.vin.length < 11) return;
@@ -44,10 +71,11 @@ function VehicleEditor(): React.ReactElement {
 
   const field = (key: keyof VehicleProfile, label: string, placeholder: string, flex = 1, numeric = false) => (
     <div style={{ flex, minWidth: 90 }}>
-      <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>
+      <label htmlFor={`vehicle-${key}`} style={{ display: 'block', ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>
         {label}
-      </div>
+      </label>
       <input
+        id={`vehicle-${key}`}
         type="text"
         value={draft[key]}
         placeholder={placeholder}
@@ -103,6 +131,7 @@ function VehicleEditor(): React.ReactElement {
             <div style={{ display: 'flex', gap: 8 }}>
               {field('notes', 'Notes for the assistant (known issues, mission)', 'chasing a parasitic battery drain', 1)}
             </div>
+            {vinError && <AlertBanner variant="warn" message={vinError} />}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <Button size="sm" onClick={() => setEditing(false)}>
                 Cancel
@@ -110,7 +139,7 @@ function VehicleEditor(): React.ReactElement {
               <Button
                 variant="primary"
                 size="sm"
-                onClick={() => { setVehicle(draft); setEditing(false); }}
+                onClick={save}
               >
                 Save vehicle
               </Button>
@@ -238,10 +267,11 @@ export function ConnectionScreen(): React.ReactElement {
 
   const handleConnect = async (port: string) => {
     if (!window.electronAPI || isBusy || !port) return;
-    localStorage.setItem('lastPort', port);
     setConnecting(true);
     try {
       await window.electronAPI.connect(port);
+    } catch {
+      // Main reports the failure through the connection status (shown here)
     } finally {
       setConnecting(false);
     }

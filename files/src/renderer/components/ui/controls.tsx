@@ -51,12 +51,14 @@ interface SegmentedProps<T extends string> {
   onChange: (v: T) => void;
   size?: 'sm' | 'md';
   ariaLabel: string;
+  disabled?: boolean;
 }
 
-export function SegmentedControl<T extends string>({ options, value, onChange, size = 'md', ariaLabel }: SegmentedProps<T>): React.ReactElement {
+export function SegmentedControl<T extends string>({ options, value, onChange, size = 'md', ariaLabel, disabled = false }: SegmentedProps<T>): React.ReactElement {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
   const current = Math.max(0, options.findIndex(o => o.value === value));
   const onKeyDown = (e: React.KeyboardEvent) => {
+    if (disabled) return;
     const i = nextIndex(current, e.key, options.length);
     if (i === null) return;
     e.preventDefault();
@@ -64,8 +66,8 @@ export function SegmentedControl<T extends string>({ options, value, onChange, s
     refs.current[i]?.focus();
   };
   return (
-    <div role="radiogroup" aria-label={ariaLabel} onKeyDown={onKeyDown} className="no-drag"
-      style={{ display: 'inline-flex', gap: 2, padding: 2, background: 'var(--fill)', borderRadius: RADIUS.control + 1 }}>
+    <div role="radiogroup" aria-label={ariaLabel} aria-disabled={disabled || undefined} onKeyDown={onKeyDown} className="no-drag"
+      style={{ display: 'inline-flex', gap: 2, padding: 2, background: 'var(--fill)', borderRadius: RADIUS.control + 1, opacity: disabled ? 0.5 : 1 }}>
       {options.map((o, i) => {
         const selected = i === current;
         return (
@@ -75,6 +77,7 @@ export function SegmentedControl<T extends string>({ options, value, onChange, s
             role="radio"
             aria-checked={selected}
             tabIndex={selected ? 0 : -1}
+            disabled={disabled}
             onClick={() => onChange(o.value)}
             style={{
               ...(size === 'sm' ? TYPE.caption : TYPE.body),

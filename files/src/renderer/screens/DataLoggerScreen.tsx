@@ -190,6 +190,7 @@ export function DataLoggerScreen(): React.ReactElement {
             options={INTERVAL_OPTIONS}
             value={String(sampleInterval)}
             onChange={v => setSampleInterval(Number(v))}
+            disabled={isRecording}
           />
         </div>
 

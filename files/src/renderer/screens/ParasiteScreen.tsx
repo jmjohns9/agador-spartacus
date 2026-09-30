@@ -303,7 +303,8 @@ function PowerConsumers(): React.ReactElement {
     // Live-detected subsystems
     const hasCoolant = typeof liveData['0105']?.value === 'number';
     const hasMAF = typeof liveData['0110']?.value === 'number';
-    if (hasCoolant) consumers.push({ name: 'ECM', draw: rpm > 0 ? '0.5–2 A' : '3–8 mA', status: rpm > 0 ? 'active' : 'sleep', source: 'PID 0105 responding' });
+    // A module that answers requests is awake, engine running or not
+    if (hasCoolant) consumers.push({ name: 'ECM', draw: rpm > 0 ? '0.5–2 A' : 'awake (engine off)', status: 'active', source: 'PID 0105 responding' });
     if (hasMAF) consumers.push({ name: 'MAF sensor', draw: rpm > 0 ? '50–100 mA' : '0 mA', status: rpm > 0 ? 'active' : 'sleep', source: 'PID 0110 responding' });
   }
 
@@ -423,7 +424,7 @@ export function ParasiteScreen(): React.ReactElement {
           label="Active DTCs"
           value={activeDTCs}
           status={activeDTCs > 0 ? 'warn' : 'neutral'}
-          subtext="Body (B) & network (U) weighted"
+          subtext="Stored codes the ECU reports as active"
         />
         <Metric
           size="compact"
@@ -449,12 +450,13 @@ export function ParasiteScreen(): React.ReactElement {
       <ChecklistSection />
 
       {/* ── Fuse panel — IPFB ─────────────────────────────────────────── */}
-      <SectionHeader>Instrument panel fuse block (IPFB)</SectionHeader>
-      <FusePanel fuses={ipfbFuses} />
+      {/* GM fuse layouts only exist for platforms that define them */}
+      {ipfbFuses.length > 0 && <SectionHeader>Instrument panel fuse block (IPFB)</SectionHeader>}
+      {ipfbFuses.length > 0 && <FusePanel fuses={ipfbFuses} />}
 
       {/* ── Fuse panel — UHFRC ────────────────────────────────────────── */}
-      <SectionHeader>Under-hood fuse relay center (UHFRC)</SectionHeader>
-      <FusePanel fuses={uhfrcFuses} />
+      {uhfrcFuses.length > 0 && <SectionHeader>Under-hood fuse relay center (UHFRC)</SectionHeader>}
+      {uhfrcFuses.length > 0 && <FusePanel fuses={uhfrcFuses} />}
 
       {/* ── Known culprits — platform-specific ───────────────────────── */}
       {isGMT800 && (

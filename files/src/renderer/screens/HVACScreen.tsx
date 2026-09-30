@@ -49,10 +49,11 @@ export function HVACScreen(): React.ReactElement {
   // A real implementation would use BCM data via SW-CAN
   const engineOn  = rpm > 200;
 
-  // HVAC-related DTCs
+  // HVAC codes: the catalog's HVAC module, or an HVAC component by name.
+  // "Any B code or anything mentioning heat" pulled in B1982 (IPC) and every
+  // O2-sensor-heater code.
   const hvacDTCs = dtcs.filter(d =>
-    d.code.startsWith('B') || d.description.toLowerCase().includes('hvac') ||
-    d.description.toLowerCase().includes('blend') || d.description.toLowerCase().includes('heat')
+    d.module === 'HVAC' || /hvac|blend door|mode door|recirc|a\/c|heater core|blower/i.test(d.description)
   );
 
   // Delta between ambient and coolant — shows heater effectiveness
@@ -232,7 +233,7 @@ export function HVACScreen(): React.ReactElement {
         <Card padding={0}>
           {hvacDTCs.map(dtc => (
             <DataRow
-              key={dtc.code}
+              key={`${dtc.code}-${dtc.status}`}
               pid={dtc.code}
               name={dtc.description}
               value=""

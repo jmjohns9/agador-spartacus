@@ -48,13 +48,75 @@ function MsgAction({ icon, label, onClick }: { icon: string; label: string; onCl
   );
 }
 
+// ─── Snapshot Claude sees with every question ────────────────────────────────
+// Built from the store when a question is sent. Subscribing to live data,
+// codes and the log here re-rendered the whole chat on every PID reading.
+
+type AppState = ReturnType<typeof useAppStore.getState>;
+
+function buildContext(st: AppState) {
+  const { vehicle, connectionStatus, protocol, liveData, dtcs, log } = st;
+  return {
+    vehicle: [
+      vehicleDisplayName(vehicle) !== 'No vehicle set' ? vehicleDisplayName(vehicle) : '',
+      vehicle.engine, vehicle.vin && `VIN ${vehicle.vin}`, vehicle.nickname,
+      vehicle.notes && `Notes: ${vehicle.notes}`,
+    ].filter(Boolean).join(' · '),
+    connectionStatus,
+    protocol,
+    liveData: Object.values(liveData).map(r => ({
+      pid: r.pid,
+      name: r.pid === 'ATRV' ? 'Battery voltage' : (PID_MAP.get(r.pid)?.name ?? r.pid),
+      value: typeof r.value === 'number' ? Math.round((r.value as number) * 100) / 100 : r.value,
+      unit: r.unit,
+    })),
+    dtcs: dtcs.map(d => ({
+      code: d.code,
+      status: d.status,
+      description: d.description,
+      module: d.module,
+      likelyCauses: d.likelyCauses,
+      repairSummary: d.repairSummary,
+    })),
+    recentLogs: log.slice(0, 30).reverse().map(e =>
+      `${new Date(e.timestamp).toLocaleTimeString()} ${e.level.toUpperCase()} ${e.message}`),
+  };
+}
+
+// Only mounted while the preview is open, so only then does it follow live data
+function SnapshotPreview(): React.ReactElement {
+  const liveData = useAppStore(s => s.liveData);
+  const dtcs     = useAppStore(s => s.dtcs);
+  const log      = useAppStore(s => s.log);
+  const text = useMemo(() => {
+    const snapshot = buildContext(useAppStore.getState());
+    const lines: string[] = [];
+    lines.push(`Vehicle:      ${snapshot.vehicle || 'not set'}`);
+    lines.push(`Connection:   ${snapshot.connectionStatus}${snapshot.protocol ? ` (${snapshot.protocol})` : ''}`);
+    lines.push(`Live PIDs:    ${snapshot.liveData.length}`);
+    if (snapshot.liveData.length) {
+      for (const r of snapshot.liveData.slice(0, 8)) lines.push(`  · ${r.name}: ${r.value} ${r.unit}`);
+      if (snapshot.liveData.length > 8) lines.push(`  · …and ${snapshot.liveData.length - 8} more`);
+    }
+    lines.push(`DTCs:         ${snapshot.dtcs.length || 'none'}`);
+    for (const d of snapshot.dtcs.slice(0, 5)) lines.push(`  · ${d.code} [${d.status}] ${d.description}`);
+    lines.push(`Recent logs:  ${snapshot.recentLogs.length} entries`);
+    return lines.join('\n');
+  }, [liveData, dtcs, log]);
+  return (
+    <pre className="selectable" style={{
+      margin: 0, padding: 8,
+      background: 'var(--fill)', borderRadius: RADIUS.control,
+      ...TYPE.caption, ...NUMERIC, color: 'var(--label)',
+      whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 180, overflowY: 'auto',
+    }}>{text}</pre>
+  );
+}
+
 export function AssistantScreen(): React.ReactElement {
   const connectionStatus    = useAppStore(s => s.connectionStatus);
   const protocol            = useAppStore(s => s.protocol);
   const vehicle             = useAppStore(s => s.vehicle);
-  const liveData            = useAppStore(s => s.liveData);
-  const dtcs                = useAppStore(s => s.dtcs);
-  const log                 = useAppStore(s => s.log);
   const messages            = useAppStore(s => s.chatMessages);
   const addChatMessage      = useAppStore(s => s.addChatMessage);
   const removeLastMessage   = useAppStore(s => s.removeLastMessage);
@@ -113,34 +175,6 @@ export function AssistantScreen(): React.ReactElement {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: reduce ? 'auto' : 'smooth' });
   }, [messages, busy, streamingText]);
 
-  // ── Snapshot Claude sees with every question ──────────────────────────────
-  const buildContext = useCallback(() => ({
-    vehicle: [
-      vehicleDisplayName(vehicle) !== 'No vehicle set' ? vehicleDisplayName(vehicle) : '',
-      vehicle.engine, vehicle.vin && `VIN ${vehicle.vin}`, vehicle.nickname,
-      vehicle.notes && `Notes: ${vehicle.notes}`,
-    ].filter(Boolean).join(' · '),
-    connectionStatus,
-    protocol,
-    liveData: Object.values(liveData).map(r => ({
-      pid: r.pid,
-      name: r.pid === 'ATRV' ? 'Battery voltage' : (PID_MAP.get(r.pid)?.name ?? r.pid),
-      value: typeof r.value === 'number' ? Math.round((r.value as number) * 100) / 100 : r.value,
-      unit: r.unit,
-    })),
-    dtcs: dtcs.map(d => ({
-      code: d.code,
-      status: d.status,
-      description: d.description,
-      module: d.module,
-      likelyCauses: d.likelyCauses,
-      repairSummary: d.repairSummary,
-    })),
-    recentLogs: log.slice(0, 30).reverse().map(e =>
-      `${new Date(e.timestamp).toLocaleTimeString()} ${e.level.toUpperCase()} ${e.message}`),
-  }), [vehicle, connectionStatus, protocol, liveData, dtcs, log]);
-
-  const snapshot = useMemo(() => buildContext(), [buildContext]);
 
   // ── Ask helper, used by send / regenerate / quick actions ────────────────
   const callClaude = async (question: string, historyOverride?: ChatMessage[]) => {
@@ -152,7 +186,7 @@ export function AssistantScreen(): React.ReactElement {
       const history = source
         .filter(m => m.role !== 'error')
         .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
-      const resp = await window.electronAPI.claudeAsk({ question, context: snapshot, history });
+      const resp = await window.electronAPI.claudeAsk({ question, context: buildContext(useAppStore.getState()), history });
       if (resp.ok) {
         addChatMessage({
           role: 'assistant', content: resp.text, timestamp: Date.now(),
@@ -212,10 +246,13 @@ export function AssistantScreen(): React.ReactElement {
     if (lastAssistantIdx < 0) return;
     const realIdx = messages.length - 1 - lastAssistantIdx;
     const priorHistory = messages.slice(0, realIdx);
-    const lastUser = [...priorHistory].reverse().find(m => m.role === 'user');
-    if (!lastUser) return;
+    const lastUserIdx = priorHistory.map(m => m.role).lastIndexOf('user');
+    if (lastUserIdx < 0) return;
+    const lastUser = priorHistory[lastUserIdx];
     removeLastMessage();   // drop the assistant reply we're about to replace
-    await callClaude(lastUser.content, priorHistory.filter(m => m.role !== 'error'));
+    // History stops before the question: main appends the question itself,
+    // and passing it in the history too sent it twice
+    await callClaude(lastUser.content, priorHistory.slice(0, lastUserIdx).filter(m => m.role !== 'error'));
   };
 
   const copy = (text: string) => {
@@ -277,20 +314,6 @@ export function AssistantScreen(): React.ReactElement {
     ? SLASH_COMMANDS.filter(c => c.cmd.startsWith(input.split(/\s/)[0]))
     : [];
 
-  const snapshotPreview = useMemo(() => {
-    const lines: string[] = [];
-    lines.push(`Vehicle:      ${snapshot.vehicle || 'not set'}`);
-    lines.push(`Connection:   ${snapshot.connectionStatus}${snapshot.protocol ? ` (${snapshot.protocol})` : ''}`);
-    lines.push(`Live PIDs:    ${snapshot.liveData.length}`);
-    if (snapshot.liveData.length) {
-      for (const r of snapshot.liveData.slice(0, 8)) lines.push(`  · ${r.name}: ${r.value} ${r.unit}`);
-      if (snapshot.liveData.length > 8) lines.push(`  · …and ${snapshot.liveData.length - 8} more`);
-    }
-    lines.push(`DTCs:         ${snapshot.dtcs.length || 'none'}`);
-    for (const d of snapshot.dtcs.slice(0, 5)) lines.push(`  · ${d.code} [${d.status}] ${d.description}`);
-    lines.push(`Recent logs:  ${snapshot.recentLogs.length} entries`);
-    return lines.join('\n');
-  }, [snapshot]);
 
   const currentModelLabel = config?.models.find(m => m.id === config.model)?.label ?? config?.model ?? '';
 
@@ -421,12 +444,7 @@ export function AssistantScreen(): React.ReactElement {
             <i className="ti ti-eye" style={{ fontSize: 12 }} aria-hidden />
             What Claude sees with every question
           </div>
-          <pre className="selectable" style={{
-            margin: 0, padding: 8,
-            background: 'var(--fill)', borderRadius: RADIUS.control,
-            ...TYPE.caption, ...NUMERIC, color: 'var(--label)',
-            whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 180, overflowY: 'auto',
-          }}>{snapshotPreview}</pre>
+          <SnapshotPreview />
         </div>
       )}
 
