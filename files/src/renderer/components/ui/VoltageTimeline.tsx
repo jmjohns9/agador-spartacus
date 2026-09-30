@@ -76,7 +76,7 @@ export function VoltageTimeline(): React.ReactElement {
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>
-          {pts.length} readings · {windowMinutes(pts)} min window
+          {pts.length} readings · {windowMinutes(pts) < 1 ? '<1' : windowMinutes(pts)} min window
         </span>
         <span style={{ ...caption, color: 'var(--label-2)' }}>
           Change: {drift >= 0 ? '+' : ''}{drift.toFixed(2)} V

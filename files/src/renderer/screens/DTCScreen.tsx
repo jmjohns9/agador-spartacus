@@ -209,7 +209,10 @@ export function DTCScreen(): React.ReactElement {
   const setActiveScreen      = useAppStore(s => s.setActiveScreen);
   const setFreezeFrameFilter = useAppStore(s => s.setFreezeFrameFilter);
 
-  const [expandedCode, setExpandedCode] = useState<string | null>(null);
+  const freezeFramesVersion = useAppStore(s => s.freezeFramesVersion);
+  // A code can be reported by more than one mode (stored and permanent), so
+  // rows are keyed by code and status.
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [freezeFrameCodes, setFreezeFrameCodes] = useState<Set<string>>(new Set());
   const [filterType,   setFilterType]   = useState<DTCType | 'ALL'>('ALL');
   const [filterStatus, setFilterStatus] = useState<DTCStatus | 'ALL'>('ALL');
@@ -218,8 +221,8 @@ export function DTCScreen(): React.ReactElement {
   useEffect(() => {
     window.electronAPI.storage.getFreezeFrames().then((ffs: unknown) => {
       setFreezeFrameCodes(new Set((ffs as FreezeFrame[]).map((f: FreezeFrame) => f.dtcCode)));
-    });
-  }, []);
+    }).catch(() => {/* button stays disabled */});
+  }, [freezeFramesVersion]);
 
   const filtered = useMemo(() => {
     return dtcs.filter(d => {
@@ -353,11 +356,11 @@ export function DTCScreen(): React.ReactElement {
         ) : (
           <Card padding={0}>
             {filtered.map((dtc, i) => (
-              <React.Fragment key={dtc.code}>
+              <React.Fragment key={`${dtc.code}-${dtc.status}`}>
                 <DTCRow
                   dtc={dtc}
-                  expanded={expandedCode === dtc.code}
-                  onToggle={() => setExpandedCode(expandedCode === dtc.code ? null : dtc.code)}
+                  expanded={expandedKey === `${dtc.code}-${dtc.status}`}
+                  onToggle={() => { const k = `${dtc.code}-${dtc.status}`; setExpandedKey(expandedKey === k ? null : k); }}
                   hasFreezeFrame={freezeFrameCodes.has(dtc.code)}
                   onViewFreezeFrame={() => { setFreezeFrameFilter(dtc.code); setActiveScreen('freezeframes'); }}
                 />

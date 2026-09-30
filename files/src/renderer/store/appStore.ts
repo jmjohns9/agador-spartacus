@@ -94,6 +94,9 @@ export interface AppState {
   // Freeze frame filter (set by DTC screen to pre-filter freeze frame viewer)
   freezeFrameFilter: string | null;
   setFreezeFrameFilter: (code: string | null) => void;
+  // Bumped whenever a freeze frame is saved, so open screens can reload
+  freezeFramesVersion: number;
+  freezeFramesChanged: () => void;
 
   // Actions
   setConnectionStatus: (status: ConnectionStatus, protocol?: string, adapterInfo?: string) => void;
@@ -221,6 +224,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   btRSSI: null,
   btDistance: null,
   freezeFrameFilter: null,
+  freezeFramesVersion: 0,
 
   addChatMessage: (m) => set((state) => ({ chatMessages: [...state.chatMessages, m] })),
   replaceLastAssistantMessage: (m) => set((state) => {
@@ -370,6 +374,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setFreezeFrameFilter: (code) => set({ freezeFrameFilter: code }),
+  freezeFramesChanged: () => set(s => ({ freezeFramesVersion: s.freezeFramesVersion + 1 })),
 
   // ── Export helpers ───────────────────────────────────────────────────────────
 

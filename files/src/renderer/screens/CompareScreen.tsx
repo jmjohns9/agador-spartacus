@@ -198,7 +198,12 @@ export function CompareScreen(): React.ReactElement {
   const hasLive = Object.keys(liveData).length > 0;
 
   const saveSnapshot = async () => {
-    if (snapshots.length >= MAX_SNAPS) setWarnFull(true);
+    // Both backends list newest first, so the oldest is last. It is deleted
+    // before saving; the banner used to say so while nothing was removed.
+    if (snapshots.length >= MAX_SNAPS) {
+      await window.electronAPI.storage.deleteSnapshot(snapshots[snapshots.length - 1].id);
+      setWarnFull(true);
+    }
     const snap: SessionSnapshot = {
       id:             `snap_${Date.now()}`,
       name:           snapName.trim() || `Snapshot ${new Date().toLocaleTimeString()}`,

@@ -379,13 +379,11 @@ For visual checks, run `npm run build && node scripts/capture-screens.mjs .scree
 
 ## Known issues
 
-These bugs predate the redesign. They are tracked in [`docs/superpowers/code-review-notes.md`](docs/superpowers/code-review-notes.md) and will be fixed in a follow-up code review.
+Open items from the code review are tracked in [`docs/superpowers/code-review-report.md`](docs/superpowers/code-review-report.md). The main ones that affect what you see:
 
-- **Module monitor** status never leaves "Unknown", because module scan results aren't sent back to the screen.
-- **Transmission** gear indicator compares a raw PID value against gear letters.
-- **Compare** snapshot limit never removes old snapshots.
-- **EcuBus-Pro** CAN/UDS tabs show static demo data. The hardware and NRC reference panels exist but can't be reached.
-- **Electrical** battery-voltage chart labels render too large.
+- **Module monitor** status never leaves "Unknown": the app has no module wake detection yet, so nothing reports module state back to the screen.
+- **EcuBus-Pro** tabs are a demo. They show sample data, send nothing to the vehicle, and say so on screen.
+- **PCM identity** checksum handling and adapter reset have not yet been checked against a real P01/P59 PCM.
 
 ---
 

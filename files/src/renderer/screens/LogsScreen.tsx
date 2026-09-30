@@ -27,7 +27,6 @@ const LEVEL_LABEL: Record<LogLevel, string> = {
 export function LogsScreen(): React.ReactElement {
   const log       = useAppStore(s => s.log);
   const addMarker = useAppStore(s => s.addMarker);
-  const exportLog = useAppStore(s => s.exportLog);
 
   const [filterLevel, setFilterLevel] = useState<LogLevel | 'ALL'>('ALL');
   const [searchText,  setSearchText]  = useState('');
@@ -55,12 +54,11 @@ export function LogsScreen(): React.ReactElement {
     return entries;
   }, [log, filterLevel, searchText]);
 
-  // Auto-scroll to bottom
+  // The log is newest-first, so tailing keeps the view at the top. Keyed on
+  // the newest entry, not the length, which stops changing at the 1000 cap.
   useEffect(() => {
-    if (autoScroll && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [filtered.length, autoScroll]);
+    if (autoScroll && scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [filtered[0]?.timestamp, autoScroll]);
 
   const handleAddMarker = () => {
     if (!markerText.trim()) return;
@@ -74,10 +72,12 @@ export function LogsScreen(): React.ReactElement {
     const slug = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join('-')
       .replace(/[^a-zA-Z0-9-]/g, '').toLowerCase() || 'session';
     const filename = `agador-${slug}-log-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.txt`;
+    // What is on screen (filters applied, markers included), oldest first
+    const text = [...filtered].reverse().map(e =>
+      `${new Date(e.timestamp).toISOString()}\t${e.level.toUpperCase().padEnd(5)}\t${e.message}`).join('\n');
     if (window.electronAPI?.exportLog) {
-      try { await window.electronAPI.exportLog(filename); return; } catch { /* fallback */ }
+      try { await window.electronAPI.exportLog(filename, text); return; } catch { /* fallback */ }
     }
-    const text = exportLog();
     const blob = new Blob([text], { type: 'text/plain' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -177,16 +177,16 @@ export function LogsScreen(): React.ReactElement {
       </div>
 
       {/* Level summary strip */}
-      {counts.error > 0 && (
+      {(counts.error > 0 || counts.warn > 0) && (
         <div style={{
           display: 'flex', gap: 12, padding: '4px 12px',
-          background: 'var(--crit-tint)', boxShadow: 'inset 0 -1px 0 var(--separator)',
+          background: counts.error > 0 ? 'var(--crit-tint)' : 'var(--warn-tint)', boxShadow: 'inset 0 -1px 0 var(--separator)',
           flexShrink: 0,
         }}>
           {counts.error > 0 && <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--crit-text)' }}>{counts.error} errors</span>}
           {counts.warn > 0 && <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--warn-text)' }}>{counts.warn} warnings</span>}
           <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)' }}>
-            Session: {log.length > 0 ? `${((log[log.length - 1].timestamp - log[0].timestamp) / 60000).toFixed(1)} min` : '—'}
+            Session: {log.length > 0 ? `${((log[0].timestamp - log[log.length - 1].timestamp) / 60000).toFixed(1)} min` : '—'}
           </span>
         </div>
       )}

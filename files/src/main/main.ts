@@ -87,9 +87,16 @@ const storage = new StorageService(undefined, (message) =>
 // array unboundedly (see eval/performance PRF-001 / eval/security SEC-004).
 const SESSION_LOG_MAX = 5000;
 
+// Last connection status sent, so a reloaded renderer (ErrorBoundary's
+// "Reload renderer") can ask for it instead of assuming "disconnected".
+let lastStatus: unknown = { status: 'disconnected' };
+
 function sendToRenderer(channel: string, data: unknown): void {
+  if (channel === 'obd:connection-status') lastStatus = data;
   mainWindow?.webContents.send(channel, data);
 }
+
+ipcMain.handle('obd:get-status', () => lastStatus);
 
 function addLog(entry: LogEntry): void {
   sessionLog.push(entry);
@@ -539,7 +546,9 @@ ipcMain.handle('obd:decode-vin', async (_event, { vin }: { vin: string }) => {
   }
 });
 
-ipcMain.handle('session:export-log', async (_event, { filename }: { filename: string }) => {
+// `text` is the renderer's log (it includes the user's markers, which never
+// reach main); main's own log is the fallback.
+ipcMain.handle('session:export-log', async (_event, { filename, text }: { filename: string; text?: string }) => {
   const { filePath } = await dialog.showSaveDialog(mainWindow!, {
     defaultPath: filename,
     filters: [{ name: 'Log files', extensions: ['log', 'txt'] }],
@@ -547,7 +556,7 @@ ipcMain.handle('session:export-log', async (_event, { filename }: { filename: st
 
   if (!filePath) return;
 
-  const lines = sessionLog.map(e => {
+  const lines = typeof text === 'string' ? text : sessionLog.map(e => {
     const ts = new Date(e.timestamp).toISOString();
     return `${ts}\t${e.level.toUpperCase().padEnd(5)}\t${e.message}`;
   }).join('\n');

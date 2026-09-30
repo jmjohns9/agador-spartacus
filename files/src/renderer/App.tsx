@@ -40,7 +40,7 @@ declare global {
       checkModules: () => Promise<ModuleState[]>;
       readPcmIds: () => Promise<PcmReadResult>;
       onPcmProgress: (cb: (p: { done: number; total: number }) => void) => () => void;
-      exportLog: (filename: string) => Promise<void>;
+      exportLog: (filename: string, text?: string) => Promise<void>;
       exportCSV: (data: string, filename: string) => Promise<void>;
       getAppearance: () => Promise<Appearance>;
       setAppearance: (a: Appearance) => Promise<Appearance>;
@@ -48,6 +48,7 @@ declare global {
       onDTCResult: (cb: (d: DTCCode[]) => void) => () => void;
       onModuleState: (cb: (m: ModuleState) => void) => () => void;
       onConnectionStatus: (cb: (s: { status: string; protocol?: string; adapterInfo?: string }) => void) => () => void;
+      getStatus: () => Promise<{ status: string; protocol?: string; adapterInfo?: string }>;
       onLogEntry: (cb: (e: LogEntry) => void) => () => void;
       onVINDetected: (cb: (vin: string) => void) => () => void;
       claudeAsk: (payload: { question: string; context: unknown; history: unknown }) =>
@@ -150,6 +151,12 @@ export function App(): React.ReactElement {
       }),
     ];
 
+    // A reloaded renderer starts at "disconnected" while main may still be
+    // connected; ask main for the current status once listeners are in place.
+    window.electronAPI.getStatus?.()
+      .then(s => { if (s.status !== 'disconnected') setConnectionStatus(s.status as any, s.protocol, s.adapterInfo); })
+      .catch(() => {/* keep the default */});
+
     return () => cleanups.forEach(fn => fn?.());
   }, []);
 
@@ -180,7 +187,9 @@ export function App(): React.ReactElement {
             Object.entries(liveData).map(([pid, r]) => [pid, { value: r.value, timestamp: r.timestamp }])
           ),
         };
-        window.electronAPI.storage.saveFreezeFrame(ff).catch(() => {/* non-blocking */});
+        window.electronAPI.storage.saveFreezeFrame(ff)
+          .then(() => useAppStore.getState().freezeFramesChanged())
+          .catch(() => {/* non-blocking */});
       }
     }
   }, [dtcs]);

@@ -115,7 +115,7 @@ Whichever you choose, fix I-12: today a clear is reported as successful on "NO D
 | I-12 | **(Fixed, wave 2.) Nothing prevents two operations from using the adapter at once.** A PCM read, discovery, VIN read, DTC scan or poll can interleave with headers on. For example, polling restarts in the middle of a PCM read, or Clear goes out with the PCM header. | `main/main.ts:372-393,467-513` | A-03, B-18 |
 | I-13 | **(Fixed, wave 2.) A late adapter reply is credited to the next command** after a timeout, so every later reply is out of step with its command. Partly unverified. | `elm327Commander.ts:243-247,320-326` | B-11 |
 | I-14 | **(Resolved: Clear DTCs removed, see D-1.) Clear DTCs problems:** it reports success on "NO DATA" (the positive reply is `44`), the list and MIL banner never refresh afterwards, and failures are silent. | `obdProtocolManager.ts:298`, `main.ts:476-479`, `DTCScreen.tsx:242-247` | A-14, B-14, D-02 |
-| I-15 | **"Reload renderer" after a crash shows Disconnected** while main is still connected, because main never re-sends the status. | `ErrorBoundary.tsx`, `main.ts` | C-16 |
+| I-15 | **(Fixed, wave 3.) "Reload renderer" after a crash shows Disconnected** while main is still connected, because main never re-sends the status. | `ErrorBoundary.tsx`, `main.ts` | C-16 |
 
 ### Data storage
 
@@ -130,18 +130,18 @@ Whichever you choose, fix I-12: today a clear is reported as successful on "NO D
 
 | ID | Problem | Where | Source |
 |---|---|---|---|
-| I-20 | **I/M readiness is fabricated:** all 10 monitors show "Ready" whenever connected, because PID 0101 is never read. | `HealthScreen.tsx:260-281` | C-10 |
-| I-21 | **Every engine shutdown raises a "Rapid voltage drop — parasitic draw" alert.** The trend has no time base (it looks at the last 10 value changes). The "min window" labels are wrong too. The Electrical chart labels render at about 20px because the SVG `viewBox` scales by about 1.9×. | `appStore.ts:424-434`, `ElectricalScreen.tsx:72-93`, `ParasiteScreen.tsx:99` | C-05, C-12, D-11 |
-| I-22 | **The discharge-rate thresholds are 1000× too high** (V/min versus mV/min), so the drain warning never fires. | `ElectricalScreen.tsx:115-221` | C-06 |
-| I-23 | **Three conditional-hook ternaries are left** (Live:289, Engine:288, Electrical:322). This is the same bug class as the crash fixed earlier, and they will crash once 012A is polled. | as listed | C-07 |
-| I-24 | **Live LTFT Bank 1 is always shown as a warning,** because it has no neutral case. | `LiveScreen.tsx:139` | C-08 |
-| I-25 | **The Engine MAP verdict compares psi against a kPa threshold,** so it always says "good vacuum". | `EngineScreen.tsx:79,185` | C-09 |
-| I-26 | **Transmission data is wrong:** the RPM-at-60 table is wrong, the TCC slip estimate assumes 4th gear, and 4L60-E content shows for every vehicle. | `TransmissionScreen.tsx:66-201` | C-14 |
-| I-27 | **HVAC treats readings at or below 0 °F as "no reading".** Winter ambient temperatures disappear. | `HVACScreen.tsx:37-141` | C-15 |
-| I-28 | **The Session log "Tail" button scrolls to the *oldest* entry,** and the session duration shows as negative. | `LogsScreen.tsx:59-63,189` | D-06 |
-| I-29 | **The TXT log export leaves out the user's markers,** because it exports main's log rather than the renderer's. | `LogsScreen.tsx:73-79` | D-07 |
-| I-30 | **The same code reported in two modes duplicates React keys,** so its rows expand together. The freeze-frame button never enables for codes found during the current visit. | `DTCScreen.tsx:212,218,372` | D-03, D-04 |
-| I-31 | **The EcuBus UDS tab offers reset, write and flash services and fakes positive replies.** For example, `11 01 → 51 01 OK` tells the user the ECU was hard-reset. It sends nothing today. | `EcuBusScreen.tsx:23-48,331-352` | D-09 |
+| I-20 | **(Fixed, wave 3.) I/M readiness is fabricated:** all 10 monitors show "Ready" whenever connected, because PID 0101 is never read. | `HealthScreen.tsx:260-281` | C-10 |
+| I-21 | **(Fixed, wave 3.) Every engine shutdown raises a "Rapid voltage drop — parasitic draw" alert.** The trend has no time base (it looks at the last 10 value changes). The "min window" labels are wrong too. The Electrical chart labels render at about 20px because the SVG `viewBox` scales by about 1.9×. | `appStore.ts:424-434`, `ElectricalScreen.tsx:72-93`, `ParasiteScreen.tsx:99` | C-05, C-12, D-11 |
+| I-22 | **(Fixed, wave 3.) The discharge-rate thresholds are 1000× too high** (V/min versus mV/min), so the drain warning never fires. | `ElectricalScreen.tsx:115-221` | C-06 |
+| I-23 | **(Fixed, wave 3.) Three conditional-hook ternaries are left** (Live:289, Engine:288, Electrical:322). This is the same bug class as the crash fixed earlier, and they will crash once 012A is polled. | as listed | C-07 |
+| I-24 | **(Fixed, wave 3.) Live LTFT Bank 1 is always shown as a warning,** because it has no neutral case. | `LiveScreen.tsx:139` | C-08 |
+| I-25 | **(Fixed, wave 3.) The Engine MAP verdict compares psi against a kPa threshold,** so it always says "good vacuum". | `EngineScreen.tsx:79,185` | C-09 |
+| I-26 | **(Fixed, wave 3.) Transmission data is wrong:** the RPM-at-60 table is wrong, the TCC slip estimate assumes 4th gear, and 4L60-E content shows for every vehicle. | `TransmissionScreen.tsx:66-201` | C-14 |
+| I-27 | **(Fixed, wave 3.) HVAC treats readings at or below 0 °F as "no reading".** Winter ambient temperatures disappear. | `HVACScreen.tsx:37-141` | C-15 |
+| I-28 | **(Fixed, wave 3.) The Session log "Tail" button scrolls to the *oldest* entry,** and the session duration shows as negative. | `LogsScreen.tsx:59-63,189` | D-06 |
+| I-29 | **(Fixed, wave 3.) The TXT log export leaves out the user's markers,** because it exports main's log rather than the renderer's. | `LogsScreen.tsx:73-79` | D-07 |
+| I-30 | **(Fixed, wave 3.) The same code reported in two modes duplicates React keys,** so its rows expand together. The freeze-frame button never enables for codes found during the current visit. | `DTCScreen.tsx:212,218,372` | D-03, D-04 |
+| I-31 | **(Fixed, wave 3.) The EcuBus UDS tab offers reset, write and flash services and fakes positive replies.** For example, `11 01 → 51 01 OK` tells the user the ECU was hard-reset. It sends nothing today. | `EcuBusScreen.tsx:23-48,331-352` | D-09 |
 
 ### Performance
 
@@ -260,7 +260,7 @@ Whichever you choose, fix I-12: today a clear is reported as successful on "NO D
 - I-11, I-12 and I-13.
 - Test gap 6.
 
-**Wave 3: screens telling the truth.**
+**Wave 3: screens telling the truth.** **Done 2026-09-29:** I-15, I-20 to I-31 (I-23 by removing the Electrical 0149 tile; the others were fixed in wave 1), the Compare snapshot cap, and test gap 7. Screen verdicts live in `renderer/logic/verdicts.ts`. The Module monitor still has no wake detection behind it.
 - C-1.
 - I-20 to I-31.
 - The UI half of I-14, and I-15.

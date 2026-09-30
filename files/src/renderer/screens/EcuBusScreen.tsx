@@ -20,31 +20,19 @@ const SUB_TABS: { id: EcuBusSubTab; icon: string; label: string }[] = [
   { id: 'doip',     icon: 'ti-network',        label: 'DoIP' },
 ];
 
+// Read-only services only. The app never changes a control module, so reset,
+// clear, security access, communication control, write, I/O control, routine
+// control, download/transfer and DTC-setting services are not offered (and
+// ELM327Commander refuses them if anything ever tried to send one).
 const UDS_SERVICES: UDSService[] = [
   { sid: 0x10, name: 'DiagnosticSessionControl', shortName: 'DSC', description: 'Switch ECU diagnostic session',
-    subFunctions: [{ id: 0x01, name: 'Default' }, { id: 0x02, name: 'Programming' }, { id: 0x03, name: 'Extended' }] },
-  { sid: 0x11, name: 'ECUReset', shortName: 'ER', description: 'Reset ECU',
-    subFunctions: [{ id: 0x01, name: 'Hard reset' }, { id: 0x02, name: 'Key off/on' }, { id: 0x03, name: 'Soft reset' }] },
-  { sid: 0x14, name: 'ClearDiagnosticInformation', shortName: 'CDI', description: 'Clear stored DTCs' },
+    subFunctions: [{ id: 0x01, name: 'Default' }, { id: 0x03, name: 'Extended' }] },
   { sid: 0x19, name: 'ReadDTCInformation', shortName: 'RDTCI', description: 'Read DTC info from ECU',
     subFunctions: [{ id: 0x01, name: 'By status mask' }, { id: 0x02, name: 'By DTC mask' }, { id: 0x06, name: 'Extended record' }] },
   { sid: 0x22, name: 'ReadDataByIdentifier', shortName: 'RDBI', description: 'Read data from ECU by DID' },
   { sid: 0x23, name: 'ReadMemoryByAddress', shortName: 'RMBA', description: 'Read ECU memory at address' },
-  { sid: 0x27, name: 'SecurityAccess', shortName: 'SA', description: 'Unlock ECU security level',
-    subFunctions: [{ id: 0x01, name: 'Request seed (L1)' }, { id: 0x02, name: 'Send key (L1)' }, { id: 0x03, name: 'Request seed (L2)' }] },
-  { sid: 0x28, name: 'CommunicationControl', shortName: 'CC', description: 'Enable/disable ECU communication',
-    subFunctions: [{ id: 0x00, name: 'Enable TX/RX' }, { id: 0x01, name: 'Enable RX, disable TX' }, { id: 0x03, name: 'Disable TX/RX' }] },
-  { sid: 0x2E, name: 'WriteDataByIdentifier', shortName: 'WDBI', description: 'Write data to ECU by DID' },
-  { sid: 0x2F, name: 'InputOutputControlByIdentifier', shortName: 'IOCBI', description: 'Control ECU I/O' },
-  { sid: 0x31, name: 'RoutineControl', shortName: 'RC', description: 'Execute ECU routine',
-    subFunctions: [{ id: 0x01, name: 'Start' }, { id: 0x02, name: 'Stop' }, { id: 0x03, name: 'Request results' }] },
-  { sid: 0x34, name: 'RequestDownload', shortName: 'RD', description: 'Initiate firmware download' },
-  { sid: 0x36, name: 'TransferData', shortName: 'TD', description: 'Transfer firmware block' },
-  { sid: 0x37, name: 'RequestTransferExit', shortName: 'RTE', description: 'Complete firmware transfer' },
   { sid: 0x3E, name: 'TesterPresent', shortName: 'TP', description: 'Keep session alive',
     subFunctions: [{ id: 0x00, name: 'With response' }, { id: 0x80, name: 'Without response' }] },
-  { sid: 0x85, name: 'ControlDTCSetting', shortName: 'CDTCS', description: 'Enable/disable DTC storage',
-    subFunctions: [{ id: 0x01, name: 'On' }, { id: 0x02, name: 'Off' }] },
 ];
 
 const NRC_CODES: Record<number, string> = {
@@ -325,14 +313,14 @@ function UDSClientTab(): React.ReactElement {
   const [didInput, setDidInput] = useState('F190');
   const [subFunc, setSubFunc] = useState(0);
   const [payloadHex, setPayloadHex] = useState('');
-  const [history, setHistory] = useState<{ ts: number; req: string; res: string; positive: boolean; service: string }[]>([]);
+  const [history, setHistory] = useState<{ ts: number; req: string; res: string; service: string }[]>([]);
   const [testerPresentActive, setTesterPresentActive] = useState(false);
 
   const handleSend = () => {
     const now = Date.now();
     let reqBytes = [selectedService.sid];
     if (selectedService.subFunctions && subFunc) reqBytes.push(subFunc);
-    if (selectedService.sid === 0x22 || selectedService.sid === 0x2E) {
+    if (selectedService.sid === 0x22) {
       const d = parseInt(didInput, 16);
       reqBytes.push((d >> 8) & 0xFF, d & 0xFF);
     }
@@ -341,14 +329,10 @@ function UDSClientTab(): React.ReactElement {
     }
     const reqStr = reqBytes.map(hexByte).join(' ');
 
-    // Simulate a positive response
-    const posRes = [selectedService.sid + 0x40, ...reqBytes.slice(1)];
-    if (selectedService.sid === 0x22) {
-      // Simulate some return data
-      posRes.push(...[0x31, 0x47, 0x43, 0x45, 0x4B, 0x31, 0x39, 0x54, 0x30, 0x34, 0x45, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36]);
-    }
-    const resStr = posRes.map(hexByte).join(' ');
-    setHistory(prev => [...prev, { ts: now, req: reqStr, res: resStr, positive: true, service: selectedService.shortName }]);
+    // This tab is not connected to the adapter: record the request only.
+    // It used to invent a positive reply (and a VIN), which read as if the
+    // ECU had answered.
+    setHistory(prev => [...prev, { ts: now, req: reqStr, res: 'Not sent (demo)', service: selectedService.shortName }]);
   };
 
   return (
@@ -444,7 +428,7 @@ function UDSClientTab(): React.ReactElement {
               )}
 
               {/* DID input for RDBI/WDBI */}
-              {(selectedService.sid === 0x22 || selectedService.sid === 0x2E) && (
+              {selectedService.sid === 0x22 && (
                 <div>
                   <div style={{ ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>DID</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -509,9 +493,9 @@ function UDSClientTab(): React.ReactElement {
                       <tr key={i}>
                         <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)' }}>{timestamp(h.ts)}</td>
                         <td style={TD_STYLE}><Badge label={h.service} variant="info" /></td>
-                        <td style={TD_STYLE}><Badge label={h.positive ? 'OK' : 'NRC'} variant={h.positive ? 'ok' : 'crit'} /></td>
+                        <td style={TD_STYLE}><Badge label="Demo" variant="muted" /></td>
                         <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.req}</td>
-                        <td style={{ ...TD_STYLE, ...NUMERIC, color: h.positive ? 'var(--ok-text)' : 'var(--crit-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.res}</td>
+                        <td style={{ ...TD_STYLE, ...NUMERIC, color: 'var(--label-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.res}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1007,7 +991,6 @@ const QUICK_ACTIONS: { label: string; tab: EcuBusSubTab; icon: string }[] = [
   { label: 'Scan DTCs', tab: 'uds', icon: 'ti-bug' },
   { label: 'Monitor CAN', tab: 'can', icon: 'ti-route' },
   { label: 'Tester present', tab: 'uds', icon: 'ti-heartbeat' },
-  { label: 'ECU reset', tab: 'uds', icon: 'ti-refresh' },
 ];
 
 export function EcuBusScreen(): React.ReactElement {
@@ -1054,14 +1037,12 @@ export function EcuBusScreen(): React.ReactElement {
         </>
       )}
 
-      {connectionStatus !== 'connected' && (
-        <div style={{ padding: '8px 12px 0', flexShrink: 0 }}>
-          <AlertBanner
-            variant="info"
-            message="Connect to an adapter first. EcuBus requires a live connection to send CAN/UDS frames."
-          />
-        </div>
-      )}
+      <div style={{ padding: '8px 12px 0', flexShrink: 0 }}>
+        <AlertBanner
+          variant="info"
+          message="Demo only: these tabs show sample data and never send anything to the vehicle."
+        />
+      </div>
 
       {/* Content */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: 12, gap: 0 }}>
