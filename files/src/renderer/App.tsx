@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useAppStore, vehicleDisplayName, selectActiveDTCCount, ScreenId } from './store/appStore';
-import { buildThemeCSS, FONTS, TYPE } from './theme/theme';
-import { GLOBAL_CSS } from './theme/globalStyles';
+import { FONTS, TYPE } from './theme/theme';
 import { Sidebar } from './components/shell/Sidebar';
 import { Toolbar } from './components/shell/Toolbar';
 import { shortcutFor, readSidebarPref, writeSidebarPref } from './components/shell/shellLogic';
@@ -229,7 +228,6 @@ export function App(): React.ReactElement {
   const Screen = SCREENS[activeScreen];
   const openDTC        = React.useCallback(() => setActiveScreen('dtc'), [setActiveScreen]);
   const openConnection = React.useCallback(() => setActiveScreen('connect'), [setActiveScreen]);
-  const themeCSS       = React.useMemo(() => `${buildThemeCSS()}\n${GLOBAL_CSS}`, []);
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: FONTS.ui, ...TYPE.body, color: 'var(--label)' }}> {/* style-ok: app root font */}
@@ -252,7 +250,6 @@ export function App(): React.ReactElement {
           <Screen />
         </main>
       </div>
-      <style>{themeCSS}</style>
     </div>
   );
 }

@@ -63,7 +63,7 @@ export function Metric({
           {label}
         </span>
         {staleAt !== undefined && (
-          <span title={stale ? 'No update in the last few seconds' : 'Live'} aria-label={stale ? 'stale reading' : 'live reading'}
+          <span title={stale ? 'No update in the last few seconds' : 'Live'} role="img" aria-label={stale ? 'stale reading' : 'live reading'}
             style={{ width: 6, height: 6, borderRadius: 3, flexShrink: 0, background: stale ? 'var(--label-3)' : 'var(--ok)' }} />
         )}
         {tooltip && <Tooltip content={tooltip} />}

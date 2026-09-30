@@ -11,6 +11,15 @@ export function ConnectionItem({ onOpenConnection }: { onOpenConnection: () => v
   const [open, setOpen] = useState(false);
   const [rate, setRate] = useState({ livePIDs: 0, perSec: '0.0' });
   const ref = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  // Keyboard users land in the dialog when it opens and back on the toolbar
+  // item when it closes
+  useEffect(() => {
+    if (open) dialogRef.current?.focus();
+    else if (document.activeElement === document.body || dialogRef.current?.contains(document.activeElement)) triggerRef.current?.focus();
+  }, [open]);
 
   // Rate is only computed while the popover is open (cheap when closed).
   useEffect(() => {
@@ -43,6 +52,7 @@ export function ConnectionItem({ onOpenConnection }: { onOpenConnection: () => v
     <div ref={ref} style={{ position: 'relative' }} className="no-drag">
       <button
         className="toolbar-item"
+        ref={triggerRef}
         aria-haspopup="dialog" aria-expanded={open}
         onClick={() => setOpen(o => !o)}
         style={{ ...TYPE.body, display: 'flex', alignItems: 'center', gap: 6, height: 28, padding: '0 10px', border: 'none', borderRadius: RADIUS.control, background: 'transparent', color: 'var(--label)' }}
@@ -52,7 +62,7 @@ export function ConnectionItem({ onOpenConnection }: { onOpenConnection: () => v
         {protocol && <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>{protocol}</span>}
       </button>
       {open && (
-        <div role="dialog" aria-label="Connection details" style={{
+        <div role="dialog" aria-label="Connection details" ref={dialogRef} tabIndex={-1} style={{
           position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 300, width: 260,
           padding: 12, borderRadius: RADIUS.panel,
           background: 'var(--elevated)', border: '0.5px solid var(--separator)',

@@ -31,7 +31,7 @@ function Row({ item, active, onSelect, badge, alert }: {
         style={{ fontSize: 16, width: 18, textAlign: 'center', color: alert ? 'var(--crit-text)' : 'var(--accent-text)' }} />
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
       {badge ? (
-        <span aria-label={`${badge} active codes`} style={{
+        <span role="img" aria-label={`${badge} active codes`} style={{
           ...TYPE.caption, ...NUMERIC, fontWeight: WEIGHT.semibold,
           minWidth: 18, height: 16, padding: '0 5px', borderRadius: 8,
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',

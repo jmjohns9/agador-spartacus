@@ -233,6 +233,7 @@ export function DataLoggerScreen(): React.ReactElement {
             key={pid}
             size="sm"
             variant={selectedPIDs.includes(pid) ? 'primary' : 'secondary'}
+            aria-pressed={selectedPIDs.includes(pid)}
             disabled={isRecording}
             onClick={() => togglePID(pid)}
           >

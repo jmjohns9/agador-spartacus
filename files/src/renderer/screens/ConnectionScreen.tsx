@@ -91,7 +91,7 @@ function VehicleEditor(): React.ReactElement {
       <Card>
         {!editing ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <i className="ti ti-car" style={{ fontSize: 22, color: 'var(--accent)', flexShrink: 0 }} />
+            <i className="ti ti-car" style={{ fontSize: 22, color: 'var(--accent)', flexShrink: 0 }} aria-hidden />
             <div style={{ flex: 1 }}>
               <div style={{ ...TYPE.headline, color: 'var(--label)' }}>
                 {vehicleDisplayName(vehicle)}
@@ -464,6 +464,7 @@ export function ConnectionScreen(): React.ReactElement {
                       </>
                     }
                     onClick={() => setSelectedPort(port.path)}
+                    pressed={selectedPort === port.path}
                   />
                 ))}
               </Card>
@@ -515,7 +516,7 @@ export function ConnectionScreen(): React.ReactElement {
                 background: 'var(--ok-tint)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <i className="ti ti-cpu" style={{ fontSize: 22, color: 'var(--ok-text)' }} />
+                <i className="ti ti-cpu" style={{ fontSize: 22, color: 'var(--ok-text)' }} aria-hidden />
               </div>
 
               {/* Description */}

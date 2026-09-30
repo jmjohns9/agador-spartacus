@@ -315,6 +315,25 @@ export function AssistantScreen(): React.ReactElement {
     : [];
 
 
+  // Menu keyboard: focus the first item on open, arrows move, Escape closes
+  // and returns focus to the button that opened it
+  useEffect(() => {
+    if (showMenu) menuRef.current?.querySelector<HTMLElement>('[role^="menuitem"]')?.focus();
+  }, [showMenu]);
+  const onMenuKey = (e: React.KeyboardEvent) => {
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]') ?? []);
+    const i = items.indexOf(document.activeElement as HTMLElement);
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowMenu(false);
+      menuRef.current?.querySelector<HTMLElement>('[aria-haspopup="menu"]')?.focus();
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const next = e.key === 'ArrowDown' ? (i + 1) % items.length : (i - 1 + items.length) % items.length;
+      items[next]?.focus();
+    }
+  };
+
   const currentModelLabel = config?.models.find(m => m.id === config.model)?.label ?? config?.model ?? '';
 
   return (
@@ -371,7 +390,7 @@ export function AssistantScreen(): React.ReactElement {
             aria-expanded={showMenu}
           />
           {showMenu && (
-            <div role="menu" style={{
+            <div role="menu" aria-label="More actions" onKeyDown={onMenuKey} style={{
               position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 300,
               background: 'var(--elevated)', borderRadius: RADIUS.card,
               boxShadow: 'inset 0 0 0 0.5px var(--separator), 0 8px 24px var(--shadow)',
