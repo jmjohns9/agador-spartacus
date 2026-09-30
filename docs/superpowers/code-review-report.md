@@ -270,7 +270,22 @@ Whichever you choose, fix I-12: today a clear is reported as successful on "NO D
 - I-32 to I-36.
 - C-3.
 
-**Wave 5: refinements and cleanup.** All Minor items:
+**Wave 5: refinements and cleanup.** **Done 2026-09-30**, except as listed below. All Minor items:
 - delete the dead files;
 - rewrite `files/README.md`;
 - the accessibility pass.
+
+---
+
+## Status after all five waves (2026-09-30)
+
+Every Critical and Important finding is fixed, and so are the Minor ones except:
+
+- **B-21, GMT800 module addresses.** Not changed: the review could not verify the published Class II addresses, and the Module monitor has no wake detection that uses them yet. Check them against GM service information before building that feature.
+- **I-18, storage writes.** The JSON store is parsed once and cached, but each save still serialises the whole file on the main thread. Moving recordings to their own files, or making SQLite the default, is a larger change.
+- **Module monitor wake detection.** Module status stays "Unknown": the app never measures whether a module is awake. This is new work, not a fix.
+- **EcuBus-Pro.** The tabs remain a clearly labelled demo that sends nothing.
+- **Not verified on hardware:** the Mode 3C checksum handling (I-9) and the adapter reset after a PCM read (I-11) need a check against a real P01/P59 PCM; the Docker image was not built (no Docker on the development machine).
+
+Tests: 120 in `npm test` (2 SQLite cases skip under plain Node; all 8 storage tests pass under `npm run test:electron`), up from 33 before the review.
+
