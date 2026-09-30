@@ -1,9 +1,14 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 
-module.exports = {
-  mode: process.env.NODE_ENV === 'production' ? 'production' : 'development',
-  target: 'electron-renderer',
+// `npm run build` passes --mode production (minified React, no source maps);
+// `npm run watch:renderer` passes --mode development. The renderer runs with
+// contextIsolation and no Node integration, so it is a plain web target.
+module.exports = (_env, argv) => {
+  const production = argv.mode === 'production';
+  return {
+  mode: production ? 'production' : 'development',
+  target: 'web',
   entry: './src/renderer/index.tsx',
   output: {
     filename: 'renderer.js',
@@ -49,5 +54,8 @@ module.exports = {
       filename: 'index.html',
     }),
   ],
-  devtool: 'source-map',
+  devtool: production ? false : 'source-map',
+  // Loaded from disk by Electron, not over a network: web size hints don't apply
+  performance: { hints: false },
+  };
 };

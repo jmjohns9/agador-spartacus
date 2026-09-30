@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme } from 'electron';
 import * as path from 'path';
+import { pathToFileURL } from 'url';
 import { EventEmitter } from 'events';
 import { execFile } from 'child_process';
 import { ELM327Commander } from '../core/elm327Commander';
@@ -21,6 +22,27 @@ const { SerialPort } = require('serialport') as { SerialPort: any };
 
 let mainWindow: BrowserWindow | null = null;
 
+// ─── Renderer trust boundary ──────────────────────────────────────────────────
+// The only page allowed to use the IPC surface is the app's own index.html in
+// the main window's top frame. Anything else (a navigated-away page, a
+// dropped file, a subframe) is refused before its handler runs.
+const APP_URL = pathToFileURL(path.join(__dirname, '../renderer/index.html')).href;
+
+function isAppSender(e: Electron.IpcMainInvokeEvent): boolean {
+  const frame = e.senderFrame;
+  return !!frame && !!mainWindow && frame === mainWindow.webContents.mainFrame && frame.url.split('#')[0] === APP_URL;
+}
+
+function handle<A extends unknown[], R>(
+  channel: string,
+  fn: (e: Electron.IpcMainInvokeEvent, ...args: A) => R,
+): void {
+  ipcMain.handle(channel, (e, ...args) => {
+    if (!isAppSender(e)) throw new Error(`Refused ${channel}: request did not come from the app window`);
+    return fn(e, ...(args as A));
+  });
+}
+
 function createWindow(): void {
   // Apply the saved override before the window exists so vibrancy and
   // prefers-color-scheme are correct on the very first frame.
@@ -41,20 +63,23 @@ function createWindow(): void {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      // The preload only requires 'electron', so it runs sandboxed
+      sandbox: true,
     },
     title: 'Project Agador Spartacus',
   });
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
 
-  // Load renderer
-  if (process.env.NODE_ENV === 'development') {
-    mainWindow.loadURL('http://localhost:3000');
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
-  }
+  // Never leave the app's page: dropping a file or URL onto the window, or a
+  // link in rendered text, would otherwise navigate it, and the new page would
+  // inherit the preload's API. The app opens no windows of its own.
+  mainWindow.webContents.on('will-navigate', (e, url) => {
+    if (url.split('#')[0] !== APP_URL) e.preventDefault();
+  });
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+  mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 
   mainWindow.on('closed', () => { mainWindow = null; });
 }
@@ -96,7 +121,7 @@ function sendToRenderer(channel: string, data: unknown): void {
   mainWindow?.webContents.send(channel, data);
 }
 
-ipcMain.handle('obd:get-status', () => lastStatus);
+handle('obd:get-status', () => lastStatus);
 
 function addLog(entry: LogEntry): void {
   sessionLog.push(entry);
@@ -413,16 +438,16 @@ function startOBDManager(gen: number, commander: ELM327Commander): void {
 
 // ─── Appearance ──────────────────────────────────────────────────────────────
 
-ipcMain.handle('app:get-appearance', () => loadAppearance(app.getPath('userData')));
+handle('app:get-appearance', () => loadAppearance(app.getPath('userData')));
 
-ipcMain.handle('app:set-appearance', (_event, value: unknown) => {
+handle('app:set-appearance', (_event, value: unknown) => {
   const appearance = parseAppearance(value);
   nativeTheme.themeSource = appearance;
   saveAppearance(app.getPath('userData'), appearance);
   return appearance;
 });
 
-ipcMain.handle('obd:list-ports', async () => {
+handle('obd:list-ports', async () => {
   try {
     const ports: Array<{ path: string; manufacturer?: string; serialNumber?: string; vendorId?: string }> = await SerialPort.list();
     return ports
@@ -449,7 +474,7 @@ ipcMain.handle('obd:list-ports', async () => {
   }
 });
 
-ipcMain.handle('obd:connect', async (_event, { port }: { port: string }) => {
+handle('obd:connect', async (_event, { port }: { port: string }) => {
   // Guard: never run two serial connect attempts at once (that causes "Cannot lock port")
   if (port !== 'SIMULATOR' && isConnecting) {
     addLog({ timestamp: Date.now(), level: 'warn', message: 'Connect ignored — a connection attempt is already in progress' });
@@ -466,7 +491,7 @@ ipcMain.handle('obd:connect', async (_event, { port }: { port: string }) => {
   }
 });
 
-ipcMain.handle('obd:disconnect', async () => {
+handle('obd:disconnect', async () => {
   const gen = await endSession();
   addLog({ timestamp: Date.now(), level: 'info', message: 'Session disconnected — port released' });
   // A connect that arrived while the port was closing owns the status now
@@ -474,7 +499,7 @@ ipcMain.handle('obd:disconnect', async () => {
   sendToRenderer('obd:connection-status', { status: 'disconnected' as ConnectionStatus });
 });
 
-ipcMain.handle('obd:scan-dtc', async () => {
+handle('obd:scan-dtc', async () => {
   const mgr = obd;
   if (!mgr) return [];
   const dtcs = await mgr.scanDTCs();
@@ -484,7 +509,7 @@ ipcMain.handle('obd:scan-dtc', async () => {
   return dtcs;
 });
 
-ipcMain.handle('pcm:read-ids', async (): Promise<PcmReadResult> => {
+handle('pcm:read-ids', async (): Promise<PcmReadResult> => {
   if (!elm) return { ok: false, error: 'Not connected to an adapter.' };
   if (simulatorMode) {
     return { ok: false, error: 'PCM identity is read from the physical module — not available in simulator mode.' };
@@ -520,14 +545,14 @@ ipcMain.handle('pcm:read-ids', async (): Promise<PcmReadResult> => {
   return obd ? obd.exclusive(run) : run();
 });
 
-ipcMain.handle('obd:check-modules', async () => {
+handle('obd:check-modules', async () => {
   // Runtime wake detection is done by monitoring PID responses. The renderer
   // seeds its module list from the resolved platform profile; for the simulator
   // (a GMT800 vehicle) we return that platform's module map.
   return simulatorMode ? GMT800.modules : [];
 });
 
-ipcMain.handle('obd:decode-vin', async (_event, { vin }: { vin: string }) => {
+handle('obd:decode-vin', async (_event, { vin }: { vin: string }) => {
   try {
     const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/${encodeURIComponent(vin)}?format=json`);
     const json: any = await res.json();
@@ -548,7 +573,7 @@ ipcMain.handle('obd:decode-vin', async (_event, { vin }: { vin: string }) => {
 
 // `text` is the renderer's log (it includes the user's markers, which never
 // reach main); main's own log is the fallback.
-ipcMain.handle('session:export-log', async (_event, { filename, text }: { filename: string; text?: string }) => {
+handle('session:export-log', async (_event, { filename, text }: { filename: string; text?: string }) => {
   const { filePath } = await dialog.showSaveDialog(mainWindow!, {
     defaultPath: filename,
     filters: [{ name: 'Log files', extensions: ['log', 'txt'] }],
@@ -571,7 +596,7 @@ ipcMain.handle('session:export-log', async (_event, { filename, text }: { filena
 // controller is enough. Cancel aborts the fetch mid-stream.
 let activeAskController: AbortController | null = null;
 
-ipcMain.handle('claude:ask', async (_event, { question, context, history }: {
+handle('claude:ask', async (_event, { question, context, history }: {
   question: string; context: SessionContext; history: ChatTurn[];
 }) => {
   activeAskController?.abort();
@@ -587,13 +612,13 @@ ipcMain.handle('claude:ask', async (_event, { question, context, history }: {
   }
 });
 
-ipcMain.handle('claude:cancel', async () => {
+handle('claude:cancel', async () => {
   activeAskController?.abort();
   activeAskController = null;
   return true;
 });
 
-ipcMain.handle('claude:get-config', async () => {
+handle('claude:get-config', async () => {
   const cfg = loadClaudeConfig();
   // Never send the full key back to the renderer — just enough to show status
   return {
@@ -606,7 +631,7 @@ ipcMain.handle('claude:get-config', async () => {
   };
 });
 
-ipcMain.handle('claude:set-config', async (_event, { apiKey, model, customSystemPrompt }: {
+handle('claude:set-config', async (_event, { apiKey, model, customSystemPrompt }: {
   apiKey?: string; model?: string; customSystemPrompt?: string;
 }) => {
   const updates: { apiKey?: string; model?: string; customSystemPrompt?: string } = {};
@@ -617,7 +642,7 @@ ipcMain.handle('claude:set-config', async (_event, { apiKey, model, customSystem
   return true;
 });
 
-ipcMain.handle('claude:export-chat', async (_event, { markdown, filename }: { markdown: string; filename: string }) => {
+handle('claude:export-chat', async (_event, { markdown, filename }: { markdown: string; filename: string }) => {
   const { filePath } = await dialog.showSaveDialog(mainWindow!, {
     defaultPath: filename,
     filters: [{ name: 'Markdown', extensions: ['md', 'txt'] }],
@@ -628,7 +653,7 @@ ipcMain.handle('claude:export-chat', async (_event, { markdown, filename }: { ma
   return true;
 });
 
-ipcMain.handle('session:export-csv', async (_event, { data, filename }: { data: string; filename: string }) => {
+handle('session:export-csv', async (_event, { data, filename }: { data: string; filename: string }) => {
   const { filePath } = await dialog.showSaveDialog(mainWindow!, {
     defaultPath: filename,
     filters: [{ name: 'CSV files', extensions: ['csv'] }],
@@ -641,27 +666,27 @@ ipcMain.handle('session:export-csv', async (_event, { data, filename }: { data: 
 
 // ─── Storage service ──────────────────────────────────────────────────────────
 
-ipcMain.handle('storage:get-config',  ()                        => storage.getConfig());
-ipcMain.handle('storage:set-config',  (_e: Electron.IpcMainInvokeEvent, u: Partial<import('../shared/types').StorageConfig>) => { storage.setConfig(u); return true; });
-ipcMain.handle('storage:migrate',     (_e: Electron.IpcMainInvokeEvent, { to }: { to: 'local' | 'sqlite' }) => { storage.migrate(to); return true; });
-ipcMain.handle('storage:get-info',    ()                        => storage.getInfo());
-ipcMain.handle('storage:open-data-folder', () => shell.openPath(app.getPath('userData')));
+handle('storage:get-config',  ()                        => storage.getConfig());
+handle('storage:set-config',  (_e: Electron.IpcMainInvokeEvent, u: Partial<import('../shared/types').StorageConfig>) => { storage.setConfig(u); return true; });
+handle('storage:migrate',     (_e: Electron.IpcMainInvokeEvent, { to }: { to: 'local' | 'sqlite' }) => { storage.migrate(to); return true; });
+handle('storage:get-info',    ()                        => storage.getInfo());
+handle('storage:open-data-folder', () => shell.openPath(app.getPath('userData')));
 
-ipcMain.handle('storage:save-snapshot',    (_e: Electron.IpcMainInvokeEvent, snap: import('../shared/types').SessionSnapshot) => storage.saveSnapshot(snap));
-ipcMain.handle('storage:get-snapshots',    ()                        => storage.getSnapshots());
-ipcMain.handle('storage:delete-snapshot',  (_e: Electron.IpcMainInvokeEvent, { id }: { id: string }) => { storage.deleteSnapshot(id); return true; });
+handle('storage:save-snapshot',    (_e: Electron.IpcMainInvokeEvent, snap: import('../shared/types').SessionSnapshot) => storage.saveSnapshot(snap));
+handle('storage:get-snapshots',    ()                        => storage.getSnapshots());
+handle('storage:delete-snapshot',  (_e: Electron.IpcMainInvokeEvent, { id }: { id: string }) => { storage.deleteSnapshot(id); return true; });
 
-ipcMain.handle('storage:save-recording',   (_e: Electron.IpcMainInvokeEvent, rec: import('../shared/types').DataRecording) => storage.saveRecording(rec));
-ipcMain.handle('storage:get-recordings',   ()                        => storage.getRecordings());
-ipcMain.handle('storage:delete-recording', (_e: Electron.IpcMainInvokeEvent, { id }: { id: string }) => { storage.deleteRecording(id); return true; });
+handle('storage:save-recording',   (_e: Electron.IpcMainInvokeEvent, rec: import('../shared/types').DataRecording) => storage.saveRecording(rec));
+handle('storage:get-recordings',   ()                        => storage.getRecordings());
+handle('storage:delete-recording', (_e: Electron.IpcMainInvokeEvent, { id }: { id: string }) => { storage.deleteRecording(id); return true; });
 
-ipcMain.handle('storage:save-freeze-frame',   (_e: Electron.IpcMainInvokeEvent, ff: import('../shared/types').FreezeFrame) => storage.saveFreezeFrame(ff));
-ipcMain.handle('storage:get-freeze-frames',   (_e: Electron.IpcMainInvokeEvent, { dtcCode }: { dtcCode?: string } = {}) => storage.getFreezeFrames(dtcCode));
-ipcMain.handle('storage:delete-freeze-frame', (_e: Electron.IpcMainInvokeEvent, { id }: { id: string }) => { storage.deleteFreezeFrame(id); return true; });
+handle('storage:save-freeze-frame',   (_e: Electron.IpcMainInvokeEvent, ff: import('../shared/types').FreezeFrame) => storage.saveFreezeFrame(ff));
+handle('storage:get-freeze-frames',   (_e: Electron.IpcMainInvokeEvent, { dtcCode }: { dtcCode?: string } = {}) => storage.getFreezeFrames(dtcCode));
+handle('storage:delete-freeze-frame', (_e: Electron.IpcMainInvokeEvent, { id }: { id: string }) => { storage.deleteFreezeFrame(id); return true; });
 
 // ─── PDF report ───────────────────────────────────────────────────────────────
 
-ipcMain.handle('report:generate', async (_event: Electron.IpcMainInvokeEvent, payload: unknown) => {
+handle('report:generate', async (_event: Electron.IpcMainInvokeEvent, payload: unknown) => {
   const os = require('os') as typeof import('os');
   const outDir = path.join(os.homedir(), 'Documents', 'AgadorSpartacus');
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
@@ -689,7 +714,7 @@ ipcMain.handle('report:generate', async (_event: Electron.IpcMainInvokeEvent, pa
   return outPath;
 });
 
-ipcMain.handle('carsxe:decode', async (_event: Electron.IpcMainInvokeEvent, { code }: { code: string }) => {
+handle('carsxe:decode', async (_event: Electron.IpcMainInvokeEvent, { code }: { code: string }) => {
   const apiKey = process.env.CARSXE_API_KEY ?? '';
   if (!apiKey) return { ok: false, error: 'CARSXE_API_KEY not set' };
   try {

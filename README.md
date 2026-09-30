@@ -285,8 +285,7 @@ ATRV     Live battery voltage
 ```bash
 git clone git@github.com:jmjohns9/agador-spartacus.git
 cd agador-spartacus/files
-npm install
-npx electron-rebuild --only better-sqlite3   # match the SQLite module to Electron's ABI
+npm install      # postinstall rebuilds better-sqlite3 and serialport for Electron
 npm run dev
 ```
 
@@ -312,9 +311,9 @@ The simulator emulates a 2004 Silverado J1850 VPW session:
 | Command | What it does |
 |---|---|
 | `npm run dev` | Watch-mode development with hot reload |
-| `npm run build` | Compile the main process and bundle the renderer |
-| `npm run dist` | Build and package a macOS `.dmg` / `.zip` via electron-builder |
-| `npm run typecheck` | `tsc --noEmit` across the project |
+| `npm run build` | Compile the main process and bundle the renderer (production mode, no source maps) |
+| `npm run dist` | Build and package a macOS `.dmg` / `.zip` into `release/` via electron-builder |
+| `npm run typecheck` | Type-check the renderer and the main process (against its own tsconfig) |
 | `npm test` | Run the `node:test` suites |
 | `npm run lint:styles <files>` | Check screens against the design-system styling rules |
 | `npm run gen:dtcs` | Regenerate `dtcCatalog.generated.ts` |
@@ -342,16 +341,21 @@ The reference adapter is the **OBDLink MX+**: Bluetooth Classic, an ELM327 v1.5 
 The container runs the full Electron GUI under Xvfb and exposes it over noVNC. This is useful for CI, for a headless shop machine, or for driving the app from a browser.
 
 ```bash
-docker compose up --build
-# then open http://<host>:6080/vnc.html
+VNC_PASSWORD=choose-one docker compose up --build
+# then open http://localhost:6080/vnc.html and enter that password
 ```
+
+The noVNC session is full control of the app (the stored Claude API key, saved sessions, a connected vehicle), so:
+
+- It is published on `127.0.0.1` only. To reach it from another machine, use an SSH tunnel (`ssh -L 6080:localhost:6080 host`) rather than opening the port.
+- It always has a password. Without `VNC_PASSWORD`, one is generated and printed by `docker compose logs obd-review`.
+- The app runs as the image's unprivileged `node` user.
 
 Details worth knowing:
 
-- `/dev` is live-mounted, so an adapter plugged in after startup is visible without a restart.
-- `device_cgroup_rules` grant access to USB-serial (`c 188:*`) and CDC-ACM (`c 166:*`) character devices, and the container joins `dialout`.
-- App data (`storage.db`, `storage.json`) persists in the `obd-data` volume, mounted at `/root/.config`.
-- The image rebuilds **only** `better-sqlite3` and `serialport` against Electron's ABI. electron-builder's default full-tree rebuild would also hit `ttf2woff2`, a dev-only dependency of the icon tooling that doesn't compile against Electron 42's V8.
+- `/dev` is live-mounted, so an adapter plugged in after startup is visible without a restart. `device_cgroup_rules` limit the container to USB-serial (`c 188:*`) and CDC-ACM (`c 166:*`) character devices, and the user is in `dialout`.
+- App data (`storage.db`, `storage.json`) persists in the `obd-data` volume, mounted at `/home/node/.config`. A volume created by an earlier image (mounted at `/root/.config`) is not picked up automatically.
+- `npm ci`'s postinstall rebuilds the runtime native modules, `better-sqlite3` and `serialport`, for Electron's ABI. Renderer-only packages are devDependencies, so the icon tooling's `ttf2woff2` addon, which doesn't compile against Electron 42, is not rebuilt.
 
 ---
 
@@ -449,7 +453,8 @@ Currently enforced:
 - Input from the adapter is bounded on the ELM327 receive path.
 - Report data is escaped before it reaches `innerHTML`.
 - The session log is a ring buffer capped at 5000 entries, so long sessions don't grow without limit.
-- The Content Security Policy no longer allows any remote font or style origin. The UI loads nothing from the network.
+- The main window is sandboxed, can't navigate away from the app's page or open windows, and every IPC handler refuses requests that don't come from the app's own page.
+- The Content Security Policy allows only the app's own scripts, styles, fonts and images (no `eval`, no remote origins). The UI loads nothing from the network.
 
 Known open findings are tracked in `eval/security/last-run-summary.md` rather than hidden. As of the last run there are 7 medium and 7 low findings. They cover DoS bounds on parsing that the adapter controls, prompt-injection fencing in the assistant context, Electron sandbox hardening, and rate limiting on metered third-party proxies.
 

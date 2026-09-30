@@ -80,7 +80,7 @@ Whichever you choose, fix I-12: today a clear is reported as successful on "NO D
   - Write atomically: write a temp file, `fsync` it, then rename it over the original.
   - If a file can't be parsed, quarantine it and never write over it.
 
-### C-3: Docker exposes the app over VNC with no password, on every network interface, with host `/dev` mounted
+### C-3: (Fixed) Docker exposes the app over VNC with no password, on every network interface, with host `/dev` mounted
 - **Source:** A-02.
 - **Where:** `docker/entrypoint.sh:13,15`, `docker-compose.yml`.
 - **Problem:** anyone on the network gets full control of the app. They can use the stored Claude API key, read saved sessions, and press Clear DTCs on a connected vehicle.
@@ -147,21 +147,21 @@ Whichever you choose, fix I-12: today a clear is reported as successful on "NO D
 
 | ID | Problem | Where | Source |
 |---|---|---|---|
-| I-32 | **`App` subscribes to the whole store,** so every PID reading, even an unchanged value, re-renders the shell and the active screen. `updatePIDReading` mutates state in place and still notifies, and that mutation also corrupts history timestamps. The Data Logger calls `JSON.stringify` on every recording on every render. | `App.tsx:109-117`, `appStore.ts:266-289`, `DataLoggerScreen.tsx:224` | C-02, C-04, C-13 |
+| I-32 | **(Fixed, wave 4.) `App` subscribes to the whole store,** so every PID reading, even an unchanged value, re-renders the shell and the active screen. `updatePIDReading` mutates state in place and still notifies, and that mutation also corrupts history timestamps. The Data Logger calls `JSON.stringify` on every recording on every render. | `App.tsx:109-117`, `appStore.ts:266-289`, `DataLoggerScreen.tsx:224` | C-02, C-04, C-13 |
 
 ### Build and packaging
 
 | ID | Problem | Where | Source |
 |---|---|---|---|
-| I-33 | **`npm run build`, `npm run dist` and Docker ship a development-mode bundle:** 2.2 MB, the React dev build, and source maps. | `package.json:10-11`, `webpack.renderer.js:5`, `Dockerfile:26-30` | A-07 |
-| I-34 | **Renderer-only packages are in `dependencies`,** including the 120 MB icon font that pulls in the native `ttf2woff2`. `npm run dist` likely fails or bloats as a result. There is also no Electron rebuild for `better-sqlite3` in development. | `package.json:53-63` | A-08, A-21, D-24 |
-| I-35 | **electron-builder's output folder is the app's own `dist/`,** so it can pack its own previous output. Unverified. | `package.json` build config | A-09 |
+| I-33 | **(Fixed, wave 4.) `npm run build`, `npm run dist` and Docker ship a development-mode bundle:** 2.2 MB, the React dev build, and source maps. | `package.json:10-11`, `webpack.renderer.js:5`, `Dockerfile:26-30` | A-07 |
+| I-34 | **(Fixed, wave 4.) Renderer-only packages are in `dependencies`,** including the 120 MB icon font that pulls in the native `ttf2woff2`. `npm run dist` likely fails or bloats as a result. There is also no Electron rebuild for `better-sqlite3` in development. | `package.json:53-63` | A-08, A-21, D-24 |
+| I-35 | **(Fixed, wave 4.) electron-builder's output folder is the app's own `dist/`,** so it can pack its own previous output. Unverified. | `package.json` build config | A-09 |
 
 ### Security hardening
 
 | ID | Problem | Where | Source |
 |---|---|---|---|
-| I-36 | **The main window is not sandboxed (`sandbox: false`, which it doesn't need).** It has no navigation or window-open guard, and IPC handlers don't check who sent a request. Dropping a file or URL onto the window would give a foreign page the full `electronAPI`. | `main.ts:40-45`, all `ipcMain.handle` | A-10 |
+| I-36 | **(Fixed, wave 4.) The main window is not sandboxed (`sandbox: false`, which it doesn't need).** It has no navigation or window-open guard, and IPC handlers don't check who sent a request. Dropping a file or URL onto the window would give a foreign page the full `electronAPI`. | `main.ts:40-45`, all `ipcMain.handle` | A-10 |
 
 ---
 
@@ -266,7 +266,7 @@ Whichever you choose, fix I-12: today a clear is reported as successful on "NO D
 - The UI half of I-14, and I-15.
 - Test gap 7.
 
-**Wave 4: performance, build and security.**
+**Wave 4: performance, build and security.** **Done 2026-09-29:** I-32 to I-36 and C-3, plus A-11's CSP and dev-URL items. The Docker changes are not build-tested (no Docker on the dev machine). `npm run dist` itself was not run.
 - I-32 to I-36.
 - C-3.
 

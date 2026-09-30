@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAppStore } from '../store/appStore';
 import { DataRecording } from '../../shared/types';
 import {
@@ -59,6 +59,13 @@ export function DataLoggerScreen(): React.ReactElement {
   }, []);
 
   useEffect(() => { loadRecordings(); }, []);
+
+  // Serialising every recording just to show its size is expensive; do it
+  // once per load, not on every render.
+  const recordingBytes = useMemo(
+    () => new Map(recordings.map(r => [r.id, JSON.stringify(r).length])),
+    [recordings],
+  );
 
   const clearTimers = () => {
     if (timerRef.current)   clearInterval(timerRef.current);
@@ -248,7 +255,7 @@ export function DataLoggerScreen(): React.ReactElement {
               subtext={
                 `${fmtDuration(rec.durationMs)} · ${rec.sampleCount.toLocaleString()} samples · ${rec.pids.length} PIDs` +
                 (rec.markers.length > 0 ? ` · ${rec.markers.length} markers` : '') +
-                ` · ${fmtBytes(JSON.stringify(rec).length)}`
+                ` · ${fmtBytes(recordingBytes.get(rec.id) ?? 0)}`
               }
               value=""
               badge={

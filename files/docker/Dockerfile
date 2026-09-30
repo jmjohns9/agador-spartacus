@@ -12,25 +12,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
 
+# Run as the image's unprivileged "node" user, in the dialout group so it can
+# open USB-serial adapters.
+RUN usermod -aG dialout node && mkdir -p /app && chown node:node /app
 WORKDIR /app
+USER node
 
-COPY package*.json ./
+# npm ci's postinstall (electron-builder install-app-deps) rebuilds the
+# runtime native modules, better-sqlite3 and serialport, for Electron's ABI.
+# Renderer-only packages are devDependencies, so the icon tooling's
+# ttf2woff2 addon (which doesn't build against Electron 42) is not touched.
+COPY --chown=node:node package*.json ./
 RUN npm ci
 
-COPY . .
-
-# Rebuild only the native modules Electron actually loads at runtime, rather
-# than electron-builder's default of rebuilding everything in node_modules —
-# that sweep also hits ttf2woff2, a dev-only transitive dep of the icon
-# tooling whose old nan-based addon doesn't compile against Electron 42's V8.
-RUN npm run build \
-    && npx electron-rebuild -f --only better-sqlite3,serialport
+COPY --chown=node:node . .
+RUN npm run build
 
 ENV DISPLAY=:99
 ENV NODE_ENV=production
 EXPOSE 6080
 
-COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY --chown=node:node docker/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/app/entrypoint.sh"]

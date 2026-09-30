@@ -1,6 +1,7 @@
 # Build artifacts
 files/node_modules/
 files/dist/
+files/release/
 files/build/
 
 # OS
