@@ -16,9 +16,14 @@ export function ConnectionItem({ onOpenConnection }: { onOpenConnection: () => v
 
   // Keyboard users land in the dialog when it opens and back on the toolbar
   // item when it closes
+  const wasOpen = useRef(false);
   useEffect(() => {
     if (open) dialogRef.current?.focus();
-    else if (document.activeElement === document.body || dialogRef.current?.contains(document.activeElement)) triggerRef.current?.focus();
+    // Only on an actual close: at startup the popover was never open
+    else if (wasOpen.current && (document.activeElement === document.body || dialogRef.current?.contains(document.activeElement))) {
+      triggerRef.current?.focus();
+    }
+    wasOpen.current = open;
   }, [open]);
 
   // Rate is only computed while the popover is open (cheap when closed).

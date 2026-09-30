@@ -307,11 +307,11 @@ function CANMonitorTab(): React.ReactElement {
 // ─── Sub-tab: UDS Client ─────────────────────────────────────────────────────
 
 function UDSClientTab(): React.ReactElement {
-  const [selectedService, setSelectedService] = useState<UDSService>(UDS_SERVICES[4]); // RDBI
+  const [selectedService, setSelectedService] = useState<UDSService>(() => UDS_SERVICES.find(x => x.sid === 0x22)!); // RDBI (by ID, not index)
   const [txId, setTxId] = useState('7E0');
   const [rxId, setRxId] = useState('7E8');
   const [didInput, setDidInput] = useState('F190');
-  const [subFunc, setSubFunc] = useState(0);
+  const [subFunc, setSubFunc] = useState(() => selectedService.subFunctions?.[0]?.id ?? 0);
   const [payloadHex, setPayloadHex] = useState('');
   const [history, setHistory] = useState<{ ts: number; req: string; res: string; service: string }[]>([]);
   const [testerPresentActive, setTesterPresentActive] = useState(false);
@@ -319,13 +319,17 @@ function UDSClientTab(): React.ReactElement {
   const handleSend = () => {
     const now = Date.now();
     let reqBytes = [selectedService.sid];
-    if (selectedService.subFunctions && subFunc) reqBytes.push(subFunc);
+    // Sub-function 0x00 is a real value (e.g. Tester present "with response")
+    if (selectedService.subFunctions) reqBytes.push(subFunc);
     if (selectedService.sid === 0x22) {
+      if (!/^[0-9A-F]{1,4}$/i.test(didInput.trim())) return;   // not a DID: build nothing
       const d = parseInt(didInput, 16);
       reqBytes.push((d >> 8) & 0xFF, d & 0xFF);
     }
     if (payloadHex.trim()) {
-      payloadHex.trim().split(/[\s,]+/).forEach(h => { const v = parseInt(h, 16); if (!isNaN(v)) reqBytes.push(v & 0xFF); });
+      const parts = payloadHex.trim().split(/[\s,]+/);
+      if (!parts.every(h => /^[0-9A-F]{1,2}$/i.test(h))) return;   // reject rather than drop bad bytes
+      parts.forEach(h => reqBytes.push(parseInt(h, 16)));
     }
     const reqStr = reqBytes.map(hexByte).join(' ');
 
@@ -636,8 +640,8 @@ function SignalsTab(): React.ReactElement {
     <>
       <SectionHeader>CAN signal decoder (DBC)</SectionHeader>
       <div style={{ display: 'flex', gap: 8, margin: '8px 0 12px' }}>
-        <Button size="sm" variant="secondary" icon="ti-file-import">Load DBC</Button>
-        <Button size="sm" variant="secondary" icon="ti-plus">Add signal</Button>
+        <Button size="sm" variant="secondary" icon="ti-file-import" disabled title="Not available in the demo">Load DBC</Button>
+        <Button size="sm" variant="secondary" icon="ti-plus" disabled title="Not available in the demo">Add signal</Button>
         <div style={{ flex: 1 }} />
         <Badge label="8 signals" variant="info" />
         <Badge label="4 messages" variant="muted" />
@@ -712,8 +716,8 @@ function ScriptTab(): React.ReactElement {
   return (
     <>
       <div style={{ display: 'flex', gap: 8, margin: '0 0 12px' }}>
-        <Button size="sm" variant="secondary" icon="ti-plus">New script</Button>
-        <Button size="sm" variant="secondary" icon="ti-file-import">Import</Button>
+        <Button size="sm" variant="secondary" icon="ti-plus" disabled title="Not available in the demo">New script</Button>
+        <Button size="sm" variant="secondary" icon="ti-file-import" disabled title="Not available in the demo">Import</Button>
         <div style={{ flex: 1 }} />
         <Badge label="TypeScript" variant="info" />
         <Badge label="CAPL-like API" variant="muted" />
@@ -730,7 +734,7 @@ function ScriptTab(): React.ReactElement {
               </span>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <Button size="sm" variant="primary" icon="ti-player-play" onClick={() => updateScript(script.id, { status: 'running', output: [...script.output, `[${new Date().toLocaleTimeString()}] Script started...`, `[${new Date().toLocaleTimeString()}] VIN: 1GCEK19T04E123456`, `[${new Date().toLocaleTimeString()}] Script completed.`], lastRun: Date.now() })}>
+              <Button size="sm" variant="primary" icon="ti-player-play" onClick={() => updateScript(script.id, { status: 'success', output: [...script.output, `[${new Date().toLocaleTimeString()}] Demo: scripts don't run and nothing is sent to the vehicle.`], lastRun: Date.now() })}>
                 Run
               </Button>
               <Button size="sm" variant="secondary" icon="ti-player-stop" onClick={() => updateScript(script.id, { status: 'idle' })}>Stop</Button>
@@ -805,9 +809,9 @@ function LINTab(): React.ReactElement {
       </div>
 
       <div style={{ display: 'flex', gap: 8, margin: '12px 0' }}>
-        <Button size="sm" variant="secondary" icon="ti-file-import">Load LDF</Button>
-        <Button size="sm" variant="secondary" icon="ti-file-export">Export LDF</Button>
-        <Button size="sm" variant="secondary" icon="ti-test-pipe">Conformance test</Button>
+        <Button size="sm" variant="secondary" icon="ti-file-import" disabled title="Not available in the demo">Load LDF</Button>
+        <Button size="sm" variant="secondary" icon="ti-file-export" disabled title="Not available in the demo">Export LDF</Button>
+        <Button size="sm" variant="secondary" icon="ti-test-pipe" disabled title="Not available in the demo">Conformance test</Button>
         <div style={{ flex: 1 }} />
         <Badge label="LIN 2.1" variant="info" />
         <Badge label="19.2 kbit/s" variant="muted" />
@@ -863,7 +867,7 @@ function DoIPTab(): React.ReactElement {
       </div>
 
       <div style={{ display: 'flex', gap: 8, margin: '12px 0' }}>
-        <Button size="sm" variant="primary" icon="ti-radar">Vehicle discovery</Button>
+        <Button size="sm" variant="primary" icon="ti-radar" disabled title="Not available in the demo">Vehicle discovery</Button>
         <div style={{ flex: 1 }} />
         <Badge label="ISO 13400" variant="info" />
         <Badge label="TCP/UDP" variant="muted" />
@@ -926,8 +930,8 @@ function DoIPTab(): React.ReactElement {
             </div>
           </div>
           <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-            <Button size="sm" variant="primary" icon="ti-plug-connected">Connect</Button>
-            <Button size="sm" variant="secondary" icon="ti-stethoscope">UDS via DoIP</Button>
+            <Button size="sm" variant="primary" icon="ti-plug-connected" disabled title="Not available in the demo">Connect</Button>
+            <Button size="sm" variant="secondary" icon="ti-stethoscope" disabled title="Not available in the demo">UDS via DoIP</Button>
           </div>
         </Card>
       )}
@@ -1013,9 +1017,6 @@ export function EcuBusScreen(): React.ReactElement {
           onChange={setSubTab}
         />
         <div style={{ flex: 1 }} />
-        <span style={{ ...TYPE.caption, color: 'var(--label-3)' }}>
-          Powered by EcuBus-Pro · Apache 2.0
-        </span>
       </div>
       <Divider />
 

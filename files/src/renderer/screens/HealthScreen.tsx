@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAppStore, selectBatteryVoltage, selectActiveDTCCount, selectParasiteRiskScore, selectVoltageTrend } from '../store/appStore';
-import { FreezeFrame, ReportPayload, LogEntry } from '../../shared/types';
+import { FreezeFrame, ReportPayload, LogEntry, PIDReading } from '../../shared/types';
 import {
   ScrollPane, SectionHeader, Grid, Card, Metric, Gauge, Badge, AlertBanner, Button, DataRow, EmptyState,
 } from '../components/layout/UIComponents';
@@ -8,6 +8,8 @@ import { connectionTone } from '../components/shell/shellLogic';
 import { readinessMonitors, isReading, batterySoC } from '../logic/verdicts';
 import { TYPE, NUMERIC, STATUS_TEXT } from '../theme/theme';
 import type { Status } from '../theme/theme';
+
+const NO_READINGS: PIDReading[] = [];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -47,7 +49,8 @@ export function HealthScreen(): React.ReactElement {
   const isGMT800     = platform.id === 'gmt800';
   const checklist    = useAppStore(s => s.checklist);
   const log          = useAppStore(s => s.log);
-  const atrvHistory  = useAppStore(s => s.history['ATRV'] ?? []);
+  // A shared empty array: a new [] per call made every store update re-render
+  const atrvHistory  = useAppStore(s => s.history['ATRV'] ?? NO_READINGS);
 
   const batteryV     = useAppStore(selectBatteryVoltage);
   const activeDTCs   = useAppStore(selectActiveDTCCount);
