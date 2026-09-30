@@ -483,32 +483,34 @@ ipcMain.handle('pcm:read-ids', async (): Promise<PcmReadResult> => {
     return { ok: false, error: 'PCM identity is read from the physical module — not available in simulator mode.' };
   }
 
-  // The read reprograms the adapter's header and turns headers on, which would
-  // corrupt PID parsing mid-flight. Take the bus, then give it back.
-  const mgr = obd;
-  const wasPolling = mgr !== null;
-  mgr?.stopPolling();
-  addLog({ timestamp: Date.now(), level: 'info', message: 'PCM identity read starting — PID polling paused' });
-
-  try {
-    const pcm = new PcmDiagnostics(elm);
-    const identity = await pcm.readIdentity((done, total) => {
-      sendToRenderer('pcm:read-progress', { done, total });
-    });
-    const found = identity.fields.filter(f => f.supported).length;
-    addLog({ timestamp: Date.now(), level: 'ok', message: `PCM identity read complete — ${found}/${identity.fields.length} blocks supported` });
-    return { ok: true, identity };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    addLog({ timestamp: Date.now(), level: 'error', message: `PCM identity read failed: ${msg}` });
-    return { ok: false, error: msg };
-  } finally {
-    // Only resume the session we paused — not one that was disconnected meanwhile
-    if (wasPolling && mgr && obd === mgr) {
-      mgr.startPolling();
-      addLog({ timestamp: Date.now(), level: 'info', message: 'PID polling resumed' });
-    }
+  // Mode 3C over Class II exists only on J1850 VPW (GM P01/P59 PCMs). On any
+  // other bus every block would time out (~30 s) for nothing.
+  const protocol = elm.getAdapterInfo().protocol ?? '';
+  if (!/VPW/i.test(protocol)) {
+    return { ok: false, error: `PCM identity needs a GM J1850 VPW vehicle; this one uses ${protocol || 'an unknown protocol'}.` };
   }
+
+  // The read turns headers on and aims the adapter at the PCM, which would
+  // corrupt anything else running on the bus. Take the bus for the whole read:
+  // polling, discovery, the VIN read and DTC scans wait until it is given back.
+  const commander = elm;
+  const run = async (): Promise<PcmReadResult> => {
+    addLog({ timestamp: Date.now(), level: 'info', message: 'PCM identity read starting — other adapter use paused' });
+    try {
+      const pcm = new PcmDiagnostics(commander);
+      const identity = await pcm.readIdentity((done, total) => {
+        sendToRenderer('pcm:read-progress', { done, total });
+      });
+      const found = identity.fields.filter(f => f.supported).length;
+      addLog({ timestamp: Date.now(), level: 'ok', message: `PCM identity read complete — ${found}/${identity.fields.length} blocks supported` });
+      return { ok: true, identity };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      addLog({ timestamp: Date.now(), level: 'error', message: `PCM identity read failed: ${msg}` });
+      return { ok: false, error: msg };
+    }
+  };
+  return obd ? obd.exclusive(run) : run();
 });
 
 ipcMain.handle('obd:check-modules', async () => {

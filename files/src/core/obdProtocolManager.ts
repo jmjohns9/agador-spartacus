@@ -21,36 +21,61 @@ export class OBDProtocolManager extends EventEmitter {
   private knownRanges = new Set<number>();
   private cycleCount = 0;
   private pollLoopRunning = false;
-  // True between startPolling() and stopPolling(). A DTC scan / VIN read /
-  // clear pauses the loop via pollingActive and only resumes it if polling is
-  // still wanted — otherwise a stopPolling() (disconnect) made mid-operation
+  // True between startPolling() and stopPolling(). An exclusive operation
+  // (see exclusive()) pauses the loop via pollingActive and only resumes it if
+  // polling is still wanted — otherwise a stopPolling() (disconnect) made mid-operation
   // was undone and the loop ran forever on a dead session.
   private pollingWanted = false;
+  // One owner of the adapter at a time. Discovery, VIN read, DTC scan and the
+  // PCM identity read take it; the poll loop stays stopped while it is held.
+  private busLock: Promise<void> = Promise.resolve();
+  private busHeld = false;
 
   constructor(elm: ELM327Commander) {
     super();
     this.elm = elm;
   }
 
+  // Run fn with sole use of the adapter: waits for any other exclusive
+  // operation, stops the poll loop after its in-flight command, and resumes
+  // polling afterwards only if it is still wanted (a stopPolling() made
+  // meanwhile, e.g. a disconnect, is not undone).
+  async exclusive<T>(fn: () => Promise<T>): Promise<T> {
+    const prev = this.busLock;
+    let release!: () => void;
+    this.busLock = new Promise<void>(r => (release = r));
+    await prev;
+    this.busHeld = true;
+    this.pollingActive = false;
+    while (this.pollLoopRunning) await this.sleep(5);
+    try {
+      return await fn();
+    } finally {
+      this.busHeld = false;
+      if (this.pollingWanted) {
+        this.pollingActive = true;
+        this.runPollLoop();
+      }
+      release();
+    }
+  }
+
   async refreshProtocol(): Promise<string> {
+    return this.exclusive(() => this.readProtocol());
+  }
+
+  private async readProtocol(): Promise<string> {
     const protocol = await this.elm.readProtocol();
     this.log(`Protocol refreshed: ${protocol}`);
     return protocol;
   }
 
   async readVIN(): Promise<string | null> {
-    const wasPolling = this.pollingActive;
-    this.pollingActive = false;
-    await this.sleep(300);
-
-    const vin = await this.elm.readVIN();
-    this.log(vin ? `VIN read: ${vin}` : 'VIN not available from ECM');
-
-    if (wasPolling && this.pollingWanted) {
-      this.pollingActive = true;
-      this.runPollLoop();
-    }
-    return vin;
+    return this.exclusive(async () => {
+      const vin = await this.elm.readVIN();
+      this.log(vin ? `VIN read: ${vin}` : 'VIN not available from ECM');
+      return vin;
+    });
   }
 
   // ── Discover which PIDs the vehicle supports ─────────────────────────────────
@@ -58,6 +83,10 @@ export class OBDProtocolManager extends EventEmitter {
   // bit of each mask says whether the next range exists. Masks from every ECU
   // that answers are merged, since the TCM supports PIDs the ECM doesn't.
   async discoverSupportedPIDs(): Promise<Set<string>> {
+    return this.exclusive(() => this.discover());
+  }
+
+  private async discover(): Promise<Set<string>> {
     for (let base = 0x00; base <= 0xE0; base += 0x20) {
       const rangePID = '01' + hex2(base);
       const resp = await this.elm.send(rangePID, 3000);
@@ -95,8 +124,9 @@ export class OBDProtocolManager extends EventEmitter {
 
   // ── Start the sequential polling loop ────────────────────────────────────────
   startPolling(): void {
-    if (this.pollingActive) return;
     this.pollingWanted = true;
+    // Held by an exclusive operation: it starts the loop when it releases
+    if (this.pollingActive || this.busHeld) return;
     this.pollingActive = true;
     this.cycleCount = 0;
     this.log('Sequential polling loop starting');
@@ -225,13 +255,10 @@ export class OBDProtocolManager extends EventEmitter {
   // error). A failed scan must not be reported as "no codes": that would wipe
   // the list and show a car with a stored P0300 as clean.
   async scanDTCs(): Promise<DTCCode[] | null> {
-    // Pause polling during DTC scan to avoid command collision
-    const wasPolling = this.pollingActive;
-    this.pollingActive = false;
+    return this.exclusive(() => this.scan());
+  }
 
-    // Wait for current poll cycle to finish
-    await this.sleep(300);
-
+  private async scan(): Promise<DTCCode[] | null> {
     const results: DTCCode[] = [];
     const failed: string[] = [];
 
@@ -255,12 +282,6 @@ export class OBDProtocolManager extends EventEmitter {
     this.log(failed.length
       ? `DTC scan failed (no answer to mode ${failed.join(', ')}) — codes on screen left unchanged`
       : `DTC scan complete — ${results.length} codes found`, failed.length ? 'warn' : 'info');
-
-    // Resume polling
-    if (wasPolling && this.pollingWanted) {
-      this.pollingActive = true;
-      this.runPollLoop();
-    }
 
     return failed.length ? null : results;
   }

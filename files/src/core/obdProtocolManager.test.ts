@@ -106,3 +106,39 @@ test('a DTC scan decodes codes from each mode', async () => {
   const dtcs = await mgr.scanDTCs();
   assert.deepEqual(dtcs?.map(d => `${d.code}:${d.status}`), ['P0300:active']);
 });
+
+test('no poll command goes out while an exclusive operation holds the bus', async (t) => {
+  const log: string[] = [];
+  let inside = false;
+  const sim = new ELM327Simulator();
+  const elm: ELM327Commander = new ELM327Commander((data) => {
+    const cmd = data.trim();
+    log.push(inside ? `IN:${cmd}` : cmd);
+    setTimeout(() => elm.onData(sim.respond(cmd)), 2);
+  });
+  const mgr = new OBDProtocolManager(elm);
+  t.after(() => mgr.stopPolling());
+  mgr.startPolling();
+  await sleep(40);
+  await mgr.exclusive(async () => {
+    inside = true;
+    mgr.startPolling();                   // e.g. discovery finishing on another path
+    await elm.send('ATH1', 100);
+    await sleep(60);                      // a poll loop running now would write here
+    await elm.send('ATH0', 100);
+    inside = false;
+  });
+  const during = log.filter(c => c.startsWith('IN:'));
+  assert.deepEqual(during, ['IN:ATH1', 'IN:ATH0']);
+  const before = log.length;
+  await sleep(100);
+  assert.ok(log.length > before, 'polling did not resume after the exclusive operation');
+});
+
+test('exclusive operations run one at a time', async () => {
+  const { mgr } = simulatedManager();
+  const order: string[] = [];
+  const op = (name: string) => mgr.exclusive(async () => { order.push(`${name}+`); await sleep(20); order.push(`${name}-`); });
+  await Promise.all([op('a'), op('b')]);
+  assert.deepEqual(order, ['a+', 'a-', 'b+', 'b-']);
+});

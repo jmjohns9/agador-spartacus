@@ -135,7 +135,13 @@ export class PcmDiagnostics {
    * have stopped PID polling first: headers-on breaks PID parsing, and the
    * request header targets the PCM rather than the broadcast address.
    */
+  private savedProtocol = '0';
+
   private async enterIdMode(): Promise<void> {
+    // Remember the negotiated protocol (ATDPN: "A2" = auto, found 2) so it can
+    // be restored without the adapter searching again.
+    const dpn = (await this.elm.send('ATDPN', 1000)).lines[0]?.trim() ?? '';
+    this.savedProtocol = /^A?([0-9A-C])$/i.exec(dpn)?.[1]?.toUpperCase() ?? '0';
     await this.elm.send('ATSP2', 2000);       // force SAE J1850 VPW
     await this.elm.send('ATAL', 1000);        // allow long (>7 byte) messages
     await this.elm.send('ATH1', 1000);        // headers on, so we can match 7C
@@ -143,11 +149,17 @@ export class PcmDiagnostics {
     await this.elm.send(`ATSH ${PCM_HEADER}`, 1000);
   }
 
-  /** Undo enterIdMode so the normal PID poll loop still works afterwards. */
+  /**
+   * Undo enterIdMode so the normal PID poll loop still works afterwards.
+   * ATH0/ATAR alone left the ATSH header aimed at the PCM, so every later
+   * poll and scan went physically addressed to it (and on CAN, to an ID no
+   * ECU listens on). ATD resets header, receive address and message length;
+   * the session's settings and protocol are then re-applied.
+   */
   private async restoreNormalMode(): Promise<void> {
-    await this.elm.send('ATH0', 1000);   // headers off
-    await this.elm.send('ATAR', 1000);   // automatic receive address
-    await this.elm.send('ATSP0', 2000);  // back to auto protocol detection
+    await this.elm.send('ATD', 2000);
+    for (const cmd of ['ATE0', 'ATL0', 'ATS0', 'ATH0', 'ATAT1']) await this.elm.send(cmd, 1000);
+    await this.elm.send(`ATSP${this.savedProtocol}`, 2000);
   }
 
   private async readBlock(block: number): Promise<number[] | null> {
@@ -163,11 +175,11 @@ export class PcmDiagnostics {
    * particular calibration does and does not expose.
    */
   async readIdentity(onProgress?: (done: number, total: number) => void): Promise<PcmIdentity> {
-    await this.enterIdMode();
     let done = 0;
     const bump = () => onProgress?.(++done, PCM_BLOCK_COUNT);
 
     try {
+      await this.enterIdMode();
       const fields: PcmField[] = [];
 
       for (const composite of COMPOSITE) {

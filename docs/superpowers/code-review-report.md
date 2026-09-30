@@ -66,13 +66,13 @@ Whichever you choose, fix I-12: today a clear is reported as successful on "NO D
 
 ## Critical
 
-### C-1: The Data Logger saves the same values in every sample
+### C-1: (Fixed) The Data Logger saves the same values in every sample
 - **Source:** C-01.
 - **Where:** `screens/DataLoggerScreen.tsx:33,57-72`.
 - **Problem:** the sampling interval reads the `liveData` captured when Record was clicked. It is a stale closure, so every sample is a copy of the first one, and the CSV and JSON exports look valid.
 - **Fix:** read `useAppStore.getState().liveData` inside each tick.
 
-### C-2: A corrupt `storage.json` resets to empty, and the next save wipes all saved data
+### C-2: (Fixed) A corrupt `storage.json` resets to empty, and the next save wipes all saved data
 - **Source:** A-01.
 - **Where:** `main/storageService.ts:20-35`.
 - **Problem:** the file is written with a non-atomic `writeFileSync`, and every parse error returns an empty store. A torn write (sleep, power loss, crash), followed by the next auto freeze-frame save, permanently erases all recordings, snapshots and freeze frames.
@@ -111,9 +111,9 @@ Whichever you choose, fix I-12: today a clear is reported as successful on "NO D
 
 | ID | Problem | Where | Source |
 |---|---|---|---|
-| I-11 | **The PCM read leaves the adapter aimed at the PCM.** `ATSH 6C 10 F0` is never reset, so every later poll, scan and Clear goes physically addressed to the PCM. On CAN this breaks polling until reconnect. The read is also offered on non-J1850 vehicles. | `pcmDiagnostics.ts:128-141`, `PcmScreen.tsx:92-97` | B-09, D-08, B-18 |
-| I-12 | **Nothing prevents two operations from using the adapter at once.** A PCM read, discovery, VIN read, DTC scan or poll can interleave with headers on. For example, polling restarts in the middle of a PCM read, or Clear goes out with the PCM header. | `main/main.ts:372-393,467-513` | A-03, B-18 |
-| I-13 | **A late adapter reply is credited to the next command** after a timeout, so every later reply is out of step with its command. Partly unverified. | `elm327Commander.ts:243-247,320-326` | B-11 |
+| I-11 | **(Fixed, wave 2.) The PCM read leaves the adapter aimed at the PCM.** `ATSH 6C 10 F0` is never reset, so every later poll, scan and Clear goes physically addressed to the PCM. On CAN this breaks polling until reconnect. The read is also offered on non-J1850 vehicles. | `pcmDiagnostics.ts:128-141`, `PcmScreen.tsx:92-97` | B-09, D-08, B-18 |
+| I-12 | **(Fixed, wave 2.) Nothing prevents two operations from using the adapter at once.** A PCM read, discovery, VIN read, DTC scan or poll can interleave with headers on. For example, polling restarts in the middle of a PCM read, or Clear goes out with the PCM header. | `main/main.ts:372-393,467-513` | A-03, B-18 |
+| I-13 | **(Fixed, wave 2.) A late adapter reply is credited to the next command** after a timeout, so every later reply is out of step with its command. Partly unverified. | `elm327Commander.ts:243-247,320-326` | B-11 |
 | I-14 | **(Resolved: Clear DTCs removed, see D-1.) Clear DTCs problems:** it reports success on "NO DATA" (the positive reply is `44`), the list and MIL banner never refresh afterwards, and failures are silent. | `obdProtocolManager.ts:298`, `main.ts:476-479`, `DTCScreen.tsx:242-247` | A-14, B-14, D-02 |
 | I-15 | **"Reload renderer" after a crash shows Disconnected** while main is still connected, because main never re-sends the status. | `ErrorBoundary.tsx`, `main.ts` | C-16 |
 
@@ -121,10 +121,10 @@ Whichever you choose, fix I-12: today a clear is reported as successful on "NO D
 
 | ID | Problem | Where | Source |
 |---|---|---|---|
-| I-16 | **Freeze frames are overwritten on every app launch** with the current, possibly engine-off or empty, live data. They are upserted by code, and the "known codes" set is empty at each start. They are also live snapshots, not real Mode 02 freeze frames. | `App.tsx:157-176`, `storageService.ts:202-217` | A-06, C-11, D-05 |
-| I-17 | **Migrating local → SQLite brings deleted items back** (old rows are never cleared), and migration errors are swallowed. | `storageService.ts:108-134`, `SettingsScreen.tsx:44-54` | A-05, D-10 |
-| I-18 | **Every storage call parses and rewrites the whole JSON file synchronously on the main thread,** and `getInfo` parses it 3 times. Large recordings freeze the gauges and can trip adapter timeouts. | `storageService.ts` | A-04 |
-| I-19 | **Leaving the Data Logger while recording leaks both timers,** and the samples grow without limit and are never saved. | `DataLoggerScreen.tsx:46-77` | C-03 |
+| I-16 | **(Fixed, wave 2.) Freeze frames are overwritten on every app launch** with the current, possibly engine-off or empty, live data. They are upserted by code, and the "known codes" set is empty at each start. They are also live snapshots, not real Mode 02 freeze frames. | `App.tsx:157-176`, `storageService.ts:202-217` | A-06, C-11, D-05 |
+| I-17 | **(Fixed, wave 2.) Migrating local → SQLite brings deleted items back** (old rows are never cleared), and migration errors are swallowed. | `storageService.ts:108-134`, `SettingsScreen.tsx:44-54` | A-05, D-10 |
+| I-18 | **(Partly fixed, wave 2: parsed once and cached.) Every storage call parses and rewrites the whole JSON file synchronously on the main thread,** and `getInfo` parses it 3 times. Large recordings freeze the gauges and can trip adapter timeouts. | `storageService.ts` | A-04 |
+| I-19 | **(Fixed, wave 2.) Leaving the Data Logger while recording leaks both timers,** and the samples grow without limit and are never saved. | `DataLoggerScreen.tsx:46-77` | C-03 |
 
 ### Screens showing wrong information
 
@@ -255,7 +255,7 @@ Whichever you choose, fix I-12: today a clear is reported as successful on "NO D
 - The protocol half of I-14.
 - Test gaps 1 to 5.
 
-**Wave 2: data safety and adapter integrity.**
+**Wave 2: data safety and adapter integrity.** **Done 2026-09-29:** C-2, I-11, I-12, I-13, I-16, I-17, I-19 and test gap 6; C-1 was fixed with I-19. I-18 is partly done (the store is cached and parsed once; saves still serialize the whole file on the main thread). I-11 still needs a check on a real P01/P59.
 - C-2, I-16, I-17, I-18 and I-19.
 - I-11, I-12 and I-13.
 - Test gap 6.

@@ -40,3 +40,31 @@ test('formatBlock', () => {
   assert.equal(formatBlock([87], 'percent'), '87%');
   assert.equal(formatBlock([0xAB, 0x01], 'hex'), 'AB 01');
 });
+
+import { PcmDiagnostics } from './pcmDiagnostics';
+import { ELM327Commander } from './elm327Commander';
+
+function recordingCommander(replies: Record<string, string> = {}): { elm: ELM327Commander; sent: string[] } {
+  const sent: string[] = [];
+  const elm: ELM327Commander = new ELM327Commander((data) => {
+    const cmd = data.trim();
+    sent.push(cmd);
+    setTimeout(() => elm.onData((replies[cmd] ?? (cmd.startsWith('AT') ? 'OK' : 'NO DATA')) + '\r\r>'), 1);
+  });
+  return { elm, sent };
+}
+
+test('after a PCM read the adapter is reset and back on the saved protocol', async () => {
+  const { elm, sent } = recordingCommander({ ATDPN: 'A2' });
+  await new PcmDiagnostics(elm).readIdentity();
+  const tail = sent.slice(sent.lastIndexOf('ATD'));
+  assert.deepEqual(tail, ['ATD', 'ATE0', 'ATL0', 'ATS0', 'ATH0', 'ATAT1', 'ATSP2']);
+  assert.ok(sent.indexOf('ATDPN') < sent.indexOf('ATSP2'), 'protocol was not saved before entering ID mode');
+});
+
+test('the adapter is restored even when the read throws', async () => {
+  const { elm, sent } = recordingCommander({ ATDPN: '6' });
+  const pcm = new PcmDiagnostics(elm);
+  await assert.rejects(pcm.readIdentity(() => { throw new Error('renderer gone'); }));
+  assert.deepEqual(sent.slice(-2), ['ATAT1', 'ATSP6']);
+});
