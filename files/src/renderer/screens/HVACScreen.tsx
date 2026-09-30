@@ -5,6 +5,7 @@ import {
 } from '../components/layout/UIComponents';
 import { TYPE, NUMERIC, STATUS_TEXT } from '../theme/theme';
 import type { Status } from '../theme/theme';
+import { isReading } from '../logic/verdicts';
 import { PID_MAP } from '../../core/pidCatalog';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -34,8 +35,11 @@ export function HVACScreen(): React.ReactElement {
   const isGMT800 = platform.id === 'gmt800';
   const rpm      = usePIDNum('010C');
 
-  const ambientF = usePIDNum('0146', 0);
-  const coolantF = usePIDNum('0105', 0);
+  // NaN until read: 0 °F and below are real winter readings, not "missing"
+  const ambientF = usePIDNum('0146', NaN);
+  const coolantF = usePIDNum('0105', NaN);
+  const hasAmbient = isReading(ambientF);
+  const hasCoolant = isReading(coolantF);
 
   // Timestamps lifted to top of component (hook rules)
   const coolantAt = useAppStore(s => s.liveData['0105']?.timestamp);
@@ -52,7 +56,7 @@ export function HVACScreen(): React.ReactElement {
   );
 
   // Delta between ambient and coolant — shows heater effectiveness
-  const heaterDelta = coolantF > 0 && ambientF > 0 ? coolantF - ambientF : 0;
+  const heaterDelta = hasCoolant && hasAmbient ? coolantF - ambientF : NaN;
   const coolantStatus: Status = coolantF > 230 ? 'crit' : coolantF > 215 ? 'warn' : 'neutral';
   // "Good" (delta > 100) is neutral, not colored — only the warn band stands out.
   const heaterDeltaStatus: Status = heaterDelta > 50 && heaterDelta <= 100 ? 'warn' : 'neutral';
@@ -65,11 +69,11 @@ export function HVACScreen(): React.ReactElement {
         <Metric
           size="hero"
           label="Coolant — heater source"
-          value={coolantF > 0 ? coolantF.toFixed(0) : '—'}
+          value={hasCoolant ? coolantF.toFixed(0) : '—'}
           unit="°F"
           status={coolantStatus}
           subtext={
-            coolantF <= 0 ? 'No reading' :
+            !hasCoolant ? 'No reading' :
             coolantF > 230 ? 'Overheating — stop and investigate' :
             coolantF > 215 ? 'High — monitor closely' :
             coolantF > 180 ? 'Normal operating range' :
@@ -82,7 +86,7 @@ export function HVACScreen(): React.ReactElement {
         <Metric
           size="hero"
           label="Ambient outside"
-          value={ambientF > 0 ? `${ambientF.toFixed(0)}` : '—'}
+          value={hasAmbient ? `${ambientF.toFixed(0)}` : '—'}
           unit="°F"
           subtext={engineOn ? 'Bumper sensor' : 'May be biased by engine heat'}
           spark={{ pid: '0146', color: 'var(--teal)' }}
@@ -91,7 +95,7 @@ export function HVACScreen(): React.ReactElement {
         <Metric
           size="hero"
           label="Heater effectiveness"
-          value={heaterDelta > 0 ? `+${heaterDelta.toFixed(0)}` : '—'}
+          value={isReading(heaterDelta) ? `${heaterDelta >= 0 ? '+' : ''}${heaterDelta.toFixed(0)}` : '—'}
           unit="°F delta"
           subtext={heaterDelta > 100 ? 'Strong heat available' : heaterDelta > 50 ? 'Moderate — still warming' : heaterDelta > 0 ? 'Low — coolant cold' : 'Coolant − ambient delta'}
           status={heaterDeltaStatus}
@@ -103,7 +107,7 @@ export function HVACScreen(): React.ReactElement {
       <SectionHeader>Temperature sensors</SectionHeader>
       <Grid cols={4}>
         <Gauge size="compact" label="Coolant" value={coolantF} max={240} unit="°F" />
-        <Gauge size="compact" label="Ambient" value={ambientF} max={120} unit="°F" />
+        <Gauge size="compact" label="Ambient" value={ambientF} min={-40} max={120} unit="°F" />
         <Metric
           size="compact"
           label="Intake air temp"
@@ -113,7 +117,7 @@ export function HVACScreen(): React.ReactElement {
         <Metric
           size="compact"
           label="Heater delta"
-          value={heaterDelta > 0 ? `+${heaterDelta.toFixed(0)} °F` : '—'}
+          value={isReading(heaterDelta) ? `${heaterDelta >= 0 ? '+' : ''}${heaterDelta.toFixed(0)} °F` : '—'}
           subtext="Coolant − ambient · higher = better"
           status={heaterDeltaStatus}
         />
@@ -128,7 +132,7 @@ export function HVACScreen(): React.ReactElement {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>Coolant supply</span>
               <span style={{ ...TYPE.body, ...NUMERIC, color: coolantF > 160 ? 'var(--label)' : STATUS_TEXT.warn }}>
-                {coolantF > 0 ? `${coolantF} °F` : '—'}
+                {hasCoolant ? `${coolantF} °F` : '—'}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -138,7 +142,7 @@ export function HVACScreen(): React.ReactElement {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>Status</span>
               <Badge
-                label={coolantF > 160 ? 'Heating available' : coolantF > 0 ? 'Warming up' : 'No data'}
+                label={!hasCoolant ? 'No data' : coolantF > 160 ? 'Heating available' : 'Warming up'}
                 variant={coolantF > 160 ? 'ok' : 'warn'}
               />
             </div>

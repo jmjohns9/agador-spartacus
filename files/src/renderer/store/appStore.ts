@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { voltageSeries, voltageTrend, dropMvPerMin } from '../logic/verdicts';
 import {
   ConnectionStatus, PIDReading, DTCCode, ModuleState,
   LogEntry, SessionMarker, FuseCircuit, ParasiticChecklistItem,
@@ -275,11 +276,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         return {};
       }
 
-      // Append to history ring buffer
+      // Append to history ring buffer. History gets its own copy: liveData's
+      // entry has its timestamp bumped in place on every unchanged reading, and
+      // sharing the object moved the history point's time along with it.
+      const point = { ...reading };
       const prevHistory = state.history[reading.pid] ?? [];
       const newHistory = prevHistory.length >= state.historyMaxPoints
-        ? [...prevHistory.slice(1), reading]
-        : [...prevHistory, reading];
+        ? [...prevHistory.slice(1), point]
+        : [...prevHistory, point];
 
       return {
         liveData: { ...state.liveData, [reading.pid]: reading },
@@ -404,10 +408,6 @@ export const selectBatteryVoltage = (s: AppState): number => {
   return typeof atrv?.value === 'number' ? atrv.value : 0;
 };
 
-export const selectRPM = (s: AppState): number => {
-  const r = s.liveData['010C'];
-  return typeof r?.value === 'number' ? r.value : 0;
-};
 
 export const selectActiveDTCCount = (s: AppState): number =>
   s.dtcs.filter(d => d.status === 'active').length;
@@ -421,14 +421,9 @@ export const selectParasiteRiskScore = (s: AppState): number => {
   return Math.min(10, (sleepFail * 3) + (voltDrift * 4) + (faultWeight * 1.5) + (Math.abs(ltftB1) > 7 ? 1 : 0));
 };
 
-export const selectVoltageTrend = (s: AppState): 'stable' | 'dropping' | 'critical' => {
-  const readings = s.history['ATRV'] ?? [];
-  if (readings.length < 10) return 'stable';
-  const recent = readings.slice(-10);
-  const first = recent[0].value as number;
-  const last = recent[recent.length - 1].value as number;
-  const dropV = first - last;
-  if (dropV > 0.05) return 'critical';
-  if (dropV > 0.02) return 'dropping';
-  return 'stable';
-};
+export const selectVoltageTrend = (s: AppState): 'stable' | 'dropping' | 'critical' =>
+  voltageTrend(voltageSeries(s.history['ATRV'] ?? [], s.liveData['ATRV']));
+
+/** Resting battery drain in mV/min over the last 30 min; null until measurable. */
+export const selectDropMvPerMin = (s: AppState): number | null =>
+  dropMvPerMin(voltageSeries(s.history['ATRV'] ?? [], s.liveData['ATRV']));

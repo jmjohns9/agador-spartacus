@@ -9,3 +9,4 @@ export type { MetricProps } from '../ui/Metric';
 export { Gauge } from '../ui/Gauge';
 export type { GaugeProps } from '../ui/Gauge';
 export { Sparkline } from '../ui/Sparkline';
+export { VoltageTimeline } from '../ui/VoltageTimeline';

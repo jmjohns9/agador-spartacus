@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
-import { useAppStore, selectBatteryVoltage, selectVoltageTrend } from '../store/appStore';
+import React from 'react';
+import { useAppStore, selectBatteryVoltage, selectVoltageTrend, selectDropMvPerMin } from '../store/appStore';
+import { dischargeStatus as statusForDrain } from '../logic/verdicts';
 import {
-  ScrollPane, SectionHeader, Grid, Card, Metric, Gauge, AlertBanner,
+  ScrollPane, SectionHeader, Grid, Card, Metric, Gauge, AlertBanner, VoltageTimeline,
 } from '../components/layout/UIComponents';
 import { batteryStatus } from '../components/shell/shellLogic';
 import { TYPE, NUMERIC, STATUS_TEXT } from '../theme/theme';
@@ -33,92 +34,16 @@ function voltageStatus(v: number): Status {
   return s === 'none' ? 'neutral' : s;
 }
 
-// ─── Voltage timeline mini-chart ──────────────────────────────────────────────
-
-const REFS: Array<{ v: number; label: string; status: Status; dim?: boolean }> = [
-  { v: 12.6, label: '12.6 Full', status: 'ok' },
-  { v: 12.4, label: '12.4 50%',  status: 'warn' },
-  { v: 12.0, label: '12.0 Crit', status: 'crit' },
-  { v: 11.8, label: '11.8 Dead', status: 'crit', dim: true },
-];
-
-function VoltageTimeline(): React.ReactElement {
-  const history = useAppStore(s => s.history['ATRV'] ?? []);
-  const recent  = history.slice(-120);
-
-  const W = 500, H = 100;
-  const V_MIN = 11.6, V_MAX = 13.0;
-
-  const yOf = (v: number) => H - ((v - V_MIN) / (V_MAX - V_MIN)) * H;
-
-  if (recent.length < 2) {
-    return (
-      <div style={{ height: H + 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>Collecting voltage history…</span>
-      </div>
-    );
-  }
-
-  const values = recent.map(r => typeof r.value === 'number' ? r.value : 12.6);
-  const pts    = values.map((v, i) => `${(i / (values.length - 1)) * W},${yOf(v)}`).join(' ');
-
-  const lastV  = values[values.length - 1];
-  const firstV = values[0];
-  const drift  = lastV - firstV;
-  const lineColor = lastV < 12.0 ? 'var(--crit)' : lastV < 12.4 ? 'var(--warn)' : 'var(--purple)';
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <svg width="100%" viewBox={`-40 -8 ${W + 100} ${H + 20}`} style={{ overflow: 'visible' }}>
-        {/* Reference lines */}
-        {REFS.map(({ v, label, status, dim }) => (
-          <g key={v}>
-            <line x1={0} y1={yOf(v)} x2={W} y2={yOf(v)} stroke={`var(--${status})`} strokeOpacity={dim ? 0.4 : 0.8} strokeWidth="0.7" strokeDasharray="4,3" />
-            <text x={W + 4} y={yOf(v) + 4} style={{ ...NUMERIC, ...TYPE.caption, fill: STATUS_TEXT[status] }} opacity={dim ? 0.6 : 1}>{label}</text>
-          </g>
-        ))}
-        {/* Voltage trace */}
-        <polyline points={pts} fill="none" stroke={lineColor} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
-        {/* Current value dot */}
-        {values.length > 0 && (
-          <circle cx={W} cy={yOf(lastV)} r="4" fill={lineColor} stroke="var(--grouped)" strokeWidth="1.5" />
-        )}
-        {/* Y axis labels */}
-        {[11.6, 11.8, 12.0, 12.2, 12.4, 12.6, 12.8, 13.0].map(v => (
-          <text key={v} x={-4} y={yOf(v) + 3} style={{ ...NUMERIC, ...TYPE.caption, fill: 'var(--label-3)' }} textAnchor="end">{v}</text>
-        ))}
-      </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>
-          {recent.length} samples · {Math.round(recent.length * 0.5 / 60)} min window
-        </span>
-        <span style={{ ...TYPE.caption, ...NUMERIC, color: drift < -0.05 ? STATUS_TEXT.crit : drift < -0.02 ? STATUS_TEXT.warn : 'var(--label-2)' }}>
-          Drift: {drift >= 0 ? '+' : ''}{drift.toFixed(3)} V
-        </span>
-        <span style={{ ...TYPE.caption, ...NUMERIC, color: lineColor }}>Current: {lastV.toFixed(3)} V</span>
-      </div>
-    </div>
-  );
-}
-
 // ─── ElectricalScreen ─────────────────────────────────────────────────────────
 
 export function ElectricalScreen(): React.ReactElement {
   const batteryV     = useAppStore(selectBatteryVoltage);
   const batteryAt    = useAppStore(s => s.liveData['ATRV']?.timestamp);
   const voltageTrend = useAppStore(selectVoltageTrend);
-  const history      = useAppStore(s => s.history['ATRV'] ?? []);
+  const dropMv       = useAppStore(selectDropMvPerMin);
 
   const ecmV      = usePIDNum('0142');
 
-  // Voltage drop rate: mV/min from last 10 samples
-  const voltDropRate = useMemo(() => {
-    if (history.length < 10) return 0;
-    const slice = history.slice(-10);
-    const dt    = (slice[slice.length - 1].timestamp - slice[0].timestamp) / 60000; // min
-    const dv    = (slice[0].value as number) - (slice[slice.length - 1].value as number);
-    return dt > 0 ? dv / dt : 0;
-  }, [history]);
 
   const voltageLabel = batteryV <= 0 ? '—'
     : batteryV >= 12.6 ? 'Fully charged'
@@ -132,7 +57,13 @@ export function ElectricalScreen(): React.ReactElement {
 
   const trendStatus: Status = voltageTrend === 'stable' ? 'neutral' : voltageTrend === 'dropping' ? 'warn' : 'crit';
   const trendLabel = voltageTrend === 'stable' ? 'Stable' : voltageTrend === 'dropping' ? 'Dropping' : 'Critical drop';
-  const dischargeStatus: Status = voltDropRate > 5 ? 'crit' : voltDropRate > 1 ? 'warn' : 'neutral';
+  const dischargeStatus: Status = statusForDrain(dropMv);
+  // Drain rate text, in the unit the thresholds use (mV/min)
+  const drainValue = dropMv === null ? '—' : `${Math.max(dropMv, 0).toFixed(1)}`;
+  const drainText  = dropMv === null ? 'Needs 10 min at rest'
+    : dischargeStatus === 'crit' ? 'High — investigate draw'
+    : dischargeStatus === 'warn' ? 'Moderate drain' : 'Normal self-discharge';
+  const trendText  = dropMv === null ? 'Needs 10 min at rest' : dropMv > 0.05 ? `−${dropMv.toFixed(1)} mV/min` : 'No drain detected';
 
   return (
     <ScrollPane>
@@ -176,15 +107,15 @@ export function ElectricalScreen(): React.ReactElement {
           label="Voltage trend"
           value={trendLabel}
           status={trendStatus}
-          subtext={voltDropRate > 0.001 ? `−${voltDropRate.toFixed(3)} V/min` : 'No drain detected'}
+          subtext={trendText}
           spark={{ pid: 'ATRV', color: 'var(--label-2)' }}
         />
         <Metric
           size="hero"
           label="Discharge rate"
-          value={voltDropRate > 0 ? `${(voltDropRate * 1000).toFixed(1)}` : '—'}
+          value={drainValue}
           unit="mV/min"
-          subtext={voltDropRate > 5 ? 'High — investigate draw' : voltDropRate > 1 ? 'Moderate drain' : 'Normal self-discharge'}
+          subtext={drainText}
           status={dischargeStatus}
           spark={{ pid: 'ATRV', color: 'var(--warn)' }}
         />
@@ -212,19 +143,19 @@ export function ElectricalScreen(): React.ReactElement {
           label="Voltage trend"
           value={trendLabel}
           status={trendStatus}
-          subtext={voltDropRate > 0.001 ? `−${voltDropRate.toFixed(3)} V/min` : 'No drain detected'}
+          subtext={trendText}
         />
         <Metric
           size="compact"
           label="Discharge rate"
-          value={voltDropRate > 0 ? `${(voltDropRate * 1000).toFixed(1)} mV/min` : '—'}
-          subtext={voltDropRate > 5 ? 'High — investigate draw' : voltDropRate > 1 ? 'Moderate drain' : 'Normal self-discharge'}
+          value={dropMv === null ? '—' : `${drainValue} mV/min`}
+          subtext={drainText}
           status={dischargeStatus}
         />
       </Grid>
 
       {/* ── Voltage timeline ───────────────────────────────────────────── */}
-      <SectionHeader>Battery voltage timeline — last 120 readings (~1 min)</SectionHeader>
+      <SectionHeader>Battery voltage timeline</SectionHeader>
       <Card padding={12}>
         <VoltageTimeline />
       </Card>
@@ -303,7 +234,7 @@ export function ElectricalScreen(): React.ReactElement {
 
       {/* ── Live electrical data ────────────────────────────────────────── */}
       <SectionHeader>Live electrical readings</SectionHeader>
-      <Grid cols={4}>
+      <Grid cols={3}>
         <Metric
           size="compact"
           label="Barometric"
@@ -312,15 +243,9 @@ export function ElectricalScreen(): React.ReactElement {
         />
         <Metric
           size="compact"
-          label="Abs throttle load"
+          label="Absolute load"
           value={fmt('0143', usePID('0143'))}
           subtext="Speed-independent ref"
-        />
-        <Metric
-          size="compact"
-          label="Fuel type"
-          value={typeof usePID('0149') === 'string' ? usePID('0149') as string : 'Gasoline'}
-          subtext="Fuel system config"
         />
         <Metric
           size="compact"

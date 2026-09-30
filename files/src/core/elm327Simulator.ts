@@ -128,6 +128,9 @@ export class ELM327Simulator extends EventEmitter {
       '0133': () => `4133${this.hex1(101)}\r\r>`,    // 101 kPa ≈ sea level
       '015E': () => `415E${this.encode2(Math.round(0.4 * 20))}\r\r>`,
       '0103': () => `41030200\r\r>`,         // closed loop
+      // MIL on, 2 stored codes; misfire/fuel/components complete; catalyst, EVAP,
+      // O2, O2 heater and EGR supported, EVAP not yet complete
+      '0101': () => `41018207E504\r\r>`,
       '01A4': () => `41A402000000\r\r>`,     // gear supported, 0 = not in a forward gear (parked)
     };
   }

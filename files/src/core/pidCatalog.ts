@@ -466,6 +466,19 @@ export const PID_CATALOG: PIDDefinition[] = [
 
   // ── Emissions ────────────────────────────────────────────────────────────────
   {
+    pid: '0101',
+    name: 'Monitor Status Since DTCs Cleared (MIL and I/M Readiness)',
+    shortName: 'Readiness',
+    category: 'emissions',
+    unit: '',
+    min: 0,
+    max: 127,
+    formula: 'A: bit 7 MIL, bits 0-6 stored codes; B-D: monitor available / incomplete bits',
+    description: 'Check-engine lamp state, the number of stored emission codes, and which I/M readiness monitors have completed since codes were last cleared. The Vehicle health screen decodes the monitor bits.',
+    decode: (b) => b[0] & 0x7F,
+    format: (v) => `${v} stored code${v === 1 ? '' : 's'}`,
+  },
+  {
     pid: '012C',
     name: 'Exhaust Gas Recirculation Valve — Commanded Position',
     shortName: 'EGR Cmd',
@@ -520,4 +533,4 @@ export const PID_MAP: Map<string, PIDDefinition> = new Map(
 
 export const POLLING_FAST   = ['010C', '0142'];  // battery voltage (ATRV) is polled separately every cycle
 export const POLLING_NORMAL = ['010D', '0105', '0104', '0111', '010F', '0110', '010B', '0106', '0107', '0108', '0109', '0114', '0115', '0118', '0119'];
-export const POLLING_SLOW   = ['012F', '015C', '0123', '015E', '0133', '010E', '0143', '0146', '012C', '012D', '012E', '01A4', '0103'];
+export const POLLING_SLOW   = ['012F', '015C', '0123', '015E', '0133', '010E', '0143', '0146', '012C', '012D', '012E', '01A4', '0103', '0101'];

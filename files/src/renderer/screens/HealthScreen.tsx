@@ -5,23 +5,9 @@ import {
   ScrollPane, SectionHeader, Grid, Card, Metric, Gauge, Badge, AlertBanner, Button, DataRow, EmptyState,
 } from '../components/layout/UIComponents';
 import { connectionTone } from '../components/shell/shellLogic';
+import { readinessMonitors, isReading } from '../logic/verdicts';
 import { TYPE, NUMERIC, STATUS_TEXT } from '../theme/theme';
 import type { Status } from '../theme/theme';
-
-// ─── Readiness monitor definitions ────────────────────────────────────────────
-
-const READINESS_MONITORS = [
-  { id: '0101_mis', name: 'Misfire monitor',              pid: '0101', bit: 0 },
-  { id: '0101_fuel', name: 'Fuel system monitor',         pid: '0101', bit: 1 },
-  { id: '0101_comp', name: 'Comprehensive components',    pid: '0101', bit: 2 },
-  { id: '0101_cat',  name: 'Catalytic converter',         pid: '0101', bit: 6 },
-  { id: '0101_hcat', name: 'Heated catalytic converter',  pid: '0101', bit: 7 },
-  { id: '0101_evap', name: 'Evaporative system (EVAP)',   pid: '0101', bit: 8 },
-  { id: '0101_air',  name: 'Secondary air system',        pid: '0101', bit: 9 },
-  { id: '0101_o2s',  name: 'O2 sensor',                   pid: '0101', bit: 11 },
-  { id: '0101_o2sh', name: 'O2 sensor heater',            pid: '0101', bit: 12 },
-  { id: '0101_egr',  name: 'Exhaust Gas Recirculation',   pid: '0101', bit: 13 },
-];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -58,6 +44,9 @@ export function HealthScreen(): React.ReactElement {
   const dtcs         = useAppStore(s => s.dtcs);
   const modules      = useAppStore(s => s.modules);
   const connectionStatus = useAppStore(s => s.connectionStatus);
+  const readinessRaw = useAppStore(s => s.liveData['0101']?.raw);
+  // Only trust readiness read in this session
+  const readiness = connectionStatus === 'connected' && readinessRaw ? readinessMonitors(readinessRaw) : null;
   const adapterInfo  = useAppStore(s => s.adapterInfo);
   const protocol     = useAppStore(s => s.protocol);
   const vehicle      = useAppStore(s => s.vehicle);
@@ -107,7 +96,7 @@ export function HealthScreen(): React.ReactElement {
     }
   };
 
-  const coolantF     = usePIDNum('0105', 0);
+  const coolantF     = usePIDNum('0105', NaN);
   const rpm          = usePIDNum('010C', 0);
   const engineOn     = rpm > 200;
 
@@ -204,7 +193,7 @@ export function HealthScreen(): React.ReactElement {
           size="compact"
           label="Engine status"
           value={connectionStatus !== 'connected' ? '—' : engineOn ? `${rpm.toLocaleString()} rpm` : 'Off'}
-          subtext={connectionStatus === 'connected' ? (engineOn ? `Coolant: ${coolantF > 0 ? coolantF + ' °F' : '—'}` : 'Engine not running') : 'Adapter not connected'}
+          subtext={connectionStatus === 'connected' ? (engineOn ? `Coolant: ${isReading(coolantF) ? coolantF + ' °F' : '—'}` : 'Engine not running') : 'Adapter not connected'}
         />
       </Grid>
 
@@ -256,29 +245,32 @@ export function HealthScreen(): React.ReactElement {
         </Card>
       )}
 
-      {/* ── Readiness monitors ─────────────────────────────────────────────── */}
+      {/* ── Readiness monitors (Mode 01 PID 01) ─────────────────────────── */}
       <SectionHeader>I/M readiness monitors</SectionHeader>
-      <Card padding={0}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)' }}>
-          {READINESS_MONITORS.map(m => {
-            // Without live 0101 data use a placeholder state
-            const ready = connectionStatus === 'connected';
-            return (
+      {readiness === null ? (
+        <Card>
+          <EmptyState
+            icon="ti-clipboard-check"
+            title={connectionStatus === 'connected' ? 'Readiness not read yet' : 'Not connected'}
+            message={connectionStatus === 'connected'
+              ? 'Monitor status (PID 0101) is read every few seconds once polling is running.'
+              : 'Connect to the vehicle to read which emissions monitors have completed.'}
+          />
+        </Card>
+      ) : (
+        <Card padding={0}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)' }}>
+            {readiness.monitors.map(m => (
               <DataRow
-                key={m.id}
+                key={m.name}
                 name={m.name}
                 value=""
-                badge={
-                  <Badge
-                    label={connectionStatus !== 'connected' ? 'N/A' : ready ? 'Ready' : 'Not ready'}
-                    variant={connectionStatus !== 'connected' ? 'muted' : ready ? 'ok' : 'warn'}
-                  />
-                }
+                badge={<Badge label={m.status === 'ready' ? 'Ready' : 'Not ready'} variant={m.status === 'ready' ? 'ok' : 'warn'} />}
               />
-            );
-          })}
-        </div>
-      </Card>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* ── Module status ──────────────────────────────────────────────────── */}
       <SectionHeader>Module status</SectionHeader>

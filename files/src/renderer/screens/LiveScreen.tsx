@@ -3,6 +3,7 @@ import { useAppStore } from '../store/appStore';
 import {
   ScrollPane, SectionHeader, Grid, Metric, Gauge, Tooltip, TipContent,
 } from '../components/layout/UIComponents';
+import { trimStatus } from '../logic/verdicts';
 import { PID_MAP } from '../../core/pidCatalog';
 
 // ─── Helper: pull a live numeric value from store ──────────────────────────────
@@ -136,7 +137,7 @@ export function LiveScreen(): React.ReactElement {
           subtext={usePIDNum('0107') > 7 ? 'Lean — persistent' : 'Normal range'}
           subtextStatus={usePIDNum('0107') > 7 ? 'warn' : 'neutral'}
           barPercent={50 + usePIDNum('0107') * 2}
-          status={Math.abs(usePIDNum('0107')) > 10 ? 'crit' : 'warn'}
+          status={trimStatus(usePIDNum('0107'))}
           tooltip={<TipContent name="Long-Term Fuel Trim — Bank 1" description="Learned persistent fuel correction stored in Engine Control Module memory for Bank 1. High positive value combined with high short-term trim signals a real lean condition — suspect a vacuum leak, dirty Mass Air Flow sensor, or failing oxygen sensor." formula="((byte A − 128) ÷ 128) × 100" range="Parameter 0107 · Normal: ±5% · Alarm: ±10% or more" />}
         />
         <Metric
