@@ -32,14 +32,6 @@ export function isVehicleWrite(command: string): boolean {
   return WRITE_SERVICES.has(hex.slice(0, 2));
 }
 
-export type ELM327Event =
-  | 'ready'
-  | 'protocol'
-  | 'raw-response'
-  | 'pid-response'
-  | 'error'
-  | 'disconnected';
-
 export interface ELM327Response {
   command: string;
   raw: string;
@@ -128,16 +120,18 @@ export class ELM327Commander extends EventEmitter {
   // ── Connectivity probe — returns true only if the adapter sends bytes back ──
   // Tries ATZ then ATI, each with a short timeout. A non-empty, non-error reply
   // means the data path is live. Total worst case ~4.5s instead of ~30s.
-  private async probeAdapter(): Promise<boolean> {
+  // Returns which command answered and the adapter's banner, or null
+  private async probeAdapter(): Promise<{ cmd: string; banner: string } | null> {
     for (const cmd of ['ATZ', 'ATI']) {
       const resp = await this.send(cmd, 2200);
       if (resp.raw && resp.raw.trim().length > 0 && !resp.errorMessage) {
         this.log(`Adapter responded to ${cmd}: ${resp.raw.trim()}`);
-        return true;
+        // Last line: with echo still on, the first line is the command itself
+        return { cmd, banner: resp.lines[resp.lines.length - 1] ?? '' };
       }
       this.log(`No response to ${cmd} — retrying probe`);
     }
-    return false;
+    return null;
   }
 
   // ── Full ELM327 initialization sequence for 2004 Silverado J1850 VPW ───────
@@ -156,8 +150,9 @@ export class ELM327Commander extends EventEmitter {
       throw new Error(msg);
     }
 
-    // 1. Reset adapter — clears all previous state
-    await this.send('ATZ', 3000);
+    // 1. Reset adapter — clears all previous state. Skipped when the probe's
+    //    ATZ already reset it (a second ATZ only cost about a second).
+    if (probe.cmd !== 'ATZ') await this.send('ATZ', 3000);
 
     // 2. Echo off — suppress command echo in responses
     await this.sendExpect('ATE0', ELM_OK, 'Echo off failed');
@@ -187,12 +182,16 @@ export class ELM327Commander extends EventEmitter {
     this.adapterInfo.protocol = dpResp.lines[0] ?? 'Unknown';
 
     // 10. OBDLink-specific: read firmware version (STI command)
+    //     A plain ELM327 or clone answers '?', which used to become the
+    //     adapter name; fall back to the banner from the probe.
     const stiResp = await this.send('STI', 1000);
-    this.adapterInfo.firmwareVersion = stiResp.lines[0] ?? 'Unknown';
+    const sti = stiResp.success ? stiResp.lines[0] : undefined;
+    this.adapterInfo.firmwareVersion = sti || probe.banner || 'Unknown';
 
     // 11. OBDLink-specific: device info (STDI)
     const stdiResp = await this.send('STDI', 1000);
-    this.adapterInfo.deviceInfo = stdiResp.lines[0] ?? 'Unknown';
+    const stdi = stdiResp.success ? stdiResp.lines[0] : undefined;
+    this.adapterInfo.deviceInfo = stdi || probe.banner || 'Unknown';
 
     // 12. Read live battery voltage
     const atrvResp = await this.send('ATRV', 1000);
@@ -283,16 +282,6 @@ export class ELM327Commander extends EventEmitter {
     const resp = await this.send('ATRV', 1000);
     const match = resp.raw.match(/(\d+\.\d+)/);
     return match ? parseFloat(match[1]) : 0;
-  }
-
-  // ── OBDLink sleep timer control (STSLLT) ──────────────────────────────────
-  async setSleepTimer(minutes: number): Promise<void> {
-    await this.send(`STSLLT ${minutes}`, 1000);
-  }
-
-  // ── OBDLink power control (STPC) ─────────────────────────────────────────
-  async setPowerControl(on: boolean): Promise<void> {
-    await this.send(on ? 'STPC 1' : 'STPC 0', 1000);
   }
 
   get ready(): boolean { return this.isReady; }

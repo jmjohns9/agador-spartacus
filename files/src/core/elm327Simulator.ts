@@ -2,14 +2,13 @@ import { EventEmitter } from 'events';
 
 // ─── ELM327 Simulator ─────────────────────────────────────────────────────────
 // Emulates a 2004 Silverado 1500 Z71 J1850 VPW session.
-// Battery voltage steps from 12.6 V → 11.8 V over 4 hours.
-// IPC stays awake after engine-off (reproducing the known GMT800 bug).
+// Battery voltage drops from 12.89 V toward 11.8 V (4 mV/min, faster after 15 min).
+// (Module wake behaviour, e.g. the IPC staying awake after engine-off, is not
+// simulated: the app has no module wake detection yet.)
 // Pre-loaded DTCs: B1982, P0300, U0100.
 
 export class ELM327Simulator extends EventEmitter {
   private sessionStartMs = Date.now();
-  private engineOff = false;
-  private engineOffMs = 0;
 
   // Simulated sensor state
   private state = {
@@ -72,8 +71,6 @@ export class ELM327Simulator extends EventEmitter {
     // Mode 0A (permanent) — none
     if (cmd === '0A') return '4A0000\r\r>';
 
-    // Keep-alive / tester present
-    if (cmd === '013E') return '7E00\r\r>';
 
     const fn = this.pidReplies()[cmd];
     if (fn) {
@@ -143,18 +140,6 @@ export class ELM327Simulator extends EventEmitter {
     return Math.max(11.8, 12.89 - drift + this.noise(0.005));
   }
 
-  setEngineOff(): void {
-    this.engineOff = true;
-    this.engineOffMs = Date.now();
-    this.state.rpm = 0;
-    this.state.speed = 0;
-  }
-
-  setEngineOn(): void {
-    this.engineOff = false;
-    this.state.rpm = 820;
-  }
-
   // ── Encoding helpers ──────────────────────────────────────────────────────────
   private hex1(v: number): string { return Math.min(255, Math.max(0, Math.round(v))).toString(16).toUpperCase().padStart(2, '0'); }
   private encode2(v: number): string { const n = Math.min(65535, Math.max(0, Math.round(v))); return ((n >> 8) & 0xFF).toString(16).toUpperCase().padStart(2, '0') + (n & 0xFF).toString(16).toUpperCase().padStart(2, '0'); }
@@ -163,10 +148,12 @@ export class ELM327Simulator extends EventEmitter {
   private encodeVolt(v: number): string { return this.encode2(Math.round(v * 1000)); }
   private encodeRPM(): string { const raw = Math.round(this.state.rpm * 4); return `410C${this.encode2(raw)}\r\r>`; }
 
+  // Noise pulls back toward the idle values; plain random walks drifted RPM by
+  // thousands and pushed the trims into warning over a long demo session.
   private jitter(): void {
-    this.state.rpm = Math.max(0, this.state.rpm + this.noise(20));
-    this.state.stftB1 += this.noise(0.2);
-    this.state.ltftB1 = Math.min(25, this.state.ltftB1 + this.noise(0.05));
+    this.state.rpm = Math.max(0, this.state.rpm + this.noise(20) + (820 - this.state.rpm) * 0.05);
+    this.state.stftB1 = Math.max(-25, Math.min(25, this.state.stftB1 + this.noise(0.2) + (4.7 - this.state.stftB1) * 0.05));
+    this.state.ltftB1 = Math.max(-25, Math.min(25, this.state.ltftB1 + this.noise(0.05) + (8.2 - this.state.ltftB1) * 0.05));
     this.state.o2B1S1 = Math.max(0.1, Math.min(0.9, this.state.o2B1S1 + this.noise(0.08)));
   }
 

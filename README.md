@@ -303,7 +303,6 @@ npm run dev
 The simulator emulates a 2004 Silverado J1850 VPW session:
 
 - Battery voltage steps from 12.89 V down to 11.8 V over four hours, reproducing a parasitic drain.
-- The instrument cluster stays awake after engine-off, reproducing the known GMT800 fault.
 - The DTCs `B1982`, `P0300` and `U0100` are preloaded.
 - Every sensor reading has realistic noise.
 

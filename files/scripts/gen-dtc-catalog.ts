@@ -16,7 +16,7 @@
 //   - repair | repair summary | corrective action
 
 import ExcelJS from 'exceljs';
-import { writeFileSync, existsSync } from 'fs';
+import { writeFileSync, existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 
 const REPO_ROOT  = resolve(__dirname, '..');
@@ -73,7 +73,9 @@ async function main(): Promise<void> {
 
   const headerRow = sheet.getRow(1);
   const headers: string[] = [];
-  headerRow.eachCell({ includeEmpty: true }, (cell, col) => { headers[col - 1] = String(cell.value ?? ''); });
+  // cell.text, not String(cell.value): rich-text, formula and hyperlink cells
+  // are objects and stringify as "[object Object]"
+  headerRow.eachCell({ includeEmpty: true }, (cell, col) => { headers[col - 1] = cell.text ?? ''; });
 
   const colCode    = findColumn(headers, ['code', 'dtc', 'dtc code']);
   const colDesc    = findColumn(headers, ['description', 'fault description', 'concise description']);
@@ -88,32 +90,34 @@ async function main(): Promise<void> {
   }
 
   const catalog: Record<string, DTCRecord> = {};
-  let parsedRows = 0;
+  const rejected: string[] = [];
 
   sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     if (rowNumber === 1) return;
-    const code = String(row.getCell(colCode + 1).value ?? '').trim().toUpperCase();
-    const desc = String(row.getCell(colDesc + 1).value ?? '').trim();
+    const code = (row.getCell(colCode + 1).text ?? '').trim().toUpperCase();
+    const desc = (row.getCell(colDesc + 1).text ?? '').trim();
     if (!code || !desc) return;
+    if (!/^[PCBU][0-9A-F]{4}$/.test(code)) { rejected.push(`row ${rowNumber}: "${code}"`); return; }
 
     const rec: DTCRecord = { description: desc };
     if (colModule >= 0) {
-      const m = String(row.getCell(colModule + 1).value ?? '').trim();
+      const m = (row.getCell(colModule + 1).text ?? '').trim();
       if (m) rec.module = m;
     }
     if (colCauses >= 0) {
-      const c = splitList(row.getCell(colCauses + 1).value);
+      const c = splitList(row.getCell(colCauses + 1).text);
       if (c) rec.causes = c;
     }
     if (colRepair >= 0) {
-      const r = String(row.getCell(colRepair + 1).value ?? '').trim();
+      const r = (row.getCell(colRepair + 1).text ?? '').trim();
       if (r) rec.repair = r;
     }
     catalog[code] = rec;
-    parsedRows += 1;
   });
 
-  if (parsedRows === 0) {
+  if (rejected.length) console.warn(`Skipped ${rejected.length} rows with invalid codes: ${rejected.slice(0, 10).join(', ')}`);
+  const count = Object.keys(catalog).length;   // duplicate rows count once
+  if (count === 0) {
     console.error(`ERROR: no usable rows found in "${sheet.name}". Check the column headers.`);
     process.exit(1);
   }
@@ -121,7 +125,7 @@ async function main(): Promise<void> {
   const banner = `// AUTO-GENERATED — do not edit by hand.
 // Source: ${XLSX_PATH.replace(REPO_ROOT + '/', '')}
 // Generated: ${new Date().toISOString()}
-// Codes:    ${parsedRows}
+// Codes:    ${count}
 // Regenerate via \`npm run gen:dtcs\`.\n`;
 
   const body =
@@ -137,8 +141,16 @@ export const DTC_CATALOG: Record<string, DTCRecord> = ${JSON.stringify(catalog, 
 export const DTC_CATALOG_SIZE = Object.keys(DTC_CATALOG).length;
 `;
 
-  writeFileSync(OUTPUT, body, 'utf-8');
-  console.log(`Wrote ${OUTPUT} (${parsedRows} codes from "${sheet.name}").`);
+  // The checked-in catalog is hand-curated (comments, module assignments).
+  // Never replace it silently: write alongside it unless --force is given.
+  const curated = existsSync(OUTPUT) && !readFileSync(OUTPUT, 'utf-8').startsWith('// AUTO-GENERATED');
+  const target = curated && !process.argv.includes('--force') ? `${OUTPUT}.new` : OUTPUT;
+  writeFileSync(target, body, 'utf-8');
+  console.log(`Wrote ${target} (${count} codes from "${sheet.name}").`);
+  if (target !== OUTPUT) {
+    console.log('The existing catalog is hand-curated, so it was left alone. Compare the two files,');
+    console.log('then re-run with --force to replace it.');
+  }
 }
 
 main().catch((err) => { console.error(err); process.exit(1); });
