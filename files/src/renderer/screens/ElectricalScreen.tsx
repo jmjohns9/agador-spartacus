@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAppStore, selectBatteryVoltage, selectVoltageTrend, selectDropMvPerMin } from '../store/appStore';
-import { dischargeStatus as statusForDrain } from '../logic/verdicts';
+import { dischargeStatus as statusForDrain, batterySoC } from '../logic/verdicts';
 import {
   ScrollPane, SectionHeader, Grid, Card, Metric, Gauge, AlertBanner, VoltageTimeline,
 } from '../components/layout/UIComponents';
@@ -45,12 +45,7 @@ export function ElectricalScreen(): React.ReactElement {
   const ecmV      = usePIDNum('0142');
 
 
-  const voltageLabel = batteryV <= 0 ? '—'
-    : batteryV >= 12.6 ? 'Fully charged'
-    : batteryV >= 12.4 ? '75% charged'
-    : batteryV >= 12.2 ? '50% charged'
-    : batteryV >= 12.0 ? '25% charged'
-    : 'Low — charge needed';
+  const voltageLabel = batterySoC(batteryV);
 
   const voltStatus = voltageStatus(batteryV);
   const wiringDrop = batteryV > 0 && ecmV > 0 ? batteryV - ecmV : 0;

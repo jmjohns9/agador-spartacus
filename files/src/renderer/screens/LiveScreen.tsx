@@ -3,7 +3,8 @@ import { useAppStore } from '../store/appStore';
 import {
   ScrollPane, SectionHeader, Grid, Metric, Gauge, Tooltip, TipContent,
 } from '../components/layout/UIComponents';
-import { trimStatus } from '../logic/verdicts';
+import { trimStatus, pidStatus } from '../logic/verdicts';
+import { batteryStatus } from '../components/shell/shellLogic';
 import { PID_MAP } from '../../core/pidCatalog';
 
 // ─── Helper: pull a live numeric value from store ──────────────────────────────
@@ -35,6 +36,8 @@ function fmt(pid: string, v: number | string): string {
 // ─── LiveScreen ───────────────────────────────────────────────────────────────
 
 export function LiveScreen(): React.ReactElement {
+  // Silverado specifics (tank size, 5.3 L idle airflow) only for that platform
+  const isGMT800 = useAppStore(s => s.platform.id === 'gmt800');
   const rpmAt      = useAppStore(s => s.liveData['010C']?.timestamp);
   const loadAt     = useAppStore(s => s.liveData['0104']?.timestamp);
   const throttleAt = useAppStore(s => s.liveData['0111']?.timestamp);
@@ -91,7 +94,7 @@ export function LiveScreen(): React.ReactElement {
           value={fmt('0105', usePID('0105'))}
           subtext="Normal · 195–220 °F"
           barPercent={((usePIDNum('0105', 68) - 68) / (240 - 68)) * 100}
-          status={usePIDNum('0105') > 230 ? 'crit' : usePIDNum('0105') > 220 ? 'warn' : 'neutral'}
+          status={pidStatus('0105', usePIDNum('0105', NaN))}
           tooltip={<TipContent name="Engine Coolant Temperature" description="Coolant temperature at the thermostat housing. Drives fuel enrichment and ignition timing maps in the Engine Control Module." formula="(byte A − 40) × 9 ÷ 5 + 32" range="Parameter 0105 · Normal: 195–220 °F · Overheat: above 240 °F" />}
         />
         <Metric
@@ -162,7 +165,7 @@ export function LiveScreen(): React.ReactElement {
           size="compact"
           label="MAF rate"
           value={fmt('0110', usePID('0110'))}
-          subtext="Idle 5.3 L: 4–6"
+          subtext={isGMT800 ? 'Idle 5.3 L: 4–6' : 'Idle: roughly 2–7'}
           tooltip={<TipContent name="Mass Air Flow Rate" description="Mass of air entering the intake per second via the hot-wire Mass Air Flow sensor. Core Engine Control Module input for fuel injection calculation." formula="((byte A × 256) + byte B) ÷ 100" range="Parameter 0110 · Idle 5.3 L: 4–6 g/s" />}
         />
         <Metric
@@ -178,7 +181,7 @@ export function LiveScreen(): React.ReactElement {
           value={fmt('012F', usePID('012F'))}
           barPercent={usePIDNum('012F')}
           barStatus={usePIDNum('012F') < 10 ? 'crit' : usePIDNum('012F') < 20 ? 'warn' : 'neutral'}
-          subtext={usePIDNum('012F') > 0 ? `≈ ${((usePIDNum('012F') / 100) * 26).toFixed(1)} gal remaining` : ''}
+          subtext={isGMT800 && usePIDNum('012F') > 0 ? `≈ ${((usePIDNum('012F') / 100) * 26).toFixed(1)} of 26 gal` : ''}
           tooltip={<TipContent name="Fuel Tank Level Remaining" description="Fuel level sensor signal from the sender float in the fuel tank." formula="(byte A ÷ 255) × 100" range="Parameter 012F" />}
         />
         <Metric
@@ -197,7 +200,7 @@ export function LiveScreen(): React.ReactElement {
           size="compact"
           label="Battery (adapter)"
           value={fmt('ATRV', usePID('ATRV'))}
-          status={usePIDNum('ATRV') < 12.0 ? 'crit' : 'neutral'}
+          status={(s => (s === 'none' ? 'neutral' : s))(batteryStatus(usePIDNum('ATRV')))}
           barPercent={((usePIDNum('ATRV') - 11.8) / (12.7 - 11.8)) * 100}
           subtext="Primary parasitic draw signal"
           tooltip={<TipContent name="Battery Terminal Voltage — Adapter Direct Reading" description="Measured directly at the OBD-II port by the ELM327 adapter. More accurate than the Engine Control Module voltage reading because it bypasses internal wiring resistance. This is the primary parasitic draw monitoring signal." range="Fully charged: 12.6 V · 50% charge: 12.2 V · Dead: below 11.8 V" />}
@@ -232,28 +235,28 @@ export function LiveScreen(): React.ReactElement {
           size="compact"
           label="O2 B1 upstream"
           value={fmt('0114', usePID('0114'))}
-          subtext="Sweeping 0.1–0.9 V"
+          subtext="Healthy: sweeps 0.1–0.9 V"
           tooltip={<TipContent name="Oxygen Sensor — Bank 1, Upstream" description="The upstream oxygen sensor on Bank 1, before the catalytic converter. Should oscillate rapidly between 0.1–0.9 V in closed-loop fuel control." formula="byte A ÷ 200" range="Parameter 0114 · Rich: above 0.45 V · Lean: below 0.45 V" />}
         />
         <Metric
           size="compact"
           label="O2 B1 downstream"
           value={fmt('0115', usePID('0115'))}
-          subtext="Cat healthy · steady"
+          subtext="Healthy cat: steady ~0.6–0.7 V"
           tooltip={<TipContent name="Oxygen Sensor — Bank 1, Downstream" description="The downstream catalytic converter monitor sensor on Bank 1. A steady reading around 0.65 V indicates a healthy catalytic converter." formula="byte A ÷ 200" range="Parameter 0115 · Catalyst OK: steady ~0.6–0.7 V" />}
         />
         <Metric
           size="compact"
           label="O2 B2 upstream"
           value={fmt('0118', usePID('0118'))}
-          subtext="Sweeping 0.1–0.9 V"
+          subtext="Healthy: sweeps 0.1–0.9 V"
           tooltip={<TipContent name="Oxygen Sensor — Bank 2, Upstream" description="The upstream oxygen sensor on Bank 2 (passenger side on the GM V8). Should oscillate rapidly in closed-loop fuel control." formula="byte A ÷ 200" range="Parameter 0118" />}
         />
         <Metric
           size="compact"
           label="O2 B2 downstream"
           value={fmt('0119', usePID('0119'))}
-          subtext="Cat healthy · steady"
+          subtext="Healthy cat: steady ~0.6–0.7 V"
           tooltip={<TipContent name="Oxygen Sensor — Bank 2, Downstream" description="Post-catalytic converter sensor on Bank 2. Steady reading indicates catalyst is functioning correctly." formula="byte A ÷ 200" range="Parameter 0119" />}
         />
       </Grid>
@@ -265,7 +268,7 @@ export function LiveScreen(): React.ReactElement {
           size="compact"
           label="EGR commanded"
           value={fmt('012C', usePID('012C'))}
-          subtext="0% at idle — normal"
+          subtext="Normal at idle: 0%"
           tooltip={<TipContent name="Exhaust Gas Recirculation Valve — Commanded Position" description="The Exhaust Gas Recirculation valve position commanded by the Engine Control Module to reduce nitrogen oxide emissions. Should be 0% at idle." formula="(byte A ÷ 255) × 100" range="Parameter 012C · Idle: 0% · Cruise: 10–25%" />}
         />
         <Metric
@@ -280,7 +283,7 @@ export function LiveScreen(): React.ReactElement {
           size="compact"
           label="EVAP purge"
           value={fmt('012E', usePID('012E'))}
-          subtext="0% at idle — normal"
+          subtext="Normal at idle: 0%"
           tooltip={<TipContent name="Evaporative Emission Control Purge Valve Duty Cycle" description="The canister purge valve duty cycle. If stuck open at idle it introduces excess fuel vapour and causes a lean condition." formula="(byte A ÷ 255) × 100" range="Parameter 012E · Idle: 0% · Cruise: up to 100%" />}
         />
         <Metric

@@ -5,7 +5,7 @@ import {
   ScrollPane, SectionHeader, Grid, Card, Metric, Gauge, Badge, AlertBanner, Button, DataRow, EmptyState,
 } from '../components/layout/UIComponents';
 import { connectionTone } from '../components/shell/shellLogic';
-import { readinessMonitors, isReading } from '../logic/verdicts';
+import { readinessMonitors, isReading, batterySoC } from '../logic/verdicts';
 import { TYPE, NUMERIC, STATUS_TEXT } from '../theme/theme';
 import type { Status } from '../theme/theme';
 
@@ -16,14 +16,7 @@ function usePIDNum(pid: string, fallback = 0): number {
   return typeof v === 'number' ? v : fallback;
 }
 
-function voltageLabel(v: number): string {
-  if (v <= 0)   return '—';
-  if (v >= 12.6) return 'Fully charged';
-  if (v >= 12.4) return '75% charge';
-  if (v >= 12.2) return '50% charge';
-  if (v >= 12.0) return '25% charge';
-  return 'Low — check for draw';
-}
+const voltageLabel = batterySoC;
 
 function riskLabel(score: number): string {
   if (score <= 2)  return 'Low risk';

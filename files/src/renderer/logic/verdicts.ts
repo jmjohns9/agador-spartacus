@@ -1,5 +1,7 @@
 import type { PIDReading } from '../../shared/types';
+import { statusFor } from '../theme/theme';
 import type { Status } from '../theme/theme';
+import { PID_MAP } from '../../core/pidCatalog';
 
 // ─── Screen verdicts ──────────────────────────────────────────────────────────
 //
@@ -73,6 +75,25 @@ export function dischargeStatus(mvPerMin: number | null): Status {
 export function voltageTrend(pts: readonly Point[]): 'stable' | 'dropping' | 'critical' {
   const s = dischargeStatus(dropMvPerMin(pts));
   return s === 'crit' ? 'critical' : s === 'warn' ? 'dropping' : 'stable';
+}
+
+/** Status from the PID catalog's warn/crit limits, so every screen agrees. */
+export function pidStatus(pid: string, value: number): Status {
+  const def = PID_MAP.get(pid);
+  return def ? statusFor(value, def) : 'neutral';
+}
+
+/**
+ * State of charge from resting voltage (lead-acid, engine off for a while):
+ * 12.65 V full, 12.45 V 75 %, 12.24 V 50 %, 12.06 V 25 %.
+ */
+export function batterySoC(v: number): string {
+  if (!isReading(v) || v <= 0) return '—';
+  if (v >= 12.65) return 'Fully charged';
+  if (v >= 12.45) return '75% charged';
+  if (v >= 12.24) return '50% charged';
+  if (v >= 12.06) return '25% charged';
+  return 'Discharged';
 }
 
 /** Fuel trim status: ±5 % is normal, beyond ±10 % critical. */

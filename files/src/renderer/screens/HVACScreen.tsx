@@ -5,7 +5,7 @@ import {
 } from '../components/layout/UIComponents';
 import { TYPE, NUMERIC, STATUS_TEXT } from '../theme/theme';
 import type { Status } from '../theme/theme';
-import { isReading } from '../logic/verdicts';
+import { isReading, pidStatus } from '../logic/verdicts';
 import { PID_MAP } from '../../core/pidCatalog';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ export function HVACScreen(): React.ReactElement {
 
   // Delta between ambient and coolant — shows heater effectiveness
   const heaterDelta = hasCoolant && hasAmbient ? coolantF - ambientF : NaN;
-  const coolantStatus: Status = coolantF > 230 ? 'crit' : coolantF > 215 ? 'warn' : 'neutral';
+  const coolantStatus: Status = pidStatus('0105', coolantF);
   // "Good" (delta > 100) is neutral, not colored — only the warn band stands out.
   const heaterDeltaStatus: Status = heaterDelta > 50 && heaterDelta <= 100 ? 'warn' : 'neutral';
 
@@ -75,8 +75,8 @@ export function HVACScreen(): React.ReactElement {
           status={coolantStatus}
           subtext={
             !hasCoolant ? 'No reading' :
-            coolantF > 230 ? 'Overheating — stop and investigate' :
-            coolantF > 215 ? 'High — monitor closely' :
+            coolantStatus === 'crit' ? 'Overheating — stop and investigate' :
+            coolantStatus === 'warn' ? 'High — monitor closely' :
             coolantF > 180 ? 'Normal operating range' :
             coolantF > 100 ? 'Warming up — heater still cool' :
             'Cold start'
@@ -138,7 +138,7 @@ export function HVACScreen(): React.ReactElement {
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>Min for heat</span>
-              <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)' }}>140 °F</span>
+              <span style={{ ...TYPE.caption, ...NUMERIC, color: 'var(--label-2)' }}>160 °F</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ ...TYPE.caption, color: 'var(--label-2)' }}>Status</span>

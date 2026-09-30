@@ -98,3 +98,23 @@ test('readiness uses the compression-ignition table when B bit 3 is set', () => 
 test('readiness with too few bytes is null', () => {
   assert.equal(readinessMonitors([0x82]), null);
 });
+
+import { pidStatus, batterySoC } from './verdicts';
+
+test('pidStatus uses the catalog thresholds', () => {
+  assert.equal(pidStatus('0105', 225), 'neutral');   // coolant: warn above 230
+  assert.equal(pidStatus('0105', 235), 'warn');
+  assert.equal(pidStatus('0105', 245), 'crit');
+  assert.equal(pidStatus('015C', 260), 'warn');      // oil: warn 250, crit 270
+  assert.equal(pidStatus('015C', NaN), 'neutral');
+  assert.equal(pidStatus('XXXX', 999), 'neutral');
+});
+
+test('batterySoC follows the resting-voltage table', () => {
+  assert.equal(batterySoC(12.7), 'Fully charged');
+  assert.equal(batterySoC(12.5), '75% charged');
+  assert.equal(batterySoC(12.3), '50% charged');
+  assert.equal(batterySoC(12.1), '25% charged');
+  assert.equal(batterySoC(11.9), 'Discharged');
+  assert.equal(batterySoC(0), '—');
+});

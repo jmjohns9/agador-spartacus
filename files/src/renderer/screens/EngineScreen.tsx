@@ -5,7 +5,7 @@ import {
 } from '../components/layout/UIComponents';
 import { TYPE, NUMERIC, STATUS_TEXT, STATUS_FILL } from '../theme/theme';
 import type { Status } from '../theme/theme';
-import { mapVerdict, isReading } from '../logic/verdicts';
+import { mapVerdict, isReading, pidStatus } from '../logic/verdicts';
 import { PID_MAP } from '../../core/pidCatalog';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -138,8 +138,8 @@ export function EngineScreen(): React.ReactElement {
           label="Coolant temp"
           value={fmt('0105', usePID('0105'))}
           barPercent={isReading(coolantF) ? ((coolantF - 68) / (240 - 68)) * 100 : undefined}
-          status={coolantF > 230 ? 'crit' : coolantF > 215 ? 'warn' : 'neutral'}
-          subtext={coolantF > 230 ? 'Overheating' : coolantF > 215 ? 'High — monitor closely' : coolantF > 180 ? 'Normal operating range' : isReading(coolantF) ? 'Warming up' : '—'}
+          status={pidStatus('0105', coolantF)}
+          subtext={pidStatus('0105', coolantF) === 'crit' ? 'Overheating' : pidStatus('0105', coolantF) === 'warn' ? 'High — monitor closely' : coolantF > 180 ? 'Normal operating range' : isReading(coolantF) ? 'Warming up' : '—'}
           tooltip={<TipContent name="Engine Coolant Temperature" description="Temperature at the thermostat housing. Drives fuel enrichment, ignition timing, and cooling fan control." formula="(byte A − 40) × 9 ÷ 5 + 32" range="0105 · Normal: 195–220 °F · Overheat threshold: 240 °F" />}
         />
         <Metric
@@ -147,8 +147,8 @@ export function EngineScreen(): React.ReactElement {
           label="Oil temp"
           value={fmt('015C', usePID('015C'))}
           barPercent={((oilTempF - 68) / (270 - 68)) * 100}
-          status={oilTempF > 260 ? 'crit' : 'neutral'}
-          barStatus={oilTempF > 260 ? 'crit' : oilTempF > 240 ? 'warn' : 'neutral'}
+          status={pidStatus('015C', oilTempF)}
+          barStatus={pidStatus('015C', oilTempF)}
           subtext="Sump temp · Normal: 180–230 °F"
           tooltip={<TipContent name="Engine Oil Temperature" description="Oil sump temperature. High oil temp degrades lubrication film and accelerates wear. Allow warmup before hard acceleration." formula="(byte A − 40) × 9 ÷ 5 + 32" range="015C · Normal: 180–230 °F" />}
         />
@@ -264,7 +264,7 @@ export function EngineScreen(): React.ReactElement {
           size="compact"
           label="EGR commanded"
           value={fmt('012C', usePID('012C'))}
-          subtext="0% at idle — normal"
+          subtext="Normal at idle: 0%"
           tooltip={<TipContent name="EGR Valve — Commanded Position" description="Exhaust Gas Recirculation valve position commanded by the ECM. Reduces NOx at cruise; 0% at idle." formula="(byte A ÷ 255) × 100" range="012C · Idle: 0% · Cruise: 10–25%" />}
         />
         <Metric
