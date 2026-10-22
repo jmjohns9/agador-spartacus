@@ -1,0 +1,18 @@
+# ELM327 emulator on :35000, open to the LAN, for driving the app with no OBD
+# adapter. Takes the bridge's port, so starting one stops the other.
+#   sudo cp tattlestone-emulator.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl start tattlestone-emulator
+[Unit]
+Description=Tattlestone ELM327 emulator (TCP 35000, LAN)
+Wants=network-online.target
+After=network-online.target
+Conflicts=tattlestone-bridge.service
+
+[Service]
+User=arduino
+ExecStart=/usr/bin/python3 -u /home/arduino/uno-q-bridge/elm327_emulator.py --host 0.0.0.0 --port 35000
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
