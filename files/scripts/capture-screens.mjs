@@ -59,7 +59,24 @@ try {
     ws.send(JSON.stringify({ id, method, params }));
   });
 
-  await sleep(5000); // simulator auto-connects and starts polling
+  await sleep(3000);
+  // A fresh profile starts disconnected, so connect the built-in simulator
+  // (Connection → Launch Emulator) and let a few poll cycles fill the screens.
+  await send('Runtime.evaluate', { expression: `document.querySelector('[data-screen="connect"]').click()` });
+  await sleep(800);
+  const launched = (await send('Runtime.evaluate', {
+    expression: `(() => { const b = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Launch Emulator'); b?.click(); return !!b; })()`,
+    returnByValue: true,
+  })).result.value;
+  if (!launched) throw new Error('Launch Emulator button not found');
+  await sleep(10000);
+  // Codes only appear after a scan (Fault codes → Scan); the simulator preloads three.
+  await send('Runtime.evaluate', { expression: `document.querySelector('[data-screen="dtc"]').click()` });
+  await sleep(800);
+  await send('Runtime.evaluate', {
+    expression: `[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Scan')?.click()`,
+  });
+  await sleep(8000);
   const ids = JSON.parse((await send('Runtime.evaluate', {
     expression: `JSON.stringify([...document.querySelectorAll('[data-screen]')].map(b => b.dataset.screen))`,
     returnByValue: true,
