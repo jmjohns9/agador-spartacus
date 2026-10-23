@@ -6,7 +6,7 @@ import { execFile } from 'child_process';
 import { ELM327Commander } from '../core/elm327Commander';
 import { ELM327Simulator } from '../core/elm327Simulator';
 import { OBDProtocolManager } from '../core/obdProtocolManager';
-import { PIDReading, ConnectionStatus, LogEntry, PcmReadResult, VehicleSafetyReport, VehicleInfoResult } from '../shared/types';
+import { PIDReading, ConnectionStatus, LogEntry, PcmReadResult, VehicleSafetyReport, VehicleInfoResult, BuildInfo } from '../shared/types';
 import { PcmDiagnostics } from '../core/pcmDiagnostics';
 import { GMT800 } from '../core/platforms/gmt800';
 import { askClaude, loadConfig as loadClaudeConfig, saveConfig as saveClaudeConfig, SessionContext, ChatTurn, CLAUDE_MODELS, DEFAULT_SYSTEM_PROMPT } from './claudeAssistant';
@@ -137,10 +137,22 @@ function sendToRenderer(channel: string, data: unknown): void {
 
 handle('obd:get-status', () => lastStatus);
 
+// Which commit this build came from; null in `npm run dev`, which skips the
+// step that writes it.
+function readBuildInfo(): BuildInfo | null {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'build-info.json'), 'utf8')) as BuildInfo;
+  } catch {
+    return null;
+  }
+}
+const buildInfo = readBuildInfo();
+
 // Version details for Settings and reports; the sandboxed renderer has no
 // process.versions of its own.
 handle('app:get-info', () => ({
   version:  app.getVersion(),
+  build:    buildInfo,
   electron: process.versions.electron,
   chrome:   process.versions.chrome,
   node:     process.versions.node,

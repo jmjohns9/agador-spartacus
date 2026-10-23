@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StorageConfig, StorageInfo } from '../../shared/types';
+import { StorageConfig, StorageInfo, BuildInfo } from '../../shared/types';
 import {
   ScrollPane, Card, SectionHeader, SegmentedControl, AlertBanner, Button, DataRow,
 } from '../components/layout/UIComponents';
@@ -12,6 +12,13 @@ function fmtBytes(b: number): string {
   return `${(b / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+// "9d91b7a · fix/adapter-link-robustness", flagged when built from uncommitted work
+function describeBuild(build: BuildInfo | null): string {
+  if (!build) return 'Development build';
+  const parts = [build.commit, build.branch].filter(Boolean).join(' · ');
+  return build.dirty ? `${parts} · uncommitted changes` : parts;
+}
+
 export function SettingsScreen(): React.ReactElement {
   const [config,    setConfigState] = useState<StorageConfig | null>(null);
   const [info,      setInfo]        = useState<StorageInfo | null>(null);
@@ -19,7 +26,7 @@ export function SettingsScreen(): React.ReactElement {
   const [pending,   setPending]     = useState<'local' | 'sqlite' | null>(null);
   const [migrateError, setMigrateError] = useState<string | null>(null);
 
-  const [appInfo, setAppInfo] = useState<{ version: string; electron: string; chrome: string; node: string } | null>(null);
+  const [appInfo, setAppInfo] = useState<{ version: string; build: BuildInfo | null; electron: string; chrome: string; node: string } | null>(null);
   useEffect(() => { window.electronAPI.getAppInfo().then(setAppInfo).catch(() => {}); }, []);
 
   const reload = useCallback(async () => {
@@ -133,6 +140,8 @@ export function SettingsScreen(): React.ReactElement {
         </div>
         <Card padding={0}>
           {infoRow('App', `Tattlestone${appInfo ? ` v${appInfo.version}` : ''}`)}
+          {appInfo && infoRow('Build', describeBuild(appInfo.build))}
+          {appInfo?.build && infoRow('Built', new Date(appInfo.build.builtAt).toLocaleString())}
           {appInfo && infoRow('Electron', appInfo.electron)}
           {appInfo && infoRow('Chromium', appInfo.chrome)}
           {appInfo && infoRow('Node', appInfo.node)}
