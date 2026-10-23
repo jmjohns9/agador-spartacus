@@ -60,7 +60,7 @@ ATRV     Live battery voltage
   - Slow PIDs every 10th cycle.
 
   Commands never overlap on the serial line.
-- A PID catalog with SAE J1979 decode formulas, ranges, units and plain-English descriptions. The extended PIDs (wideband O2, catalyst temperatures, rail pressures, and distance, time and warm-ups since codes were cleared) are polled a few per slow cycle, and only when the ECU confirms it supports them.
+- An 87-PID catalog with SAE J1979 decode formulas, ranges, units and plain-English descriptions. The extended PIDs (wideband O2, catalyst temperatures, rail pressures, and distance, time and warm-ups since codes were cleared) are polled a few per slow cycle, and only when the ECU confirms it supports them.
 - Refusals from the ECU are logged with their ISO 14229 reason (e.g. "Conditions not correct", NRC 0x22).
 - Sparklines of recent history on the key metrics.
 - VIN detection and decoding, offline first, which fills in the vehicle profile automatically.
