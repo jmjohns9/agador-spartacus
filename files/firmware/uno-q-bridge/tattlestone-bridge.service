@@ -1,18 +1,21 @@
-# Tattlestone Network Mode bridge: TCP :35000 <-> OBD adapter on /dev/rfcomm0.
-# Without a unit nothing listens after a reboot and the app sees ECONNREFUSED.
+# Tattlestone Network Mode bridge: TCP :35000 <-> the paired OBDLink over Bluetooth.
+# The bridge opens the RFCOMM link itself for each app session and closes it
+# when the app leaves: no /dev/rfcomm0 and no `rfcomm bind` needed.
+# One-time setup: pair and trust the OBDLink with bluetoothctl.
 #   sudo cp tattlestone-bridge.service /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl enable --now tattlestone-bridge
 #   journalctl -u tattlestone-bridge -f
+# USB adapter instead: replace "--bt auto" with "--device /dev/ttyUSB0".
 [Unit]
 Description=Tattlestone Network Mode bridge (TCP 35000 -> OBD adapter)
-Wants=network-online.target
-After=network-online.target
+Wants=network-online.target bluetooth.service
+After=network-online.target bluetooth.service
 Conflicts=tattlestone-emulator.service
 
 [Service]
 User=arduino
-SupplementaryGroups=dialout
-ExecStart=/usr/bin/python3 -u /home/arduino/uno-q-bridge/obd_tcp_bridge.py --device /dev/rfcomm0 --baud 115200 --port 35000
+SupplementaryGroups=dialout bluetooth
+ExecStart=/usr/bin/python3 -u /home/arduino/uno-q-bridge/obd_tcp_bridge.py --bt auto --channel 1 --port 35000
 Restart=always
 RestartSec=2
 

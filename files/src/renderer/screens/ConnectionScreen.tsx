@@ -339,6 +339,12 @@ export function ConnectionScreen(): React.ReactElement {
                 {adapterInfo && ` · ${adapterInfo}`}
               </div>
             )}
+            {/* The bridge's progress while it brings up Bluetooth, or an auto-connect retry */}
+            {isBusy && adapterInfo && (
+              <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginTop: 4 }}>
+                {adapterInfo}
+              </div>
+            )}
             {isConnected && batteryVoltage > 0 && (
               <div style={{ ...TYPE.body, ...NUMERIC, color: 'var(--accent-text)', marginTop: 4 }}>
                 Battery: {batteryVoltage.toFixed(2)} V

@@ -15,7 +15,8 @@ import { StorageService } from './storageService';
 import { decodeVin } from './vinDecoder';
 import { fetchVehicleSafety, bulletinPdfUrl, validVehicle } from './nhtsa';
 import { buildGrounding, codesToGround } from './assistantGrounding';
-import { TcpPort, isTcpTarget, parseTcpTarget } from './tcpPort';
+import { TcpPort, isTcpTarget, parseTcpTarget, isRetryableOpenError, TCP_PREFIX } from './tcpPort';
+import { AttemptResult, connectWithRetry, readRememberedBridge, rememberBridge } from './autoConnect';
 
 // SerialPort is a native module — use require() to avoid dynamic import issues in Electron
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -93,6 +94,9 @@ function createWindow(): void {
   });
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
+  // Opening the app connects to the last used bridge, once the page is there
+  // to show the progress
+  mainWindow.webContents.once('did-finish-load', () => { void autoConnectOnOpen(); });
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 
   mainWindow.on('closed', () => { mainWindow = null; });
@@ -289,8 +293,9 @@ function setupFailureReason(port: TcpPort | { closeReason?: undefined }): string
 }
 
 // Called by obd:connect, which has already refused overlapping serial attempts
-// and ended the previous session (releasing its port).
-async function connectToPort(portPath: string, gen: number): Promise<void> {
+// and ended the previous session (releasing its port). The result tells
+// auto-connect whether trying again could help.
+async function connectToPort(portPath: string, gen: number): Promise<AttemptResult> {
   let port: any = null;
   let commander: ELM327Commander | null = null;
   // Set inside the try so any throw still reaches the finally that clears it;
@@ -317,6 +322,15 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
       ? new TcpPort(portPath)
       : new SerialPort({ path: portPath, baudRate: 115200, autoOpen: false });
     activePort = port;
+
+    // The bridge's progress while it brings up Bluetooth to the adapter,
+    // retrying as needed: shown under "Connecting…" instead of a bare spinner.
+    if (port instanceof TcpPort) {
+      port.on('status', (text: string) => {
+        addLog({ timestamp: Date.now(), level: 'info', message: `Bridge: ${text}` });
+        if (gen === sessionGen) sendToRenderer('obd:connection-status', { status: 'connecting' as ConnectionStatus, adapterInfo: text });
+      });
+    }
 
     const fakeSend = (data: string): void => {
       port.write(data, (err: Error | null | undefined) => {
@@ -390,7 +404,7 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
 
     // Disconnected (or replaced) while the port was opening: the teardown
     // could not close a port that wasn't open yet, so close it here.
-    if (gen !== sessionGen) { await closePort(port); return; }
+    if (gen !== sessionGen) { await closePort(port); return 'failed'; }
 
     // macOS opens a Bluetooth cu.* port before the RFCOMM link to the adapter
     // is up; bytes written in that window are silently dropped. Give the link
@@ -398,13 +412,13 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
     if (isBluetooth) {
       addLog({ timestamp: Date.now(), level: 'info', message: `Port open — waiting ${BT_LINK_SETTLE_MS}ms for Bluetooth link` });
       await new Promise((r) => setTimeout(r, BT_LINK_SETTLE_MS));
-      if (gen !== sessionGen) return;   // teardown already closed the port
+      if (gen !== sessionGen) return 'failed';   // teardown already closed the port
     }
 
     sendToRenderer('obd:connection-status', { status: 'initializing' as ConnectionStatus });
 
     const info = await commander.initialize();
-    if (gen !== sessionGen) return;   // teardown already closed the port
+    if (gen !== sessionGen) return 'failed';   // teardown already closed the port
 
     sendToRenderer('obd:connection-status', {
       status: 'connected' as ConnectionStatus,
@@ -417,12 +431,14 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
     // Signal strength only exists for Bluetooth; USB and network adapters have none
     if (isBluetooth) startRSSIPolling(gen);
     startOBDManager(gen, commander);
+    if (isTcpTarget(portPath)) rememberBridge(connectionFile(), portPath);
+    return 'connected';
   } catch (err) {
     commander?.close();
     if (gen !== sessionGen) {
       // A later disconnect/connect owns the UI state now — just let go of the port.
       if (port) await closePort(port);
-      return;
+      return 'failed';
     }
     if (elm === commander) elm = null;
     const msg = err instanceof Error ? err.message : String(err);
@@ -430,9 +446,44 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
     sendToRenderer('obd:connection-status', { status: 'error' as ConnectionStatus, adapterInfo: msg });
     // Release the port so the lock doesn't linger and block the next attempt
     await releaseActivePort();
+    return isRetryableOpenError(err) ? 'retryable' : 'failed';
   } finally {
     isConnecting = false;
   }
+}
+
+// ─── Connect on open ──────────────────────────────────────────────────────────
+// A window that finishes loading reconnects to the last Network Mode bridge
+// (see autoConnect.ts). Bumped by anything that must cancel a pending
+// auto-connect retry: a manual connect or disconnect, or the window closing.
+let connectionEpoch = 0;
+
+function connectionFile(): string {
+  return path.join(app.getPath('userData'), 'connection.json');
+}
+
+async function autoConnectOnOpen(): Promise<void> {
+  const target = readRememberedBridge(connectionFile());
+  if (!target) return;
+  // A renderer reload must not tear down a live or starting session
+  const live = ['connecting', 'initializing', 'connected'].includes((lastStatus as { status?: string })?.status ?? '');
+  if (isConnecting || live) return;
+  const epoch = connectionEpoch;
+  const where = target.slice(TCP_PREFIX.length);
+  addLog({ timestamp: Date.now(), level: 'info', message: `Connecting to the last used bridge, ${where}` });
+  await connectWithRetry(async () => {
+    if (isConnecting) return 'failed';
+    const gen = await endSession();
+    if (gen !== sessionGen || epoch !== connectionEpoch) return 'failed';
+    return connectToPort(target, gen);
+  }, {
+    cancelled: () => epoch !== connectionEpoch,
+    onRetry: (ms, n) => {
+      const text = `Bridge at ${where} not reachable yet — retrying in ${ms / 1000} s (attempt ${n})`;
+      addLog({ timestamp: Date.now(), level: 'info', message: text });
+      sendToRenderer('obd:connection-status', { status: 'connecting' as ConnectionStatus, adapterInfo: text });
+    },
+  });
 }
 
 let rssiTimer: ReturnType<typeof setTimeout> | null = null;
@@ -588,6 +639,7 @@ handle('obd:connect', async (_event, arg: unknown) => {
     addLog({ timestamp: Date.now(), level: 'warn', message: 'Connect ignored — a connection attempt is already in progress' });
     return;
   }
+  connectionEpoch++;   // the user's choice overrides a pending auto-connect
   // A new connection replaces whatever session is running. If another
   // connect/disconnect arrived while the old port was closing, it wins.
   const gen = await endSession();
@@ -600,6 +652,9 @@ handle('obd:connect', async (_event, arg: unknown) => {
 });
 
 handle('obd:disconnect', async () => {
+  connectionEpoch++;
+  // Disconnecting on purpose means "don't reconnect when the app opens"
+  rememberBridge(connectionFile(), null);
   const gen = await endSession();
   addLog({ timestamp: Date.now(), level: 'info', message: 'Session disconnected — port released' });
   // A connect that arrived while the port was closing owns the status now
@@ -915,6 +970,8 @@ app.on('window-all-closed', () => {
   // End the session (stops polling, releases the serial port so the adapter
   // isn't locked for other apps). On macOS the app stays running and a new
   // window starts out disconnected, so nothing may keep polling behind it.
+  // A pending auto-connect retry must not reconnect with no window either.
+  connectionEpoch++;
   void endSession();
   if (process.platform !== 'darwin') app.quit();
 });
