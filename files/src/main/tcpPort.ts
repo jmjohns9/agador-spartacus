@@ -54,44 +54,73 @@ export function describeConnectError(err: NodeJS.ErrnoException, target: TcpTarg
   }
 }
 
-// The UNO Q bridge reports a failed adapter open in-band, as one line with no
-// '>' prompt, then hangs up: "BRIDGE ERROR: cannot open /dev/rfcomm0: ...".
-// Returns the reason, or null when the text holds no such line.
+// The UNO Q bridge reports on the adapter link in-band, one line each, before
+// any ELM327 traffic (none carry the '>' prompt):
+//   BRIDGE STATUS: <progress>      while it brings up Bluetooth, retrying as needed
+//   BRIDGE READY                   link up; adapter traffic follows
+//   BRIDGE ERROR: <what to do>     then it hangs up (also on a mid-session drop)
+// Returns the error's reason, or null when the text holds no such line.
 export function parseBridgeError(text: string): string | null {
   const m = text.match(/BRIDGE ERROR: ([^\r\n]+)/);
   return m ? m[1].trim() : null;
 }
 
-// Only the start of a session can hold the bridge's error line
-const HEAD_BYTES = 256;
+// Failures that mean the bridge itself isn't up yet (board booting, service
+// restarting), so trying again shortly can work. A BRIDGE ERROR is not one:
+// the bridge already retried the adapter before giving up.
+export function isRetryableOpenError(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException | null)?.code;
+  return ['ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH', 'ETIMEDOUT', 'ECONNRESET', 'CONNECT_TIMEOUT'].includes(code ?? '');
+}
+
+// The bridge greets the moment it accepts; a plain Wi-Fi ELM327 says nothing
+// until it gets a command, so silence this long means "not a bridge".
+const BRIDGE_GREETING_MS = 1500;
+// The bridge retries the adapter for up to 20 s before answering READY or ERROR
+const BRIDGE_LINK_TIMEOUT_MS = 30_000;
+// The bridge's lines sit at the start of a session, or at the end when the
+// adapter drops mid-session; keep both ends whole across split reads.
+const CAPTURE_BYTES = 256;
 
 export class TcpPort extends EventEmitter {
   readonly path: string;
   private readonly target: TcpTarget;
   private socket: net.Socket | null = null;
-  private head = '';   // first bytes received, kept whole across split reads
+  private opened = false;
+  private head = '';
+  private tail = '';
+  private readonly greetingMs: number;
+  private readonly linkTimeoutMs: number;
 
-  constructor(path: string) {
+  // The wait overrides exist for tests; the app uses the defaults.
+  constructor(path: string, opts: { greetingMs?: number; linkTimeoutMs?: number } = {}) {
     super();
     const target = parseTcpTarget(path);
     if (!target) throw new Error(`Not a network adapter address: ${path} (expected tcp://host:port)`);
     this.path = path;
     this.target = target;
+    this.greetingMs = opts.greetingMs ?? BRIDGE_GREETING_MS;
+    this.linkTimeoutMs = opts.linkTimeoutMs ?? BRIDGE_LINK_TIMEOUT_MS;
   }
 
   get isOpen(): boolean {
-    return !!this.socket && !this.socket.destroyed && this.socket.readyState === 'open';
+    return this.opened && !!this.socket && !this.socket.destroyed && this.socket.readyState === 'open';
   }
 
   // Why the bridge hung up, when it said so before closing
   get closeReason(): string | null {
-    return parseBridgeError(this.head);
+    return parseBridgeError(this.tail) ?? parseBridgeError(this.head);
   }
 
+  // Opens the TCP connection, then waits for the bridge to bring up the
+  // adapter link ('status' events carry its progress text). The callback gets
+  // null once adapter traffic can flow, or an error whose message says what to
+  // do. Only an open that succeeded later emits 'data', 'error' or 'close'.
   open(cb: (err: Error | null) => void): void {
     const socket = net.createConnection({ host: this.target.host, port: this.target.port });
     this.socket = socket;
-    this.head = '';
+    this.opened = false;
+    this.head = this.tail = '';
     // ELM327 traffic is tiny request/response lines; Nagle would hold each
     // command back waiting for more bytes.
     socket.setNoDelay(true);
@@ -101,34 +130,90 @@ export class TcpPort extends EventEmitter {
     socket.setKeepAlive(true, 5000);
 
     let settled = false;
+    let handshaking = false;
+    let lineBuf = '';
+    let greetTimer: ReturnType<typeof setTimeout> | undefined;
+    let linkTimer: ReturnType<typeof setTimeout> | undefined;
+
     const settle = (err: Error | null): void => {
       if (settled) return;
       settled = true;
+      handshaking = false;
       socket.setTimeout(0);
+      clearTimeout(greetTimer);
+      clearTimeout(linkTimer);
+      if (!err) this.opened = true;
       cb(err);
     };
+    const fail = (message: string, code: string): void => {
+      settle(Object.assign(new Error(message), { code }));
+      socket.destroy();
+    };
+    // Adapter bytes that arrived with the bridge's last line go to the session
+    const pass = (text: string): void => { if (text) this.emit('data', Buffer.from(text, 'ascii')); };
 
     socket.setTimeout(CONNECT_TIMEOUT_MS, () => {
-      const err = new Error(`No answer from ${this.target.host}:${this.target.port} within ${CONNECT_TIMEOUT_MS / 1000} s — is the bridge powered and on this network?`);
-      settle(err);
-      socket.destroy();
+      fail(`No answer from ${this.target.host}:${this.target.port} within ${CONNECT_TIMEOUT_MS / 1000} s — is the bridge powered and on this network?`, 'CONNECT_TIMEOUT');
     });
-    socket.once('connect', () => settle(null));
+    socket.once('connect', () => {
+      socket.setTimeout(0);
+      handshaking = true;
+      // Silence: a plain Wi-Fi ELM327, ready for commands as it is
+      greetTimer = setTimeout(() => { settle(null); pass(lineBuf); }, this.greetingMs);
+    });
     socket.on('data', (chunk: Buffer) => {
-      if (this.head.length < HEAD_BYTES) this.head += chunk.toString('ascii', 0, HEAD_BYTES - this.head.length);
-      this.emit('data', chunk);
+      const text = chunk.toString('ascii');
+      if (this.head.length < CAPTURE_BYTES) this.head += text.slice(0, CAPTURE_BYTES - this.head.length);
+      this.tail = (this.tail + text).slice(-CAPTURE_BYTES);
+      if (!handshaking) {
+        if (this.opened) this.emit('data', chunk);
+        return;
+      }
+      lineBuf += text;
+      let i: number;
+      while (handshaking && (i = lineBuf.search(/[\r\n]/)) !== -1) {
+        const line = lineBuf.slice(0, i).trim();
+        lineBuf = lineBuf.slice(i + 1);
+        if (!line) continue;
+        if (line.startsWith('BRIDGE STATUS:')) {
+          clearTimeout(greetTimer);
+          linkTimer ??= setTimeout(() => fail(
+            `The bridge didn't bring up the OBD adapter within ${this.linkTimeoutMs / 1000} s: check journalctl -u tattlestone-bridge on the board`,
+            'BRIDGE_TIMEOUT'), this.linkTimeoutMs);
+          this.emit('status', line.slice('BRIDGE STATUS:'.length).trim());
+        } else if (line === 'BRIDGE READY') {
+          settle(null);
+          pass(lineBuf);
+        } else if (parseBridgeError(line)) {
+          fail(`The bridge can't reach the OBD adapter: ${parseBridgeError(line)}`, 'BRIDGE_ERROR');
+        } else {
+          // Not a bridge line: a plain ELM327 talking unprompted
+          settle(null);
+          pass(`${line}\r${lineBuf}`);
+        }
+      }
     });
     socket.on('error', (err: Error) => {
-      // Before the connection is up the error belongs to open()'s callback,
+      // Before the session is up the error belongs to open()'s callback,
       // as with SerialPort; afterwards it is a session error.
       if (!settled) {
         const code = (err as NodeJS.ErrnoException).code;
         settle(Object.assign(new Error(describeConnectError(err, this.target)), { code }));
-      } else this.emit('error', err);
+      } else if (this.opened) this.emit('error', err);
     });
-    // Only a link that actually opened can "close" — a failed open reports
-    // through its callback alone.
-    socket.on('close', () => { if (settled && this.socket === socket) this.emit('close'); });
+    socket.on('close', () => {
+      if (!settled) {
+        const why = this.closeReason;
+        settle(Object.assign(new Error(why
+          ? `The bridge can't reach the OBD adapter: ${why}`
+          : `${this.target.host}:${this.target.port} closed the connection before the adapter link was up: check the bridge log on the board`),
+          { code: why ? 'BRIDGE_ERROR' : 'ECONNRESET' }));
+        return;
+      }
+      // Only a session that actually opened can "close"; a failed open
+      // reports through its callback alone.
+      if (this.opened && this.socket === socket) this.emit('close');
+    });
   }
 
   write(data: string, cb?: (err: Error | null | undefined) => void): void {

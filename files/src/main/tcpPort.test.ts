@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import * as net from 'net';
 import * as path from 'path';
 import { spawn } from 'child_process';
-import { TcpPort, parseTcpTarget, isTcpTarget, parseBridgeError, DEFAULT_TCP_PORT } from './tcpPort';
+import { TcpPort, parseTcpTarget, isTcpTarget, parseBridgeError, isRetryableOpenError, DEFAULT_TCP_PORT } from './tcpPort';
+
+// A plain Wi-Fi ELM327 never greets; don't make every test wait the full window
+const QUICK = { greetingMs: 20 };
 
 test('only tcp:// paths are network targets', () => {
   assert.equal(isTcpTarget('tcp://192.168.4.1:35000'), true);
@@ -43,7 +46,7 @@ async function fakeBridge(): Promise<{ port: number; close: () => Promise<void> 
 
 test('opens, round-trips a command and closes like a SerialPort', async () => {
   const bridge = await fakeBridge();
-  const port = new TcpPort(`tcp://127.0.0.1:${bridge.port}`);
+  const port = new TcpPort(`tcp://127.0.0.1:${bridge.port}`, QUICK);
   await new Promise<void>((res, rej) => port.open((e) => e ? rej(e) : res()));
   assert.equal(port.isOpen, true);
 
@@ -71,7 +74,7 @@ test('a refused connection fails open() and emits no close', async () => {
 
 test('the bridge dropping the link emits close', async () => {
   const bridge = await fakeBridge();
-  const port = new TcpPort(`tcp://127.0.0.1:${bridge.port}`);
+  const port = new TcpPort(`tcp://127.0.0.1:${bridge.port}`, QUICK);
   await new Promise<void>((res, rej) => port.open((e) => e ? rej(e) : res()));
   const closed = new Promise<void>((r) => port.once('close', () => r()));
   await bridge.close();
@@ -86,35 +89,113 @@ test('a bridge error line is read out of the received text', () => {
   assert.equal(parseBridgeError('BRIDGE ERR'), null);
 });
 
-// A bridge that can't open its adapter: says why, then hangs up
-async function failingBridge(parts: string[]): Promise<{ port: number; close: () => Promise<void> }> {
+test('only "bridge not up yet" failures are worth retrying', () => {
+  for (const code of ['ECONNREFUSED', 'EHOSTUNREACH', 'CONNECT_TIMEOUT']) assert.equal(isRetryableOpenError({ code }), true, code);
+  for (const code of ['BRIDGE_ERROR', 'BRIDGE_TIMEOUT', 'ENOTFOUND', undefined]) assert.equal(isRetryableOpenError({ code }), false, String(code));
+});
+
+// A stand-in UNO Q bridge: writes `script` (strings, with numbers as pauses in
+// ms) to each connection, then answers ATI if still open, or hangs up on 'END'.
+async function scriptedBridge(script: (string | number)[]): Promise<{ port: number; close: () => Promise<void> }> {
+  const sockets = new Set<net.Socket>();
   const server = net.createServer(async (s) => {
-    for (const part of parts) { s.write(part); await new Promise((r) => setTimeout(r, 20)); }
-    s.end();
+    sockets.add(s);
+    s.on('close', () => sockets.delete(s));
+    s.on('error', () => { /* the port under test may destroy its end */ });
+    s.on('data', (d) => { if (d.toString().includes('ATI')) s.write('ELM327 v1.5\r\r>'); });
+    for (const step of script) {
+      if (typeof step === 'number') await new Promise((r) => setTimeout(r, step));
+      else if (step === 'END') { s.end(); return; }
+      else if (!s.destroyed) s.write(step);
+    }
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
   const { port } = server.address() as net.AddressInfo;
-  return { port, close: () => new Promise<void>((r) => server.close(() => r())) };
+  return {
+    port,
+    close: () => new Promise<void>((r) => { for (const s of sockets) s.destroy(); server.close(() => r()); }),
+  };
 }
 
-for (const [name, parts] of [
-  ['in one read', [OPEN_FAIL]],
-  ['split across reads', [OPEN_FAIL.slice(0, 20), OPEN_FAIL.slice(20)]],
+function openPort(port: TcpPort): Promise<Error | null> {
+  return new Promise((r) => port.open(r));
+}
+
+test('a bridge that reports progress, then READY, opens and relays its status', async (t) => {
+  const bridge = await scriptedBridge([
+    'BRIDGE STATUS: connecting to the OBD adapter\r', 20,
+    'BRIDGE STATUS: OBDLink 00:04:3E:12:34:56 not answering, retrying in 1s (attempt 1)\r', 20,
+    'BRIDGE READY\r',
+  ]);
+  t.after(bridge.close);
+  const port = new TcpPort(`tcp://127.0.0.1:${bridge.port}`);
+  const statuses: string[] = [];
+  port.on('status', (s: string) => statuses.push(s));
+  assert.equal(await openPort(port), null);
+  assert.deepEqual(statuses, ['connecting to the OBD adapter', 'OBDLink 00:04:3E:12:34:56 not answering, retrying in 1s (attempt 1)']);
+  const reply = new Promise<string>((r) => port.on('data', (b: Buffer) => r(b.toString('ascii'))));
+  port.write('ATI\r');
+  assert.match(await reply, /ELM327 v1\.5/);
+  await new Promise<void>((r) => port.close(r));
+});
+
+test('adapter bytes that arrive with READY reach the session', async (t) => {
+  const bridge = await scriptedBridge(['BRIDGE READY\rELM327 v1.5\r\r>']);
+  t.after(bridge.close);
+  const port = new TcpPort(`tcp://127.0.0.1:${bridge.port}`);
+  const got = new Promise<string>((r) => port.on('data', (b: Buffer) => r(b.toString('ascii'))));
+  assert.equal(await openPort(port), null);
+  assert.equal(await got, 'ELM327 v1.5\r\r>');
+  await new Promise<void>((r) => port.close(r));
+});
+
+for (const [name, script] of [
+  ['in one read', ['BRIDGE STATUS: connecting to the OBD adapter\r', OPEN_FAIL, 'END']],
+  ['split across reads', ['BRIDGE STATUS: connecting to the OBD adapter\r', OPEN_FAIL.slice(0, 20), 20, OPEN_FAIL.slice(20), 'END']],
 ] as const) {
-  test(`the bridge's reason for hanging up is kept as closeReason (${name})`, async (t) => {
-    const bridge = await failingBridge([...parts]);
+  test(`BRIDGE ERROR fails open() with the bridge's advice and emits no close (${name})`, async (t) => {
+    const bridge = await scriptedBridge([...script]);
     t.after(bridge.close);
     const port = new TcpPort(`tcp://127.0.0.1:${bridge.port}`);
-    const closed = new Promise<void>((r) => port.once('close', () => r()));
-    await new Promise<void>((res, rej) => port.open((e) => e ? rej(e) : res()));
-    await closed;
-    assert.equal(port.closeReason, 'cannot open /dev/rfcomm0: No such file or directory');
+    let closed = false;
+    port.on('close', () => { closed = true; });
+    const err = await openPort(port);
+    assert.equal(err?.message, "The bridge can't reach the OBD adapter: cannot open /dev/rfcomm0: No such file or directory");
+    assert.equal((err as NodeJS.ErrnoException).code, 'BRIDGE_ERROR');
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(closed, false, 'a failed open must not also report close');
   });
 }
 
+test('a bridge that never finishes linking times out', async (t) => {
+  const bridge = await scriptedBridge(['BRIDGE STATUS: connecting to the OBD adapter\r']);
+  t.after(bridge.close);
+  const err = await openPort(new TcpPort(`tcp://127.0.0.1:${bridge.port}`, { linkTimeoutMs: 100 }));
+  assert.equal((err as NodeJS.ErrnoException).code, 'BRIDGE_TIMEOUT');
+  assert.match(err!.message, /journalctl -u tattlestone-bridge/);
+});
+
+test('a bridge that hangs up mid-handshake without a reason fails open()', async (t) => {
+  const bridge = await scriptedBridge(['BRIDGE STATUS: connecting to the OBD adapter\r', 'END']);
+  t.after(bridge.close);
+  const err = await openPort(new TcpPort(`tcp://127.0.0.1:${bridge.port}`));
+  assert.match(err!.message, /closed the connection before the adapter link was up/);
+});
+
+test('a mid-session BRIDGE ERROR is kept as closeReason, past the first 256 bytes', async (t) => {
+  const bridge = await scriptedBridge(['BRIDGE READY\r', 30, '410C1AF8\r\r>'.repeat(40), 30,
+    'BRIDGE ERROR: lost the link to the OBD adapter (the adapter closed the link)\r', 'END']);
+  t.after(bridge.close);
+  const port = new TcpPort(`tcp://127.0.0.1:${bridge.port}`);
+  const closed = new Promise<void>((r) => port.once('close', () => r()));
+  assert.equal(await openPort(port), null);
+  await closed;
+  assert.equal(port.closeReason, 'lost the link to the OBD adapter (the adapter closed the link)');
+});
+
 test('a link that closes without a bridge error has no closeReason', async () => {
   const bridge = await fakeBridge();
-  const port = new TcpPort(`tcp://127.0.0.1:${bridge.port}`);
+  const port = new TcpPort(`tcp://127.0.0.1:${bridge.port}`, QUICK);
   await new Promise<void>((res, rej) => port.open((e) => e ? rej(e) : res()));
   const closed = new Promise<void>((r) => port.once('close', () => r()));
   await bridge.close();
@@ -159,7 +240,7 @@ test('round-trips ELM327 traffic with the firmware emulator, across split reads'
   if (!up) { t.skip('python3 not available'); return; }
   t.after(() => { emu.kill(); });
 
-  const port = new TcpPort(`tcp://127.0.0.1:${tcp}`);
+  const port = new TcpPort(`tcp://127.0.0.1:${tcp}`, QUICK);
   await new Promise<void>((res, rej) => port.open((e) => e ? rej(e) : res()));
   let rx = '';
   port.on('data', (b: Buffer) => { rx += b.toString('ascii'); });
@@ -180,4 +261,54 @@ test('round-trips ELM327 traffic with the firmware emulator, across split reads'
   assert.equal(replies[1], 'ELM327 v1.5');
   assert.match(replies[2], /^410C[0-9A-F]{4}$/);
   await new Promise<void>((r) => port.close(r));
+});
+
+// The real UNO Q bridge, run with --device on a pty-backed ELM327 from its own
+// test module: the app/bridge handshake end to end. Skipped where python3 is missing.
+const FIRMWARE = path.join(__dirname, '../../firmware/uno-q-bridge');
+
+function spawnLine(t: { after: (fn: () => void) => void }, args: string[], expect: RegExp): Promise<string | null> {
+  const proc = spawn('python3', ['-u', ...args], { cwd: FIRMWARE });
+  t.after(() => { proc.kill(); });
+  return new Promise<string | null>((r) => {
+    proc.once('error', () => r(null));
+    let out = '';
+    proc.stdout.on('data', (d: Buffer) => { out += d.toString(); const m = out.match(expect); if (m) r(m[1] ?? m[0]); });
+  });
+}
+
+async function realBridge(t: { after: (fn: () => void) => void }, device: string | null): Promise<number | null> {
+  if (device === null) {
+    const pty = await spawnLine(t, ['-c', 'from test_obd_tcp_bridge import fake_adapter\nimport time\nprint(fake_adapter()[0], flush=True)\ntime.sleep(60)'], /(\/dev\/\S+)/);
+    if (!pty) return null;
+    device = pty;
+  }
+  const tcp = await freePort();
+  const up = await spawnLine(t, ['obd_tcp_bridge.py', '--device', device, '--port', String(tcp)], /listening/);
+  return up ? tcp : null;
+}
+
+test('with the real bridge: connect, round-trip, close cleanly, reconnect', async (t) => {
+  const tcp = await realBridge(t, null);
+  if (!tcp) { t.skip('python3 not available'); return; }
+  for (const round of [1, 2]) {
+    const port: TcpPort = new TcpPort(`tcp://127.0.0.1:${tcp}`);
+    const statuses: string[] = [];
+    port.on('status', (s: string) => statuses.push(s));
+    assert.equal(await openPort(port), null, `round ${round}`);
+    assert.deepEqual(statuses, ['connecting to the OBD adapter']);
+    const reply = new Promise<string>((r) => { let rx = ''; port.on('data', (b: Buffer) => { rx += b.toString('ascii'); if (rx.endsWith('>')) r(rx); }); });
+    port.write('ATI\r');
+    assert.equal(await reply, 'ELM327 v1.5\r\r>');
+    await new Promise<void>((r) => port.close(r));
+    assert.equal(port.isOpen, false);
+  }
+});
+
+test('with the real bridge: an unavailable adapter fails open() with what to do', async (t) => {
+  const tcp = await realBridge(t, '/dev/does-not-exist');
+  if (!tcp) { t.skip('python3 not available'); return; }
+  const err = await openPort(new TcpPort(`tcp://127.0.0.1:${tcp}`));
+  assert.equal((err as NodeJS.ErrnoException).code, 'BRIDGE_ERROR');
+  assert.match(err!.message, /^The bridge can't reach the OBD adapter: cannot open \/dev\/does-not-exist: .*USB cable/);
 });
