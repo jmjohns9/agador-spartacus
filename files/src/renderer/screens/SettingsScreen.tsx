@@ -4,6 +4,7 @@ import {
   ScrollPane, Card, SectionHeader, SegmentedControl, AlertBanner, Button, DataRow,
 } from '../components/layout/UIComponents';
 import { TYPE } from '../theme/theme';
+import { Lockup } from '../components/brand/Brand';
 
 function fmtBytes(b: number): string {
   if (b < 1024)         return `${b} B`;
@@ -126,8 +127,12 @@ export function SettingsScreen(): React.ReactElement {
 
       <SectionHeader>About</SectionHeader>
       <Card style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 0 4px' }}>
+          <Lockup height={20} />
+          <div style={{ ...TYPE.body, color: 'var(--label-2)' }}>Reads everything. Changes nothing.</div>
+        </div>
         <Card padding={0}>
-          {infoRow('App', `Tellstone${appInfo ? ` v${appInfo.version}` : ''}`)}
+          {infoRow('App', `Tattlestone${appInfo ? ` v${appInfo.version}` : ''}`)}
           {appInfo && infoRow('Electron', appInfo.electron)}
           {appInfo && infoRow('Chromium', appInfo.chrome)}
           {appInfo && infoRow('Node', appInfo.node)}

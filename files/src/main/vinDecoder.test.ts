@@ -33,7 +33,7 @@ test('VIN pattern excludes I, O and Q', () => {
 
 // better-sqlite3 is built for Electron's ABI, so this runs under `npm run test:electron`
 test('decodes offline from the bundled vPIC database', { skip: !process.versions.electron }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'tellstone-vin-'));
+  const dir = mkdtempSync(join(tmpdir(), 'tattlestone-vin-'));
   try {
     const v = await decodeOffline('1GCEK19T84E123456', dir);
     assert.equal(v?.make, 'Chevrolet');

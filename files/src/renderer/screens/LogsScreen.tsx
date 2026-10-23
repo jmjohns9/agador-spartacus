@@ -71,7 +71,7 @@ export function LogsScreen(): React.ReactElement {
   const handleExportTxt = async () => {
     const slug = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join('-')
       .replace(/[^a-zA-Z0-9-]/g, '').toLowerCase() || 'session';
-    const filename = `tellstone-${slug}-log-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.txt`;
+    const filename = `tattlestone-${slug}-log-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.txt`;
     // What is on screen (filters applied, markers included), oldest first
     const text = [...filtered].reverse().map(e =>
       `${new Date(e.timestamp).toISOString()}\t${e.level.toUpperCase().padEnd(5)}\t${e.message}`).join('\n');
@@ -88,7 +88,7 @@ export function LogsScreen(): React.ReactElement {
   const handleExportCSV = async () => {
     const slug = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join('-')
       .replace(/[^a-zA-Z0-9-]/g, '').toLowerCase() || 'session';
-    const filename = `tellstone-${slug}-log-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.csv`;
+    const filename = `tattlestone-${slug}-log-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.csv`;
     // Every field quoted; a leading = + - @ is neutralised so a spreadsheet
     // doesn't run adapter-supplied text as a formula
     const field = (v: unknown): string => {

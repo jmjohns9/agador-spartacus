@@ -34,6 +34,26 @@ export function parseTcpTarget(path: string): TcpTarget | null {
   return { host: m[1], port };
 }
 
+// A failed connect is shown verbatim in the Connection screen's banner, so say
+// which hop failed (bridge not running, board not on the network, name not
+// found) instead of a bare errno. The code stays on the returned error.
+export function describeConnectError(err: NodeJS.ErrnoException, target: TcpTarget): string {
+  const where = `${target.host}:${target.port}`;
+  switch (err.code) {
+    case 'ECONNREFUSED':
+      return `Nothing is listening on ${where}: the bridge isn't running on the board (systemctl status tattlestone-bridge) [ECONNREFUSED]`;
+    case 'EHOSTUNREACH':
+    case 'ENETUNREACH':
+      return `Can't reach ${where}: the board is off, still booting, on another network, or macOS Local Network access is off for Tattlestone [${err.code}]`;
+    case 'ENOTFOUND':
+      return `Can't find ${target.host}: try the board's IP address instead of its name [ENOTFOUND]`;
+    case 'ECONNRESET':
+      return `${where} accepted the connection, then dropped it: check the bridge log on the board [ECONNRESET]`;
+    default:
+      return `${err.message} (${where})`;
+  }
+}
+
 export class TcpPort extends EventEmitter {
   readonly path: string;
   private readonly target: TcpTarget;
@@ -57,6 +77,10 @@ export class TcpPort extends EventEmitter {
     // ELM327 traffic is tiny request/response lines; Nagle would hold each
     // command back waiting for more bytes.
     socket.setNoDelay(true);
+    // Let the OS probe an idle link so a bridge that lost power (no FIN) is
+    // eventually reported as 'close'. The commander's timeout count catches it
+    // sooner while polling; this covers a session sitting idle.
+    socket.setKeepAlive(true, 5000);
 
     let settled = false;
     const settle = (err: Error | null): void => {
@@ -76,8 +100,10 @@ export class TcpPort extends EventEmitter {
     socket.on('error', (err: Error) => {
       // Before the connection is up the error belongs to open()'s callback,
       // as with SerialPort; afterwards it is a session error.
-      if (!settled) settle(err);
-      else this.emit('error', err);
+      if (!settled) {
+        const code = (err as NodeJS.ErrnoException).code;
+        settle(Object.assign(new Error(describeConnectError(err, this.target)), { code }));
+      } else this.emit('error', err);
     });
     // Only a link that actually opened can "close" — a failed open reports
     // through its callback alone.

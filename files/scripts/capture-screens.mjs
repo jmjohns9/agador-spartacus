@@ -22,7 +22,7 @@ mkdirSync(outDir, { recursive: true });
 // and other auto-saved state never land in the user's real
 // ~/Library/Application Support/silverado-dx. Confirmed empirically that Electron 42
 // honours --user-data-dir for app.getPath('userData').
-const userDataDir = mkdtempSync(path.join(os.tmpdir(), 'tellstone-capture-'));
+const userDataDir = mkdtempSync(path.join(os.tmpdir(), 'tattlestone-capture-'));
 // Some shells (including this repo's agent sandbox) export ELECTRON_RUN_AS_NODE=1,
 // which makes the "electron" binary boot as plain Node — no app/BrowserWindow,
 // no CDP target. Strip it so the harness always gets a real Electron process.
