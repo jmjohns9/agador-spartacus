@@ -1,7 +1,7 @@
 # GitHub page redesign
 
 Date: 2026-10-19
-Branch: `docs/github-redesign`, cut from `feat/tattlestone-brand`, PR stacked on #10
+Branch: `docs/github-redesign`, cut from `fix/adapter-link-robustness`, PR stacked on #12
 
 ## Goal
 
