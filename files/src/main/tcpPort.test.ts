@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as net from 'net';
 import * as path from 'path';
 import { spawn } from 'child_process';
-import { TcpPort, parseTcpTarget, isTcpTarget, DEFAULT_TCP_PORT } from './tcpPort';
+import { TcpPort, parseTcpTarget, isTcpTarget, parseBridgeError, DEFAULT_TCP_PORT } from './tcpPort';
 
 test('only tcp:// paths are network targets', () => {
   assert.equal(isTcpTarget('tcp://192.168.4.1:35000'), true);
@@ -76,6 +76,50 @@ test('the bridge dropping the link emits close', async () => {
   const closed = new Promise<void>((r) => port.once('close', () => r()));
   await bridge.close();
   await closed;
+});
+
+const OPEN_FAIL = 'BRIDGE ERROR: cannot open /dev/rfcomm0: No such file or directory\r';
+
+test('a bridge error line is read out of the received text', () => {
+  assert.equal(parseBridgeError(OPEN_FAIL), 'cannot open /dev/rfcomm0: No such file or directory');
+  assert.equal(parseBridgeError('ELM327 v1.5\r\r>'), null);
+  assert.equal(parseBridgeError('BRIDGE ERR'), null);
+});
+
+// A bridge that can't open its adapter: says why, then hangs up
+async function failingBridge(parts: string[]): Promise<{ port: number; close: () => Promise<void> }> {
+  const server = net.createServer(async (s) => {
+    for (const part of parts) { s.write(part); await new Promise((r) => setTimeout(r, 20)); }
+    s.end();
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+  const { port } = server.address() as net.AddressInfo;
+  return { port, close: () => new Promise<void>((r) => server.close(() => r())) };
+}
+
+for (const [name, parts] of [
+  ['in one read', [OPEN_FAIL]],
+  ['split across reads', [OPEN_FAIL.slice(0, 20), OPEN_FAIL.slice(20)]],
+] as const) {
+  test(`the bridge's reason for hanging up is kept as closeReason (${name})`, async (t) => {
+    const bridge = await failingBridge([...parts]);
+    t.after(bridge.close);
+    const port = new TcpPort(`tcp://127.0.0.1:${bridge.port}`);
+    const closed = new Promise<void>((r) => port.once('close', () => r()));
+    await new Promise<void>((res, rej) => port.open((e) => e ? rej(e) : res()));
+    await closed;
+    assert.equal(port.closeReason, 'cannot open /dev/rfcomm0: No such file or directory');
+  });
+}
+
+test('a link that closes without a bridge error has no closeReason', async () => {
+  const bridge = await fakeBridge();
+  const port = new TcpPort(`tcp://127.0.0.1:${bridge.port}`);
+  await new Promise<void>((res, rej) => port.open((e) => e ? rej(e) : res()));
+  const closed = new Promise<void>((r) => port.once('close', () => r()));
+  await bridge.close();
+  await closed;
+  assert.equal(port.closeReason, null);
 });
 
 test('an invalid address throws before any socket is made', () => {

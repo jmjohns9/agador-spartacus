@@ -54,10 +54,22 @@ export function describeConnectError(err: NodeJS.ErrnoException, target: TcpTarg
   }
 }
 
+// The UNO Q bridge reports a failed adapter open in-band, as one line with no
+// '>' prompt, then hangs up: "BRIDGE ERROR: cannot open /dev/rfcomm0: ...".
+// Returns the reason, or null when the text holds no such line.
+export function parseBridgeError(text: string): string | null {
+  const m = text.match(/BRIDGE ERROR: ([^\r\n]+)/);
+  return m ? m[1].trim() : null;
+}
+
+// Only the start of a session can hold the bridge's error line
+const HEAD_BYTES = 256;
+
 export class TcpPort extends EventEmitter {
   readonly path: string;
   private readonly target: TcpTarget;
   private socket: net.Socket | null = null;
+  private head = '';   // first bytes received, kept whole across split reads
 
   constructor(path: string) {
     super();
@@ -71,9 +83,15 @@ export class TcpPort extends EventEmitter {
     return !!this.socket && !this.socket.destroyed && this.socket.readyState === 'open';
   }
 
+  // Why the bridge hung up, when it said so before closing
+  get closeReason(): string | null {
+    return parseBridgeError(this.head);
+  }
+
   open(cb: (err: Error | null) => void): void {
     const socket = net.createConnection({ host: this.target.host, port: this.target.port });
     this.socket = socket;
+    this.head = '';
     // ELM327 traffic is tiny request/response lines; Nagle would hold each
     // command back waiting for more bytes.
     socket.setNoDelay(true);
@@ -96,7 +114,10 @@ export class TcpPort extends EventEmitter {
       socket.destroy();
     });
     socket.once('connect', () => settle(null));
-    socket.on('data', (chunk: Buffer) => this.emit('data', chunk));
+    socket.on('data', (chunk: Buffer) => {
+      if (this.head.length < HEAD_BYTES) this.head += chunk.toString('ascii', 0, HEAD_BYTES - this.head.length);
+      this.emit('data', chunk);
+    });
     socket.on('error', (err: Error) => {
       // Before the connection is up the error belongs to open()'s callback,
       // as with SerialPort; afterwards it is a session error.

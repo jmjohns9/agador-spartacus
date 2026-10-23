@@ -268,6 +268,14 @@ async function endSession(): Promise<number> {
   return gen;
 }
 
+// The message shown (Connection screen banner and session log) when the port
+// closes while the adapter is still being set up. A TcpPort knows the bridge's
+// reason when it sent one (port.closeReason); a Bluetooth SerialPort never does.
+function setupFailureReason(port: TcpPort | { closeReason?: undefined }): string {
+  if (port.closeReason) return `The bridge can't reach the OBD adapter: ${port.closeReason} [BRIDGE ERROR]`;
+  return 'The adapter closed the connection during setup: check that it has power and no other device is connected to it';
+}
+
 // Called by obd:connect, which has already refused overlapping serial attempts
 // and ended the previous session (releasing its port).
 async function connectToPort(portPath: string, gen: number): Promise<void> {
@@ -347,8 +355,18 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
       // The adapter went away under a live session: end it so nothing keeps
       // polling a closed port.
       addLog({ timestamp: Date.now(), level: 'warn', message: 'Serial port closed' });
+      // Closed before initialize() finished: this attempt failed, and its
+      // catch stays silent because endSession() moves sessionGen on. Report
+      // the failure here, with the bridge's own reason when it gave one.
+      const setupReason = commander?.ready ? null : setupFailureReason(port);
       void endSession().then((g) => {
-        if (g === sessionGen) sendToRenderer('obd:connection-status', { status: 'disconnected' as ConnectionStatus });
+        if (g !== sessionGen) return;
+        if (setupReason === null) {
+          sendToRenderer('obd:connection-status', { status: 'disconnected' as ConnectionStatus });
+          return;
+        }
+        addLog({ timestamp: Date.now(), level: 'error', message: `Connection failed: ${setupReason}` });
+        sendToRenderer('obd:connection-status', { status: 'error' as ConnectionStatus, adapterInfo: setupReason });
       });
     });
 

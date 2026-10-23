@@ -151,6 +151,9 @@ export class ELM327Commander extends EventEmitter {
   private async probeAdapter(): Promise<{ cmd: string; banner: string } | null> {
     for (const cmd of ['ATZ', 'ATI']) {
       const resp = await this.send(cmd, 2200);
+      // Cut off by close() (the port or bridge hung up): not a silent adapter,
+      // and nothing more can be sent.
+      if (resp.errorMessage === 'Closed') return null;
       if (resp.raw && resp.raw.trim().length > 0 && !resp.errorMessage) {
         this.log(`Adapter responded to ${cmd}: ${resp.raw.trim()}`);
         // Last line: with echo still on, the first line is the command itself

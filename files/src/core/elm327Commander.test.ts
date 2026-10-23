@@ -45,6 +45,21 @@ test('close() resolves a command that is waiting for its reply', async () => {
   assert.equal(resp.errorMessage, 'Closed');
 });
 
+test('close() during the probe ends it without reporting a silent adapter', async () => {
+  // A bridge that hangs up before answering: the probe's ATZ is cut off by
+  // close(), which is not the same as the adapter staying quiet.
+  const writes: string[] = [];
+  const logs: string[] = [];
+  const elm = new ELM327Commander((data) => { writes.push(data); });
+  elm.on('log', (e: { message: string }) => logs.push(e.message));
+  const init = elm.initialize();
+  await new Promise(r => setTimeout(r, 10));
+  elm.close();
+  await assert.rejects(init, /closed/i);
+  assert.deepEqual(logs.filter((m) => m.includes('No response to')), []);
+  assert.deepEqual(writes, ['ATZ\r'], 'ATI was sent after the link closed');
+});
+
 test('send() refuses vehicle-write services without touching the transport', async () => {
   // The app is read-only: clearing codes, resets, writes and flashing never go out.
   for (const cmd of ['04', '08 01', '11 01', '14 FF FF FF', '28 00', '2E F1 90', '2F 01', '31 01', '34', '36 01', '3B 01', '85 02']) {
