@@ -27,7 +27,7 @@ SS = 4
 MARGIN = 80
 MARK_W = 250                       # drawn stone width
 FONT = "/System/Library/Fonts/HelveticaNeue.ttc"
-LINE = "Tattlestone plugs into your car and tells you what it’s been keeping quiet about."
+LINE = "Your car writes down what goes wrong. Tattlestone reads it to you."
 
 OUT = Path(__file__).parent / "github" / "social-preview.png"
 

@@ -1,29 +1,27 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="brand/github/readme-banner-dark.svg">
-  <img alt="Tattlestone" src="brand/github/readme-banner-light.svg" width="100%">
+  <img alt="Tattlestone. Your car writes down what goes wrong. Tattlestone reads it to you." src="brand/github/readme-banner-light.svg" width="100%">
 </picture>
 
-Tattlestone plugs into your car and tells you what it's been keeping quiet about.
+## What it does
+
+Your car has a bunch of small computers in it. One runs the engine and another runs the dashboard. When something goes wrong, they write down a code and hold on to it. Tattlestone plugs into the port under the dashboard, reads those codes along with live readings like battery voltage and engine temperature, and shows them on your Mac in plain words.
+
+- It checks your car's health: battery voltage, the check engine light, and whether the emissions tests are ready.
+- It shows live gauges while the engine runs, like speed, temperatures and how rich or lean the fuel mix is.
+- It reads fault codes and tells you what they mean. It knows 371 codes for GM trucks of the early 2000s and about 9,500 general ones.
+- It helps you hunt down a battery drain. It tracks the battery voltage over hours, shows which fuses are most likely to blame, and walks you through pulling them in order.
+- It looks up recalls and service bulletins for your car from NHTSA, and points out the ones that mention your codes.
+- You can ask Claude about what you're seeing. It answers from Tattlestone's own code lists and NHTSA's records, and shows which sources it used. You bring your own API key.
+- It saves sessions, so you can compare today with last week, and it can turn one into a report.
 
 ## Why it exists
 
 It started with a 2004 Chevy Silverado that kept going dead overnight. Something in the truck was still using power after it was locked up, and the usual way to find it is to pull fuses one at a time while watching a meter on the battery. Tattlestone came out of wanting the truck to just say what was wrong.
 
-## What it does
-
-Your truck has a bunch of small computers in it. One runs the engine and another runs the dashboard. They talk to each other all the time, and when something goes wrong they write down a code. Tattlestone reads what they say and shows it on your Mac.
-
-- It checks the truck's health: battery voltage, the check engine light, and whether the emissions tests are ready.
-- It shows live gauges while the engine runs, like speed, temperatures and how rich or lean the fuel mix is.
-- It reads fault codes and tells you what they mean in plain words. It knows 371 codes for GM trucks of that era and about 9,500 general ones.
-- It helps you hunt down a battery drain. It tracks the battery voltage over hours, shows which fuses on your truck are most likely to blame, and walks you through pulling them in order.
-- It looks up recalls and service bulletins for your truck from NHTSA, and points out the ones that mention your codes.
-- You can ask Claude about what you're seeing. It answers from Tattlestone's own code lists and NHTSA's records, and tells you which ones it used. You bring your own API key.
-- It saves sessions, so you can compare today with last week, and it can turn one into a report.
-
 ## It only listens
 
-Tattlestone reads from your truck and never changes anything in it. There's no button to clear codes, and the part of the app that talks to the truck refuses any command that would erase, reset or reprogram one of its computers. If you need to clear a code, use a regular scan tool.
+Tattlestone reads from your car and never changes anything in it. There's no button to clear codes, and the part of the app that talks to the car refuses any command that would erase, reset or reprogram one of its computers. If you need to clear a code, use a regular scan tool.
 
 ## What it looks like
 
