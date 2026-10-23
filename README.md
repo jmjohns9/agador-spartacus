@@ -1,7 +1,6 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="brand/github/readme-banner-dark.svg">
-  <img alt="Tattlestone. Your car writes down what goes wrong. Tattlestone reads it to you." src="brand/github/readme-banner-light.svg" width="100%">
-</picture>
+<h1>
+  <img alt="Tattlestone. Your car writes down what goes wrong. Tattlestone reads it to you." src="brand/github/social-preview.png" width="100%">
+</h1>
 
 ## What it does
 

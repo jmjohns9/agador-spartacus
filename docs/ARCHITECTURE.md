@@ -125,7 +125,7 @@ The full reference is [ui-styling.md](ui-styling.md). In short:
 - **Brand.** Three colours: Basalt `#16171A`, Signal `#E8590C` and Paper `#F5F3EE`, set as `BRAND` in `renderer/theme/theme.ts`.
   - Signal orange appears only when the car is reporting something, such as a warning. Everything else is Basalt on Paper, and red is kept for critical states.
   - The mark is a Basalt stone with a T cut out of it and a Signal dot. The app icon puts it on a Limestone tile.
-  - The wordmark and lockup SVGs live in `brand/`. `build_wordmark.py` regenerates them, `build_icon.py` regenerates `files/build/icon.icns`, and `build_github_banners.py` and `build_social.py` regenerate the README banners and the GitHub social card. The wordmark is set in Helvetica Neue Bold as a stand-in for Neue Haas Grotesk.
+  - The wordmark and lockup SVGs live in `brand/`. `build_wordmark.py` regenerates them, `build_icon.py` regenerates `files/build/icon.icns`, and `build_social.py` regenerates the card at the top of the README, which is also the GitHub social preview. The wordmark is set in Helvetica Neue Bold as a stand-in for Neue Haas Grotesk.
 - **Tokens.** Colours, type, spacing, radii and motion are defined in `renderer/theme/theme.ts`.
   - `buildThemeCSS()` turns them into CSS custom properties.
   - The app is light only: the main process pins `nativeTheme.themeSource` to `light`, so the window's vibrancy and native controls stay light in macOS dark mode.
