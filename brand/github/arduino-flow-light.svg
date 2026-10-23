@@ -76,8 +76,8 @@
 <text x="920" y="342" font-size="17" font-weight="700">No adapter handy?</text>
 <text x="920" y="368" font-size="15" font-family="ui-monospace, Menlo, monospace">elm327_emulator.py</text>
 <text x="920" y="392" font-size="15">on the UNO Q pretends to</text>
-<text x="920" y="414" font-size="15">be the truck. Reach it</text>
-<text x="920" y="436" font-size="15">over an SSH tunnel.</text>
+<text x="920" y="414" font-size="15">be the truck, on the</text>
+<text x="920" y="436" font-size="15">same Wi-Fi port.</text>
 
 <!-- direct path, no arduino -->
 <path d="M60 270 L 32 270 L 32 600 L 1180 600 L 1180 180 L 1163 180" fill="none" stroke="#16171A" stroke-width="2" marker-end="url(#ink)"/>
