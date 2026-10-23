@@ -19,6 +19,21 @@ const MAX_RECV_BUF = 64 * 1024;
 // command goes out; otherwise it would be taken as the next command's reply.
 const STALE_REPLY_WAIT_MS = 1500;
 
+// If the late reply still hasn't come, a bare CR is sent to interrupt the
+// adapter (it answers "STOPPED" and a prompt; an idle adapter repeats its last
+// command, which is always a read). That prompt is waited for up to this long.
+const RESYNC_WAIT_MS = 500;
+
+// Consecutive timeouts on a ready session before the link is declared dead.
+// A live adapter answers every command with a prompt (even "NO DATA"), so a
+// run of timeouts means the adapter is gone: powered off, out of range, or a
+// TCP bridge that vanished without closing the socket.
+const LINK_LOST_TIMEOUTS = 4;
+
+// The first OBD request after ATSP0 makes the adapter search every protocol,
+// which can take several seconds on some vehicles.
+const PROTOCOL_SEARCH_TIMEOUT = 10000;
+
 // The app is read-only: it must never change a control module. Refuse the
 // OBD/UDS/GM services that clear codes, actuate, reset, write or reprogram.
 // AT/ST commands only configure the adapter and are always allowed.
@@ -57,13 +72,23 @@ export class ELM327Commander extends EventEmitter {
   private pendingTimer: ReturnType<typeof setTimeout> | null = null;
   private staleReply = false;                 // a timed-out command's reply is still due
   private staleDone: (() => void) | null = null;
+  private consecutiveTimeouts = 0;
   private isReady = false;
   private closed = false;
   private adapterInfo: Partial<AdapterInfo> = {};
 
-  constructor(sendFn: (data: string) => void) {
+  private staleReplyWaitMs: number;
+  private resyncWaitMs: number;
+
+  // The wait overrides exist for tests; the app uses the defaults.
+  constructor(
+    sendFn: (data: string) => void,
+    opts: { staleReplyWaitMs?: number; resyncWaitMs?: number } = {},
+  ) {
     super();
     this.sendFn = sendFn;
+    this.staleReplyWaitMs = opts.staleReplyWaitMs ?? STALE_REPLY_WAIT_MS;
+    this.resyncWaitMs = opts.resyncWaitMs ?? RESYNC_WAIT_MS;
   }
 
   getAdapterInfo(): Partial<AdapterInfo> {
@@ -102,16 +127,18 @@ export class ELM327Commander extends EventEmitter {
     }
     this.recvBuf += chunk;
 
-    // ELM327 responses end with the '>' prompt
-    if (this.recvBuf.includes(ELM_PROMPT)) {
-      const raw = this.recvBuf.replace(/>/g, '').trim();
-      this.recvBuf = '';
+    // ELM327 responses end with the '>' prompt. Each prompt closes exactly one
+    // reply, so a chunk holding two prompts is two replies, not one.
+    let idx: number;
+    while ((idx = this.recvBuf.indexOf(ELM_PROMPT)) !== -1) {
+      const raw = this.recvBuf.slice(0, idx).trim();
+      this.recvBuf = this.recvBuf.slice(idx + 1);
       if (!this.pendingResolve) {
         // No command is waiting: this is a timed-out command's late reply
         if (this.staleReply) this.log(`Discarded late reply: ${raw.slice(0, 40)}`, 'warn');
         this.staleReply = false;
         this.staleDone?.();
-        return;
+        continue;
       }
       this.resolveResponse(raw);
     }
@@ -124,6 +151,9 @@ export class ELM327Commander extends EventEmitter {
   private async probeAdapter(): Promise<{ cmd: string; banner: string } | null> {
     for (const cmd of ['ATZ', 'ATI']) {
       const resp = await this.send(cmd, 2200);
+      // Cut off by close() (the port or bridge hung up): not a silent adapter,
+      // and nothing more can be sent.
+      if (resp.errorMessage === 'Closed') return null;
       if (resp.raw && resp.raw.trim().length > 0 && !resp.errorMessage) {
         this.log(`Adapter responded to ${cmd}: ${resp.raw.trim()}`);
         // Last line: with echo still on, the first line is the command itself
@@ -174,7 +204,7 @@ export class ELM327Commander extends EventEmitter {
 
     // 8. Confirm protocol by pinging a standard PID (RPM)
     //    This forces ELM327 to lock onto J1850 VPW for the Silverado
-    const pingResp = await this.send('010C', 2000);
+    const pingResp = await this.send('010C', PROTOCOL_SEARCH_TIMEOUT);
     this.log(`Protocol ping response: ${pingResp.raw}`);
 
     // 9. Read negotiated protocol
@@ -235,13 +265,27 @@ export class ELM327Commander extends EventEmitter {
 
   private sendChain: Promise<unknown> = Promise.resolve();
 
-  // Wait for (and drop) a late reply before writing the next command.
-  private awaitStaleReply(): Promise<void> {
-    if (!this.staleReply || this.closed) return Promise.resolve();
+  // Wait for (and drop) a late reply before writing the next command. If it
+  // never comes, interrupt the adapter and drop the prompt that answers the
+  // interrupt, so the next command starts from a known-idle adapter instead
+  // of having the late reply land on it.
+  private async awaitStaleReply(): Promise<void> {
+    if (!this.staleReply || this.closed) return;
+    if (await this.waitForPrompt(this.staleReplyWaitMs)) return;
+    this.log('Late reply overdue — interrupting adapter to resync', 'warn');
+    this.recvBuf = '';
+    this.sendFn('\r');
+    await this.waitForPrompt(this.resyncWaitMs);
+    this.staleReply = false;
+  }
+
+  // Resolves true when onData sees a prompt with no command pending (or the
+  // session closes), false after `ms`.
+  private waitForPrompt(ms: number): Promise<boolean> {
+    if (this.closed) return Promise.resolve(true);
     return new Promise((resolve) => {
-      const timer = setTimeout(() => { this.staleReply = false; finish(); }, STALE_REPLY_WAIT_MS);
-      const finish = () => { clearTimeout(timer); this.staleDone = null; resolve(); };
-      this.staleDone = finish;
+      const timer = setTimeout(() => { this.staleDone = null; resolve(false); }, ms);
+      this.staleDone = () => { clearTimeout(timer); this.staleDone = null; resolve(true); };
     });
   }
 
@@ -256,6 +300,10 @@ export class ELM327Commander extends EventEmitter {
         resolve({ command, raw: '', lines: [], success: false, errorMessage: 'Refused: the app is read-only' });
         return;
       }
+      // Nothing is pending, so anything buffered is the tail of an earlier
+      // reply (e.g. "SEARCHING..." from a timed-out command, with no prompt
+      // yet). Left in place it would be prepended to this command's reply.
+      this.recvBuf = '';
       this.pendingResolve = resolve;
       this.pendingCommand = command;
 
@@ -299,6 +347,18 @@ export class ELM327Commander extends EventEmitter {
     if (timedOut) {
       this.recvBuf = '';
       this.staleReply = !this.closed;
+    }
+
+    // Dead-link detection, only once initialized: during init a slow protocol
+    // search or a silent probe is handled by initialize() itself.
+    if (timedOut && !this.closed) {
+      this.consecutiveTimeouts++;
+      if (this.isReady && this.consecutiveTimeouts === LINK_LOST_TIMEOUTS) {
+        this.log(`No reply to ${LINK_LOST_TIMEOUTS} commands in a row — adapter link lost`, 'warn');
+        this.emit('link-lost');
+      }
+    } else if (!timedOut) {
+      this.consecutiveTimeouts = 0;
     }
 
     if (this.pendingTimer) {

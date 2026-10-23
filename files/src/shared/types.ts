@@ -357,6 +357,14 @@ export interface FreezeFrame {
   liveData: Record<string, SnapshotPID>;
 }
 
+/** Which commit a build came from (dist/build-info.json, written by npm run build). */
+export interface BuildInfo {
+  commit: string;     // short hash, or 'unknown' outside a git checkout
+  branch: string;
+  dirty: boolean;     // built with uncommitted changes to tracked files
+  builtAt: string;    // ISO time of the build
+}
+
 export interface StorageInfo {
   localPath: string;
   sqlitePath: string;

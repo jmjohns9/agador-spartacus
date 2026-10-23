@@ -1,14 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StorageConfig, StorageInfo } from '../../shared/types';
+import { StorageConfig, StorageInfo, BuildInfo } from '../../shared/types';
 import {
   ScrollPane, Card, SectionHeader, SegmentedControl, AlertBanner, Button, DataRow,
 } from '../components/layout/UIComponents';
 import { TYPE } from '../theme/theme';
+import { Lockup } from '../components/brand/Brand';
 
 function fmtBytes(b: number): string {
   if (b < 1024)         return `${b} B`;
   if (b < 1024 * 1024)  return `${(b / 1024).toFixed(1)} KB`;
   return `${(b / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+// "9d91b7a · fix/adapter-link-robustness", flagged when built from uncommitted work
+function describeBuild(build: BuildInfo | null): string {
+  if (!build) return 'Development build';
+  const parts = [build.commit, build.branch].filter(Boolean).join(' · ');
+  return build.dirty ? `${parts} · uncommitted changes` : parts;
 }
 
 export function SettingsScreen(): React.ReactElement {
@@ -18,7 +26,7 @@ export function SettingsScreen(): React.ReactElement {
   const [pending,   setPending]     = useState<'local' | 'sqlite' | null>(null);
   const [migrateError, setMigrateError] = useState<string | null>(null);
 
-  const [appInfo, setAppInfo] = useState<{ version: string; electron: string; chrome: string; node: string } | null>(null);
+  const [appInfo, setAppInfo] = useState<{ version: string; build: BuildInfo | null; electron: string; chrome: string; node: string } | null>(null);
   useEffect(() => { window.electronAPI.getAppInfo().then(setAppInfo).catch(() => {}); }, []);
 
   const reload = useCallback(async () => {
@@ -126,8 +134,14 @@ export function SettingsScreen(): React.ReactElement {
 
       <SectionHeader>About</SectionHeader>
       <Card style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 0 4px' }}>
+          <Lockup height={20} />
+          <div style={{ ...TYPE.body, color: 'var(--label-2)' }}>Reads everything. Changes nothing.</div>
+        </div>
         <Card padding={0}>
-          {infoRow('App', `Tellstone${appInfo ? ` v${appInfo.version}` : ''}`)}
+          {infoRow('App', `Tattlestone${appInfo ? ` v${appInfo.version}` : ''}`)}
+          {appInfo && infoRow('Build', describeBuild(appInfo.build))}
+          {appInfo?.build && infoRow('Built', new Date(appInfo.build.builtAt).toLocaleString())}
           {appInfo && infoRow('Electron', appInfo.electron)}
           {appInfo && infoRow('Chromium', appInfo.chrome)}
           {appInfo && infoRow('Node', appInfo.node)}

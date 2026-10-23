@@ -25,7 +25,7 @@ export const Toolbar = React.memo(function Toolbar({ sidebarOpen, onToggleSideba
     return () => clearInterval(id);
   }, [sessionStartMs]);
 
-  const subtitle = [vehicle.vin, vehicle.engine, vehicle.nickname].filter(Boolean).join(' · ') || 'Tellstone';
+  const subtitle = [vehicle.vin, vehicle.engine, vehicle.nickname].filter(Boolean).join(' · ') || 'Tattlestone';
   const bStatus = batteryStatus(battery);
 
   return (

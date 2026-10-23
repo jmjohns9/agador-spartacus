@@ -33,9 +33,9 @@ test('nothing to ground means no reference block', () => {
 
 test('each code names its source, and missing codes are flagged', () => {
   const { text, summary } = buildGrounding(['B1982', 'P2096', 'P1416'], 'Chevrolet', null);
-  assert.match(text, /B1982 \(source: Tellstone GM GMT800 catalog\)/);
+  assert.match(text, /B1982 \(source: Tattlestone GM GMT800 catalog\)/);
   assert.match(text, /P2096 \(source: OBDex generic SAE J2012 catalog\)/);
-  assert.match(text, /P1416: not in Tellstone's catalogs\. Manufacturer-specific code/);
+  assert.match(text, /P1416: not in Tattlestone's catalogs\. Manufacturer-specific code/);
   assert.deepEqual(summary.codes.map(c => c.source), ['gmt800', 'obdex', 'none']);
 });
 

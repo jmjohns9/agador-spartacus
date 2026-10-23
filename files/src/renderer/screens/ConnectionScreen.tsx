@@ -212,6 +212,8 @@ export function ConnectionScreen(): React.ReactElement {
   const [selectedPort,  setSelectedPort]  = useState('');
   const [connecting,    setConnecting]    = useState(false);
   const [scanError,     setScanError]     = useState('');
+  // The UNO Q bridge on the home network, on the Wi-Fi ELM327 port
+  const [bridgeAddress, setBridgeAddress] = useState('192.168.1.33:35000');
 
   const isConnected   = connectionStatus === 'connected';
   const inProgress    = connectionStatus === 'connecting' || connectionStatus === 'initializing';
@@ -505,6 +507,38 @@ export function ConnectionScreen(): React.ReactElement {
               </Button>
             );
           })()}
+
+          {/* ── Network Mode — Wi-Fi bridge ───────────────────────────── */}
+          <SectionHeader>Network adapter — Wi-Fi bridge</SectionHeader>
+          <Card>
+            <div style={{ ...TYPE.caption, color: 'var(--label-2)', marginBottom: 8 }}>
+              The Arduino UNO Q bridge (or a Wi-Fi ELM327 dongle). Put the Mac on the same network,
+              then connect to its address. Reach a bridge on another network through an SSH
+              tunnel: <code>ssh -L 35000:bridge:35000 host</code>, then use 127.0.0.1:35000.
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+              <div style={{ flex: 1 }}>
+                <label htmlFor="bridge-address" style={{ display: 'block', ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>
+                  Address (host:port)
+                </label>
+                <input
+                  id="bridge-address"
+                  type="text"
+                  value={bridgeAddress}
+                  placeholder="192.168.1.33:35000"
+                  onChange={e => setBridgeAddress(e.target.value)}
+                  style={{ width: '100%', ...NUMERIC }}
+                />
+              </div>
+              <Button
+                icon={isBusy ? 'ti-loader' : 'ti-wifi'}
+                disabled={isBusy || !bridgeAddress.trim()}
+                onClick={() => handleConnect(`tcp://${bridgeAddress.trim()}`)}
+              >
+                {isBusy ? 'Connecting…' : 'Connect over Wi-Fi'}
+              </Button>
+            </div>
+          </Card>
 
           {/* ── Built-in Emulator ─────────────────────────────────────── */}
           <SectionHeader>Built-in emulator</SectionHeader>

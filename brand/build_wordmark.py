@@ -1,0 +1,142 @@
+"""Outline the Tattlestone wordmark from a font and write SVGs.
+
+Run:  python build_wordmark.py [font.ttc|font.otf] [face index]
+Defaults to Helvetica Neue Bold (macOS) as a stand-in for licensed Neue Haas Grotesk.
+"""
+import sys
+from pathlib import Path
+
+from fontTools.pens.boundsPen import BoundsPen
+from fontTools.pens.recordingPen import RecordingPen
+from fontTools.pens.svgPathPen import SVGPathPen
+from fontTools.pens.transformPen import TransformPen
+from fontTools.ttLib import TTCollection, TTFont
+
+WORD = "Tattlestone"
+INK = "#16171A"
+SIGNAL = "#E8590C"
+PAPER = "#F5F3EE"
+OUT = Path(__file__).parent
+APP_MODULE = OUT.parent / "files" / "src" / "renderer" / "components" / "brand" / "wordmark.ts"
+
+# Uniform tracking, in font units per 1000 em (negative = tighter).
+TRACKING = -18
+
+# Hand kerning, in units per 1000 em, applied on top of tracking.
+# "tt" is not here: it is computed so the two crossbars join into one bar.
+KERNING = {
+    ("T", "a"): -78,
+    ("a", "t"): -6,
+    ("t", "l"): 4,
+    ("l", "e"): 2,
+    ("e", "s"): 0,
+    ("s", "t"): -4,
+    ("t", "o"): -8,
+    ("o", "n"): 0,
+    ("n", "e"): 0,
+}
+
+
+def load_font(path: str, index: int) -> TTFont:
+    if path.lower().endswith((".ttc", ".otc")):
+        return TTCollection(path).fonts[index]
+    return TTFont(path)
+
+
+def glyph_bounds(glyphs, name):
+    pen = BoundsPen(glyphs)
+    glyphs[name].draw(pen)
+    return pen.bounds  # (xMin, yMin, xMax, yMax)
+
+
+def build(font: TTFont):
+    upm = font["head"].unitsPerEm
+    scale = 1000 / upm
+    cmap = font.getBestCmap()
+    glyphs = font.getGlyphSet()
+    hmtx = font["hmtx"]
+
+    names = [cmap[ord(ch)] for ch in WORD]
+    t_min, _, t_max, _ = glyph_bounds(glyphs, cmap[ord("t")])
+    t_adv = hmtx[cmap[ord("t")]][0]
+    # Pull the second t left until its crossbar meets the first one's, with
+    # a 1-unit overlap so the bars fuse cleanly when filled.
+    tt_kern = (t_max - t_min - t_adv) / scale - TRACKING - 1
+
+    # Pen position of each glyph, in font units.
+    xs, x = [], 0.0
+    for i, (ch, name) in enumerate(zip(WORD, names)):
+        xs.append(x)
+        x += hmtx[name][0]
+        if i + 1 < len(WORD):
+            nxt = WORD[i + 1]
+            kern = tt_kern if (ch, nxt) == ("t", "t") else KERNING.get((ch, nxt), 0)
+            x += (TRACKING + kern) / scale
+
+    pen, bp = SVGPathPen(glyphs), BoundsPen(glyphs)
+    for name, gx in zip(names, xs):
+        # Flip y (font units are y-up, SVG is y-down) and scale to 1000/em.
+        t = (scale, 0, 0, -scale, gx * scale, 0)
+        glyphs[name].draw(TransformPen(pen, t))
+        glyphs[name].draw(TransformPen(bp, t))
+    # The t crossbar spans from its lowest left-edge point up to the x-height.
+    rec = RecordingPen()
+    glyphs[cmap[ord("t")]].draw(rec)
+    left_ys = [pt[1] for _, args in rec.value for pt in args if pt[0] == t_min]
+    crossbar = (font["OS/2"].sxHeight * scale, min(left_ys) * scale)  # (top, bottom), y-up
+    return pen.getCommands(), bp.bounds, crossbar
+
+
+def fmt(v: float) -> str:
+    return f"{v:.1f}".rstrip("0").rstrip(".")
+
+
+def main():
+    path = sys.argv[1] if len(sys.argv) > 1 else "/System/Library/Fonts/HelveticaNeue.ttc"
+    index = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+    d, (x0, y0, x1, y1), (bar_top, bar_bottom) = build(load_font(path, index))
+    w, h = x1 - x0, y1 - y0
+
+    for suffix, fill in (("", INK), ("-reversed", PAPER)):
+        (OUT / f"tattlestone-wordmark{suffix}.svg").write_text(
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{fmt(x0)} {fmt(y0)} {fmt(w)} {fmt(h)}" '
+            f'role="img" aria-label="Tattlestone"><path fill="{fill}" d="{d}"/></svg>\n'
+        )
+
+    # Lockup: the stone's drawn edges (4..96 in mark units, stroke included)
+    # span the word's cap height, and the streak sits exactly on the joined
+    # tt crossbar, so the orange line reads straight across into the word.
+    stone_h = h
+    k = stone_h / 92
+    stone_w = 112 * k
+    gap = stone_h * 0.4
+    streak_y = (-bar_top - y0) / k + 4
+    streak_h = (bar_top - bar_bottom) / k
+    mark = (
+        f'<g transform="scale({k:.4f}) translate(-4 -4)">'
+        f'<path d="M12 12 H108 L92 88 H28 Z" fill="{INK}" stroke="{INK}" stroke-width="16" stroke-linejoin="round"/>'
+        f'<rect x="26" y="{streak_y:.2f}" width="58" height="{streak_h:.2f}" rx="{streak_h / 2:.2f}" fill="{SIGNAL}"/></g>'
+    )
+    print(f"streak in mark units: y={streak_y:.2f} h={streak_h:.2f}")
+    word = f'<g transform="translate({fmt(stone_w + gap - x0)} {fmt(-y0)})"><path fill="{INK}" d="{d}"/></g>'
+    total_w = stone_w + gap + w
+    lockup_svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {fmt(total_w)} {fmt(stone_h)}" '
+        f'role="img" aria-label="Tattlestone">{mark}{word}</svg>\n'
+    )
+    (OUT / "tattlestone-lockup.svg").write_text(lockup_svg)
+
+    # The app draws the brand from this module (components/brand/Brand.tsx).
+    APP_MODULE.write_text(
+        "// Generated by brand/build_wordmark.py — do not edit by hand.\n"
+        f"export const WORDMARK_VIEWBOX = '{fmt(x0)} {fmt(y0)} {fmt(w)} {fmt(h)}';\n"
+        f"export const WORDMARK_ASPECT = {w / h:.4f};\n"
+        f"/** Streak in mark units (viewBox 0 0 120 100), aligned to the joined tt crossbar. */\n"
+        f"export const STREAK = {{ y: {streak_y:.2f}, h: {streak_h:.2f} }};\n"
+        f"export const WORDMARK_PATH =\n  '{d}';\n"
+    )
+    print(f"wordmark {fmt(w)} x {fmt(h)}; lockup {fmt(total_w)} x {fmt(stone_h)}")
+
+
+if __name__ == "__main__":
+    main()

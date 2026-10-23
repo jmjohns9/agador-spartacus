@@ -6,7 +6,7 @@ import { execFile } from 'child_process';
 import { ELM327Commander } from '../core/elm327Commander';
 import { ELM327Simulator } from '../core/elm327Simulator';
 import { OBDProtocolManager } from '../core/obdProtocolManager';
-import { PIDReading, ConnectionStatus, LogEntry, PcmReadResult, VehicleSafetyReport, VehicleInfoResult } from '../shared/types';
+import { PIDReading, ConnectionStatus, LogEntry, PcmReadResult, VehicleSafetyReport, VehicleInfoResult, BuildInfo } from '../shared/types';
 import { PcmDiagnostics } from '../core/pcmDiagnostics';
 import { GMT800 } from '../core/platforms/gmt800';
 import { askClaude, loadConfig as loadClaudeConfig, saveConfig as saveClaudeConfig, SessionContext, ChatTurn, CLAUDE_MODELS, DEFAULT_SYSTEM_PROMPT } from './claudeAssistant';
@@ -15,6 +15,7 @@ import { StorageService } from './storageService';
 import { decodeVin } from './vinDecoder';
 import { fetchVehicleSafety, bulletinPdfUrl, validVehicle } from './nhtsa';
 import { buildGrounding, codesToGround } from './assistantGrounding';
+import { TcpPort, isTcpTarget, parseTcpTarget } from './tcpPort';
 
 // SerialPort is a native module — use require() to avoid dynamic import issues in Electron
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -79,7 +80,7 @@ function createWindow(): void {
       // The preload only requires 'electron', so it runs sandboxed
       sandbox: true,
     },
-    title: 'Tellstone',
+    title: 'Tattlestone',
   });
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
@@ -105,6 +106,7 @@ let simulator: ELM327Simulator | null = null;
 let simulatorMode = false;
 let sessionLog: LogEntry[] = [];
 let activePort: any = null;       // currently open SerialPort (if any)
+const BT_LINK_SETTLE_MS = 3000;   // wait after opening a Bluetooth port before the first command
 let isConnecting = false;          // guard against concurrent connect attempts
 
 // Session generation. Every connect and disconnect ends the current session
@@ -135,10 +137,22 @@ function sendToRenderer(channel: string, data: unknown): void {
 
 handle('obd:get-status', () => lastStatus);
 
+// Which commit this build came from; null in `npm run dev`, which skips the
+// step that writes it.
+function readBuildInfo(): BuildInfo | null {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'build-info.json'), 'utf8')) as BuildInfo;
+  } catch {
+    return null;
+  }
+}
+const buildInfo = readBuildInfo();
+
 // Version details for Settings and reports; the sandboxed renderer has no
 // process.versions of its own.
 handle('app:get-info', () => ({
   version:  app.getVersion(),
+  build:    buildInfo,
   electron: process.versions.electron,
   chrome:   process.versions.chrome,
   node:     process.versions.node,
@@ -257,32 +271,51 @@ async function endSession(): Promise<number> {
   simulator = null;
   stopSimulatorTimers();
   simulatorMode = false;
+  // Callers send their own status next, but a window opened after
+  // window-all-closed asks for lastStatus with no send in between — it must
+  // not be told "connected" about a session that no longer exists.
+  lastStatus = { status: 'disconnected' as ConnectionStatus };
   // Actually close the serial port so the lock is released for the next session
   await releaseActivePort();
   return gen;
 }
 
+// The message shown (Connection screen banner and session log) when the port
+// closes while the adapter is still being set up. A TcpPort knows the bridge's
+// reason when it sent one (port.closeReason); a Bluetooth SerialPort never does.
+function setupFailureReason(port: TcpPort | { closeReason?: undefined }): string {
+  if (port.closeReason) return `The bridge can't reach the OBD adapter: ${port.closeReason} [BRIDGE ERROR]`;
+  return 'The adapter closed the connection during setup: check that it has power and no other device is connected to it';
+}
+
 // Called by obd:connect, which has already refused overlapping serial attempts
 // and ended the previous session (releasing its port).
 async function connectToPort(portPath: string, gen: number): Promise<void> {
-  isConnecting = true;
-
-  sendToRenderer('obd:connection-status', { status: 'connecting' as ConnectionStatus });
-
-  // macOS Bluetooth-serial gotcha: tty.* is the call-IN device and blocks waiting
-  // for carrier detect. cu.* is the call-UP device and is the correct one for
-  // outgoing connections. Auto-correct so the adapter actually responds.
-  if (portPath.includes('/dev/tty.')) {
-    const corrected = portPath.replace('/dev/tty.', '/dev/cu.');
-    addLog({ timestamp: Date.now(), level: 'info', message: `Using call-up device ${corrected} instead of ${portPath} (macOS Bluetooth requires cu.*)` });
-    portPath = corrected;
-  }
-
   let port: any = null;
   let commander: ELM327Commander | null = null;
+  // Set inside the try so any throw still reaches the finally that clears it;
+  // a throw before the try used to leave every later connect ignored.
   try {
-    // OBDLink MX+ over Bluetooth SPP uses 115200 baud
-    port = new SerialPort({ path: portPath, baudRate: 115200, autoOpen: false });
+    isConnecting = true;
+
+    sendToRenderer('obd:connection-status', { status: 'connecting' as ConnectionStatus });
+
+    // macOS Bluetooth-serial gotcha: tty.* is the call-IN device and blocks waiting
+    // for carrier detect. cu.* is the call-UP device and is the correct one for
+    // outgoing connections. Auto-correct so the adapter actually responds.
+    if (portPath.includes('/dev/tty.')) {
+      const corrected = portPath.replace('/dev/tty.', '/dev/cu.');
+      addLog({ timestamp: Date.now(), level: 'info', message: `Using call-up device ${corrected} instead of ${portPath} (macOS Bluetooth requires cu.*)` });
+      portPath = corrected;
+    }
+
+    const isBluetooth = !isTcpTarget(portPath) && !/usbserial|usbmodem|ttyUSB|ttyACM/i.test(portPath);
+
+    // Network Mode: a Wi-Fi bridge at tcp://host:port. Otherwise OBDLink MX+
+    // over Bluetooth SPP, which uses 115200 baud.
+    port = isTcpTarget(portPath)
+      ? new TcpPort(portPath)
+      : new SerialPort({ path: portPath, baudRate: 115200, autoOpen: false });
     activePort = port;
 
     const fakeSend = (data: string): void => {
@@ -294,8 +327,30 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
     commander = new ELM327Commander(fakeSend);
     elm = commander;
 
+    // The port can stay open while the adapter is gone (powered off, out of
+    // Bluetooth range, a Wi-Fi bridge that dropped without closing the socket),
+    // so no 'close' ever arrives. The commander notices the run of timeouts.
+    commander.once('link-lost', () => {
+      if (gen !== sessionGen) return;
+      addLog({ timestamp: Date.now(), level: 'error', message: 'Adapter stopped responding — ending session' });
+      void endSession().then((g) => {
+        if (g !== sessionGen) return;
+        sendToRenderer('obd:connection-status', {
+          status: 'error' as ConnectionStatus,
+          adapterInfo: 'Adapter stopped responding. Check that it has power and is in range, then reconnect.',
+        });
+      });
+    });
+
+    // Log the first raw chunks so a failed init shows whether any bytes
+    // arrived at all (silent link) or arrived without the '>' prompt.
+    let rxLogged = 0;
     port.on('data', (chunk: Buffer) => {
       const ascii = chunk.toString('ascii');
+      if (rxLogged < 20) {
+        rxLogged++;
+        addLog({ timestamp: Date.now(), level: 'info', message: `RX ${chunk.length}B: ${JSON.stringify(ascii.slice(0, 80))}` });
+      }
       commander?.onData(ascii);
     });
     // Port events only speak for the live session. A port we closed ourselves
@@ -312,8 +367,18 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
       // The adapter went away under a live session: end it so nothing keeps
       // polling a closed port.
       addLog({ timestamp: Date.now(), level: 'warn', message: 'Serial port closed' });
+      // Closed before initialize() finished: this attempt failed, and its
+      // catch stays silent because endSession() moves sessionGen on. Report
+      // the failure here, with the bridge's own reason when it gave one.
+      const setupReason = commander?.ready ? null : setupFailureReason(port);
       void endSession().then((g) => {
-        if (g === sessionGen) sendToRenderer('obd:connection-status', { status: 'disconnected' as ConnectionStatus });
+        if (g !== sessionGen) return;
+        if (setupReason === null) {
+          sendToRenderer('obd:connection-status', { status: 'disconnected' as ConnectionStatus });
+          return;
+        }
+        addLog({ timestamp: Date.now(), level: 'error', message: `Connection failed: ${setupReason}` });
+        sendToRenderer('obd:connection-status', { status: 'error' as ConnectionStatus, adapterInfo: setupReason });
       });
     });
 
@@ -326,6 +391,15 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
     // Disconnected (or replaced) while the port was opening: the teardown
     // could not close a port that wasn't open yet, so close it here.
     if (gen !== sessionGen) { await closePort(port); return; }
+
+    // macOS opens a Bluetooth cu.* port before the RFCOMM link to the adapter
+    // is up; bytes written in that window are silently dropped. Give the link
+    // time to come up before the first ATZ.
+    if (isBluetooth) {
+      addLog({ timestamp: Date.now(), level: 'info', message: `Port open — waiting ${BT_LINK_SETTLE_MS}ms for Bluetooth link` });
+      await new Promise((r) => setTimeout(r, BT_LINK_SETTLE_MS));
+      if (gen !== sessionGen) return;   // teardown already closed the port
+    }
 
     sendToRenderer('obd:connection-status', { status: 'initializing' as ConnectionStatus });
 
@@ -340,8 +414,8 @@ async function connectToPort(portPath: string, gen: number): Promise<void> {
 
     addLog({ timestamp: Date.now(), level: 'ok', message: `Connected — ${info.firmwareVersion} — Protocol: ${info.protocol} — Battery: ${info.voltage}` });
 
-    // Signal strength only exists for Bluetooth; USB adapters have none
-    if (!/usbserial|usbmodem|ttyUSB|ttyACM/i.test(portPath)) startRSSIPolling(gen);
+    // Signal strength only exists for Bluetooth; USB and network adapters have none
+    if (isBluetooth) startRSSIPolling(gen);
     startOBDManager(gen, commander);
   } catch (err) {
     commander?.close();
@@ -458,12 +532,26 @@ function startOBDManager(gen: number, commander: ELM327Commander): void {
 
 // ─── IPC Handlers ─────────────────────────────────────────────────────────────
 
+// Serial paths from the most recent obd:list-ports. obd:connect only opens
+// one of these, so the renderer can't point main at an arbitrary device node.
+let listedPorts = new Set<string>();
+
+// SIMULATOR, a well-formed tcp:// target, or a port the last scan returned.
+function isConnectTarget(port: unknown): port is string {
+  if (typeof port !== 'string') return false;
+  if (port === 'SIMULATOR') return true;
+  if (isTcpTarget(port)) return parseTcpTarget(port) !== null;
+  return listedPorts.has(port);
+}
+
 handle('obd:list-ports', async () => {
   try {
     const ports: Array<{ path: string; manufacturer?: string; serialNumber?: string; vendorId?: string }> = await SerialPort.list();
-    return ports
+    const visible = ports
       // Hide noise like /dev/cu.Bluetooth-Incoming-Port and debug consoles
-      .filter(p => !/Bluetooth-Incoming|debug-console/i.test(p.path))
+      .filter(p => !/Bluetooth-Incoming|debug-console/i.test(p.path));
+    listedPorts = new Set(visible.map(p => p.path));
+    return visible
       .map(p => {
         const haystack = `${p.path} ${p.manufacturer ?? ''}`;
         // Match OBD adapters by name, OR common USB-serial bridges used by USB
@@ -485,7 +573,16 @@ handle('obd:list-ports', async () => {
   }
 });
 
-handle('obd:connect', async (_event, { port }: { port: string }) => {
+handle('obd:connect', async (_event, arg: unknown) => {
+  const port = (arg as { port?: unknown } | null)?.port;
+  if (!isConnectTarget(port)) {
+    addLog({ timestamp: Date.now(), level: 'error', message: `Connect refused — not a scanned port or valid tcp:// address: ${JSON.stringify(port)?.slice(0, 80)}` });
+    sendToRenderer('obd:connection-status', {
+      status: 'error' as ConnectionStatus,
+      adapterInfo: 'That adapter is not in the current port list. Scan for ports and try again.',
+    });
+    return;
+  }
   // Guard: never run two serial connect attempts at once (that causes "Cannot lock port")
   if (port !== 'SIMULATOR' && isConnecting) {
     addLog({ timestamp: Date.now(), level: 'warn', message: 'Connect ignored — a connection attempt is already in progress' });
@@ -749,7 +846,7 @@ handle('storage:delete-freeze-frame', (_e: Electron.IpcMainInvokeEvent, { id }: 
 
 handle('report:generate', async (_event: Electron.IpcMainInvokeEvent, payload: unknown) => {
   const os = require('os') as typeof import('os');
-  const outDir = path.join(os.homedir(), 'Documents', 'Tellstone');
+  const outDir = path.join(os.homedir(), 'Documents', 'Tattlestone');
   await fs.promises.mkdir(outDir, { recursive: true });
 
   // Date and time, so a second report on the same day doesn't replace the first
@@ -799,8 +896,11 @@ handle('carsxe:decode', async (_event: Electron.IpcMainInvokeEvent, { code }: { 
 // App name — shown in the menu bar and as the Dock icon tooltip.
 // (In dev mode the Dock may still say "Electron" because the tooltip comes from
 //  the Electron binary's Info.plist; packaged builds use productName and show
-//  "Tellstone" correctly.)
-app.setName('Tellstone');
+//  "Tattlestone" correctly.)
+// The name also keys safeStorage's keychain item ("<name> Safe Storage"), so
+// an API key saved before the Tellstone → Tattlestone rename no longer
+// decrypts; readApiKey() treats that as no key and the user re-enters it.
+app.setName('Tattlestone');
 
 app.whenReady().then(() => {
   // Dock icon for dev mode (packaged builds get it from electron-builder's icon config)

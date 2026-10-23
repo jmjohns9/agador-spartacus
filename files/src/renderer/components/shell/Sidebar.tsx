@@ -2,6 +2,7 @@ import React from 'react';
 import type { ScreenId } from '../../store/appStore';
 import { TYPE, WEIGHT, NUMERIC, RADIUS } from '../../theme/theme';
 import { NAV_GROUPS, SETTINGS_ITEM, NavItem } from './navItems';
+import { BrandMark } from '../brand/Brand';
 
 interface SidebarProps {
   active: ScreenId;
@@ -48,7 +49,9 @@ export const Sidebar = React.memo(function Sidebar({ active, onSelect, dtcCount,
       width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column',
       background: 'transparent', borderRight: '1px solid var(--separator)',
     }}>
-      <div className="drag" style={{ height: 52, flexShrink: 0 }} />
+      <div className="drag" style={{ height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 16 }}>
+        <BrandMark size={13} />
+      </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
         {NAV_GROUPS.map((group, gi) => (
           <div key={group.title ?? gi} style={{ marginBottom: 12 }}>

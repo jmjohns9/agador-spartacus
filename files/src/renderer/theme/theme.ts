@@ -1,6 +1,10 @@
-// ─── Tellstone — macOS-native design tokens ───────────────────
-// Apple system colours, SF type scale, 4pt spacing. Light appearance only; the
-// main process pins nativeTheme.themeSource to 'light' to match.
+// ─── Tattlestone — macOS-native design tokens ─────────────────
+// Brand colours (Basalt, Signal, Paper) over Apple's system status colours, SF
+// type scale, 4pt spacing. Light appearance only; the main process pins
+// nativeTheme.themeSource to 'light' to match.
+//
+// Brand rule: Signal orange appears only when the car is telling you something
+// (warnings). Everything else is Basalt on Paper; red stays for critical.
 
 import type { CSSProperties } from 'react';
 
@@ -17,9 +21,16 @@ export interface Thresholds {
 // *-text variants are contrast-checked for body text (see theme.test.ts);
 // the plain status colours are for fills, strokes and dots.
 
+export const BRAND = {
+  'brand-ink':    '#16171A',   // Basalt
+  'brand-signal': '#E8590C',   // Signal
+  'brand-paper':  '#F5F3EE',   // Paper
+} as const;
+
 export const LIGHT = {
-  window:        '#F5F5F7',
-  content:       '#F5F5F7',
+  ...BRAND,
+  window:        '#F5F3EE',
+  content:       '#F5F3EE',
   grouped:       '#FFFFFF',
   elevated:      '#FFFFFF',
   fill:          'rgba(118,118,128,0.12)',
@@ -30,13 +41,13 @@ export const LIGHT = {
   'label-4':     'rgba(0,0,0,0.10)',
   separator:     'rgba(0,0,0,0.10)',
   shadow:        'rgba(0,0,0,0.12)',
-  accent:        '#007AFF',
-  'accent-text': '#0066CC',
+  accent:        '#16171A',
+  'accent-text': '#16171A',
   'on-accent':   '#FFFFFF',
   ok:            '#34C759',
   'ok-text':     '#1F7A35',
-  warn:          '#FF9500',
-  'warn-text':   '#C93400',
+  warn:          '#E8590C',
+  'warn-text':   '#B4460A',
   crit:          '#FF3B30',
   'crit-text':   '#D70015',
   teal:          '#30B0C7',

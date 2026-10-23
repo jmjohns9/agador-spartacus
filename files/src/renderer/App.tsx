@@ -4,7 +4,7 @@ import { FONTS, TYPE } from './theme/theme';
 import { Sidebar } from './components/shell/Sidebar';
 import { Toolbar } from './components/shell/Toolbar';
 import { shortcutFor, readSidebarPref, writeSidebarPref } from './components/shell/shellLogic';
-import { PIDReading, DTCCode, ModuleState, LogEntry, SessionSnapshot, DataRecording, FreezeFrame, StorageConfig, StorageInfo, ReportPayload, PcmReadResult, VehicleSafetyReport, GroundingSummary, VehicleInfoResult } from '../shared/types';
+import { PIDReading, DTCCode, ModuleState, LogEntry, SessionSnapshot, DataRecording, FreezeFrame, StorageConfig, StorageInfo, ReportPayload, PcmReadResult, VehicleSafetyReport, GroundingSummary, VehicleInfoResult, BuildInfo } from '../shared/types';
 
 // Screens
 import { ConnectionScreen }   from './screens/ConnectionScreen';
@@ -48,7 +48,7 @@ declare global {
       onModuleState: (cb: (m: ModuleState) => void) => () => void;
       onConnectionStatus: (cb: (s: { status: string; protocol?: string; adapterInfo?: string }) => void) => () => void;
       getStatus: () => Promise<{ status: string; protocol?: string; adapterInfo?: string }>;
-      getAppInfo: () => Promise<{ version: string; electron: string; chrome: string; node: string }>;
+      getAppInfo: () => Promise<{ version: string; build: BuildInfo | null; electron: string; chrome: string; node: string }>;
       onLogEntry: (cb: (e: LogEntry) => void) => () => void;
       onVINDetected: (cb: (vin: string) => void) => () => void;
       claudeAsk: (payload: { question: string; context: unknown; history: unknown }) =>
