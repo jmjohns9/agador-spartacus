@@ -37,7 +37,7 @@
 <text x="620" y="130" text-anchor="middle" font-size="19" font-weight="700">Linux side</text>
 <text x="620" y="156" text-anchor="middle" font-size="15" font-family="ui-monospace, Menlo, monospace">obd_tcp_bridge.py</text>
 <text x="620" y="186" text-anchor="middle" font-size="15">passes the data through</text>
-<text x="620" y="208" text-anchor="middle" font-size="15">blocks &#8220;clear codes&#8221;</text>
+<text x="620" y="208" text-anchor="middle" font-size="15">blocks Mode 04 (clear codes)</text>
 <text x="620" y="230" text-anchor="middle" font-size="15">starts by itself on boot</text>
 
 <rect x="460" y="330" width="320" height="130" rx="8" fill="none" stroke="#E8590C" stroke-width="2" stroke-dasharray="8 6"/>
@@ -65,7 +65,7 @@
 <text x="1030" y="124" text-anchor="middle" font-size="22" font-weight="700">Tattlestone</text>
 <text x="1030" y="156" text-anchor="middle" font-size="15">shows the readings,</text>
 <text x="1030" y="178" text-anchor="middle" font-size="15">fault codes and drain</text>
-<text x="1030" y="222" text-anchor="middle" font-size="15">Connection &#8594; Network Mode</text>
+<text x="1030" y="222" text-anchor="middle" font-size="15">Connect over Wi-Fi</text>
 <text x="1030" y="244" text-anchor="middle" font-size="15">or plain Bluetooth</text>
 
 <path d="M780 185 L 897 185" fill="none" stroke="#16171A" stroke-width="2" marker-end="url(#ink)"/>

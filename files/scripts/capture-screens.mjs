@@ -84,7 +84,7 @@ try {
 
   for (const id of ids) {
     await send('Runtime.evaluate', { expression: `document.querySelector('[data-screen="${id}"]').click()` });
-    await sleep(1200);
+    await sleep(2000); // screens fade in; 1200 ms caught Settings mid-fade
     const { data } = await send('Page.captureScreenshot', { format: 'png' });
     writeFileSync(path.join(outDir, `${id}.png`), Buffer.from(data, 'base64'));
     console.log(`saved ${id}.png`);

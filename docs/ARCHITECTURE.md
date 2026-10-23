@@ -20,7 +20,7 @@ The app is built with Electron, React and TypeScript, and talks to an ELM327-cla
 │   main.ts ── window, IPC handlers, connection sessions              │
 │      │         (serialport, tcpPort for Network Mode, simulator)    │
 │      │                                                              │
-│   OBDProtocolManager ── poll loop, DTC scan, module wake check      │
+│   OBDProtocolManager ── poll loop, DTC scan, VIN read               │
 │      │                                                              │
 │   ELM327Commander ── AT command engine, timeouts, response framing  │
 │                                                                     │
@@ -76,7 +76,7 @@ ATRV     Live battery voltage
 - Cached for 30 minutes. NHTSA doesn't hold every service bulletin, and complaints are unverified owner reports.
 
 **Parasitic draw suite**
-- A module wake monitor. It polls known module addresses after key-off to find the one staying awake.
+- A module monitor that lists the platform's known modules by address with their draw risk. Wake detection isn't built yet, so module status stays "Unknown".
 - A battery voltage timeline over long sessions.
 - An interactive fuse map (interior panel and under-hood fuse/relay center), ordered by how likely each circuit is to cause a draw.
 - A step-by-step draw isolation procedure, driven by the resolved platform profile.
@@ -151,7 +151,7 @@ The full reference is [ui-styling.md](ui-styling.md). In short:
 │   │   │   ├── elm327Commander.ts     #   AT engine, timeouts, retries, read-only guard
 │   │   │   ├── elm327Simulator.ts     #   offline 2004 Silverado session
 │   │   │   ├── obdParsers.ts          #   reply parsing: messages, ISO-TP, DTCs, VIN, PIDs
-│   │   │   ├── obdProtocolManager.ts  #   poll loop, DTC scan, wake check
+│   │   │   ├── obdProtocolManager.ts  #   poll loop, DTC scan, VIN read
 │   │   │   ├── pidCatalog.ts          #   PID catalog, J1979 decode functions
 │   │   │   ├── dtcCatalog.generated.ts #  371 curated codes (see scripts/gen-dtc-catalog.ts)
 │   │   │   ├── dtcGeneric.generated.ts #  9,533 OBDex generic codes (npm run gen:obdex)

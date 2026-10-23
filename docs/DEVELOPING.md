@@ -4,7 +4,7 @@ How to build, run and test the app. For how it fits together, see [ARCHITECTURE.
 
 ## Prerequisites
 
-- **Node.js 18+.** Node 22 is recommended; the container builds on `node:22-bookworm`.
+- **Node.js 22.12 or newer.** Electron 42 requires it; the container builds on `node:22-bookworm`.
 - **macOS 13 Ventura or later** for the packaged app. Linux works for development and via Docker.
 - **A build toolchain for the native modules** (`serialport`, `better-sqlite3`):
   - On macOS, Xcode Command Line Tools (`xcode-select --install`).
@@ -48,7 +48,7 @@ Run these from `files/`.
 | `npm run dev` | Watch-mode development with hot reload |
 | `npm run build` | Compile the main process and bundle the renderer (production mode, no source maps) |
 | `npm run dist` | Build and package a macOS `.dmg` / `.zip` into `release/` via electron-builder |
-| `npm run install:app` | Build, ad-hoc sign and install `Tattlestone.app` into `/Applications` |
+| `npm run install:app` | Build, ad-hoc sign and install `Tattlestone.app` into `/Applications` (Apple Silicon only: it copies from `release/mac-arm64`) |
 | `npm run typecheck` | Type-check the renderer and the main process (against its own tsconfig) |
 | `npm test` | Run the `node:test` suites |
 | `npm run lint:styles <files>` | Check screens against the design-system styling rules |

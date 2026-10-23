@@ -64,7 +64,7 @@ Bluetooth only reaches a few metres, though, and a drain test runs overnight wit
 
 1. The truck's computers talk on a wire that comes out at the OBD-II port under the dashboard.
 2. The OBDLink adapter plugs into that port, listens, and sends what it hears over Bluetooth.
-3. The UNO Q picks that up and passes it to your Mac over Wi-Fi. If anything tries to clear codes on the way through, it drops the command.
+3. The UNO Q picks that up and passes it to your Mac over Wi-Fi. It also drops the standard clear-codes command (Mode 04) if anything sends one.
 4. Tattlestone shows it the same way it would if the adapter were paired with the Mac.
 5. Later, a small sensor on one fuse will measure the drain directly and send it the same way. That part isn't built yet.
 
@@ -72,7 +72,7 @@ The UNO Q can also pretend to be the truck, which is handy for testing the Wi-Fi
 
 ## Try it
 
-You don't need a truck for this. You do need Node.js 18 or newer and the Xcode command line tools.
+You don't need a truck for this. You do need an Apple Silicon Mac with Node.js 22.12 or newer and the Xcode command line tools installed.
 
 ```bash
 git clone https://github.com/jmjohns9/Tattlestone.git
@@ -83,7 +83,7 @@ npm run install:app
 
 1. Open Tattlestone from your Applications folder.
 2. Go to **Connection** and click **Launch Emulator**. A pretend 2004 Silverado shows up, with its battery slowly sinking from 12.89 V.
-3. Go to **Fault codes** and click **Scan** to find the three codes it's hiding.
+3. Go to **Fault codes** and click **Scan**. It finds two stored codes and one pending.
 
 ## What you need for a real truck
 

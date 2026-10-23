@@ -34,7 +34,7 @@ Setup guides, step by step:
 - [Wi-Fi bridge setup](uno-q/wifi-bridge-setup.html): copy the files, install the units, test with `nc`, connect from the app.
 - [OBDLink bind guide](uno-q/obdlink-bind-next-steps.html): pair the OBDLink with the board and bind `/dev/rfcomm0`.
 
-In the app, open **Connection**, choose **Network**, and enter the board's address with the port, for example `192.168.1.33:35000`.
+In the app, open **Connection**, find **Network adapter**, enter the board's address with the port (for example `192.168.1.33:35000`), and click **Connect over Wi-Fi**.
 
 ### Planned: measuring the drain directly
 
