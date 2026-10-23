@@ -92,6 +92,81 @@ test('a late reply that never comes does not block the next command forever', as
   assert.ok(Date.now() - t0 < 2500, 'waited too long for the stale prompt');
 });
 
+test('a reply later than the stale window is not credited to the next command', async () => {
+  // 010C answers at 1760 ms — after the 1.5 s stale wait — unless interrupted
+  // by the resync CR, which (like a real ELM327) yields STOPPED and a prompt.
+  let elm: ELM327Commander;
+  const late = new Set<ReturnType<typeof setTimeout>>();
+  elm = new ELM327Commander((data) => {
+    if (data === '\r') {
+      for (const t of late) clearTimeout(t);
+      setTimeout(() => elm.onData('STOPPED\r\r>'), 5);
+    }
+    if (data.trim() === '010C') late.add(setTimeout(() => elm.onData('410C1AF8\r\r>'), 1760));
+    if (data.trim() === 'ATDP') setTimeout(() => elm.onData('SAE J1850 VPW\r\r>'), 150);
+  });
+  assert.equal((await elm.send('010C', 200)).success, false);
+  const dp = await elm.send('ATDP', 1000);
+  assert.equal(dp.raw, 'SAE J1850 VPW');
+});
+
+test('partial bytes of a timed-out reply do not leak into the next reply', async () => {
+  let elm: ELM327Commander;
+  elm = new ELM327Commander((data) => {
+    if (data.trim() === '0100') setTimeout(() => elm.onData('SEARCHING...\r'), 100);
+    if (data === '\r') setTimeout(() => elm.onData('STOPPED\r\r>'), 5);
+    if (data.trim() === 'ATRV') setTimeout(() => elm.onData('12.6V\r\r>'), 5);
+  });
+  await elm.send('0100', 50);
+  const rv = await elm.send('ATRV', 1000);
+  assert.equal(rv.raw, '12.6V');
+});
+
+test('two prompts in one chunk are two replies', async () => {
+  let elm: ELM327Commander;
+  elm = new ELM327Commander((data) => {
+    const cmd = data.trim();
+    if (cmd === '0100') setTimeout(() => elm.onData('4100BE1FA813\r\r>4100BE1FA813\r\r>'), 2);
+    if (cmd === 'ATRV') setTimeout(() => elm.onData('12.6V\r\r>'), 2);
+  }, { staleReplyWaitMs: 50, resyncWaitMs: 20 });
+  assert.equal((await elm.send('0100', 500)).raw, '4100BE1FA813');
+  // The duplicate's prompt had no command waiting, so it is dropped rather
+  // than left in the buffer to resolve ATRV with the wrong bytes.
+  await new Promise(r => setTimeout(r, 10));
+  assert.equal((await elm.send('ATRV', 500)).raw, '12.6V');
+});
+
+test('emits link-lost after consecutive timeouts on a ready session, once', async () => {
+  const sim = new ELM327Simulator();
+  let live = true;
+  const elm: ELM327Commander = new ELM327Commander((data) => {
+    if (live) setTimeout(() => elm.onData(sim.respond(data.trim())), 2);
+  }, { staleReplyWaitMs: 20, resyncWaitMs: 10 });
+  await elm.initialize();
+  let lost = 0;
+  elm.on('link-lost', () => lost++);
+  live = false;   // adapter goes silent
+  for (let i = 0; i < 5; i++) await elm.send('010C', 20);
+  assert.equal(lost, 1);
+});
+
+test('a reply resets the timeout count', async () => {
+  let answer = false;
+  let elm: ELM327Commander;
+  elm = new ELM327Commander((data) => {
+    if (answer && data.trim() === '010C') setTimeout(() => elm.onData('410C1AF8\r\r>'), 2);
+  }, { staleReplyWaitMs: 20, resyncWaitMs: 10 });
+  (elm as any).isReady = true;   // dead-link detection only runs after init
+  let lost = 0;
+  elm.on('link-lost', () => lost++);
+  for (let i = 0; i < 3; i++) await elm.send('010C', 20);
+  answer = true;
+  await elm.send('010C', 2000);
+  answer = false;
+  for (let i = 0; i < 3; i++) await elm.send('010C', 20);
+  assert.equal(lost, 0);
+});
+
 test('response lines are split on the ELM327 carriage return', async () => {
   const elm = new ELM327Commander((data) => {
     if (data.trim() === 'ATDP') setTimeout(() => elm.onData('SEARCHING...\rSAE J1850 VPW\r\r>'), 1);

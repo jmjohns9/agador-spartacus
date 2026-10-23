@@ -1,0 +1,20 @@
+# Tattlestone Network Mode bridge: TCP :35000 <-> OBD adapter on /dev/rfcomm0.
+# Without a unit nothing listens after a reboot and the app sees ECONNREFUSED.
+#   sudo cp tattlestone-bridge.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now tattlestone-bridge
+#   journalctl -u tattlestone-bridge -f
+[Unit]
+Description=Tattlestone Network Mode bridge (TCP 35000 -> OBD adapter)
+Wants=network-online.target
+After=network-online.target
+Conflicts=tattlestone-emulator.service
+
+[Service]
+User=arduino
+SupplementaryGroups=dialout
+ExecStart=/usr/bin/python3 -u /home/arduino/uno-q-bridge/obd_tcp_bridge.py --device /dev/rfcomm0 --baud 115200 --port 35000
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
