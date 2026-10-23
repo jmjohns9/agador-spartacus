@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wi-Fi Bridge Setup</title>
+<style>
+  :root {
+    --bg: #f7f6f2; --card: #ffffff; --text: #1f2328; --muted: #5d6470;
+    --line: #dedcd4; --accent: #2f6f5e; --accent-bg: #e6f1ed;
+    --warn: #8a5a00; --warn-bg: #fdf3dc; --code-bg: #f0efea; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #16181b; --card: #1e2125; --text: #e6e6e3; --muted: #a0a5ad;
+      --line: #33373d; --accent: #6cc3a8; --accent-bg: #1f332d;
+      --warn: #f0c060; --warn-bg: #3a2f17; --code-bg: #26292e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.8rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+          padding: 18px 20px; margin: 0 0 16px; }
+  .step h2 { font-size: 1.15rem; margin: 0 0 8px; display: flex; gap: 10px; align-items: center; }
+  .num { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--accent);
+         color: var(--card); display: grid; place-items: center; font-size: .9rem; font-weight: 700; }
+  .where { display: inline-block; font-size: .75rem; font-weight: 600; letter-spacing: .03em;
+           text-transform: uppercase; padding: 2px 8px; border-radius: 4px;
+           background: var(--accent-bg); color: var(--accent); margin-left: auto; }
+  p, li { margin: 6px 0; }
+  ol, ul { padding-left: 22px; }
+  .cmd { position: relative; margin: 10px 0; }
+  pre { margin: 0; background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px;
+        padding: 12px 70px 12px 12px; overflow-x: auto; font: 13.5px/1.5 var(--mono); white-space: pre; }
+  code { font-family: var(--mono); font-size: .92em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre code { background: none; padding: 0; }
+  .copy { position: absolute; top: 8px; right: 8px; font: 12px sans-serif; padding: 4px 10px;
+          border: 1px solid var(--line); border-radius: 4px; background: var(--card); color: var(--text); cursor: pointer; }
+  .ok { border-left: 4px solid var(--accent); background: var(--accent-bg); padding: 8px 12px; border-radius: 4px; margin: 10px 0; }
+  .note { border-left: 4px solid var(--warn); background: var(--warn-bg); padding: 8px 12px; border-radius: 4px; margin: 10px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+  .wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Get the Wi-Fi bridge talking</h1>
+  <p class="sub">Tattlestone ↔ Arduino UNO Q · next steps after the 2026-10-21 fix</p>
+
+  <div class="step">
+    <h2>What's going on</h2>
+    <p>Nothing was running on the UNO Q, so Tattlestone's connections to <code>192.168.1.33:35000</code> were refused. The code is fixed and tested on the Mac. What's left is copying it to the board, starting it as a service so it survives reboots, and checking that data comes back.</p>
+    <p>You'll use the <b>ELM327 emulator</b> first. It answers like a real OBD adapter, so you can prove the Wi-Fi link works without the Bluetooth/OBD side.</p>
+  </div>
+
+  <div class="step">
+    <h2><span class="num">1</span> Copy the bridge files to the board <span class="where">Mac terminal</span></h2>
+    <p>From the Mac, run this. It asks for the <code>arduino</code> user's password.</p>
+    <div class="cmd"><pre><code>scp -r ~/Tattlestone/agador-spartacus/files/firmware/uno-q-bridge arduino@tattlestone.local:/home/arduino/</code></pre></div>
+    <div class="ok">Done when you see the files listed as they copy: <code>obd_tcp_bridge.py</code>, <code>elm327_emulator.py</code>, the two <code>.service</code> files and the test file.</div>
+    <div class="note">If <code>tattlestone.local</code> isn't found, use the IP instead: <code>arduino@192.168.1.33:/home/arduino/</code></div>
+  </div>
+
+  <div class="step">
+    <h2><span class="num">2</span> Install the services <span class="where">Board terminal</span></h2>
+    <p>Open a shell on the UNO Q, the same way you ran <code>ss</code> earlier. First check that Python is where the service files expect it:</p>
+    <div class="cmd"><pre><code>which python3</code></pre></div>
+    <p>It should print <code>/usr/bin/python3</code>. If it prints something else, tell Claude before you go on.</p>
+    <p>Then install both service files:</p>
+    <div class="cmd"><pre><code>sudo cp ~/uno-q-bridge/tattlestone-bridge.service ~/uno-q-bridge/tattlestone-emulator.service /etc/systemd/system/
+sudo systemctl daemon-reload</code></pre></div>
+  </div>
+
+  <div class="step">
+    <h2><span class="num">3</span> Start the emulator <span class="where">Board terminal</span></h2>
+    <div class="cmd"><pre><code>sudo systemctl enable --now tattlestone-emulator
+systemctl status tattlestone-emulator --no-pager
+ss -ltnp | grep 35000</code></pre></div>
+    <div class="ok">Done when <code>status</code> says <b>active (running)</b> and <code>ss</code> shows <code>0.0.0.0:35000</code>.
+      <code>enable</code> means it also starts on every boot.</div>
+    <div class="note">If <code>ss</code> shows <code>127.0.0.1:35000</code> instead, an old copy of the emulator is running by hand. Stop it with <code>pkill -f elm327_emulator</code>, then run <code>sudo systemctl restart tattlestone-emulator</code>.</div>
+  </div>
+
+  <div class="step">
+    <h2><span class="num">4</span> Test the link by hand <span class="where">Mac terminal</span></h2>
+    <p>Send one command over Wi-Fi and read the reply:</p>
+    <div class="cmd"><pre><code>printf 'ATI\r010C\r' | nc -w 2 192.168.1.33 35000</code></pre></div>
+    <div class="ok">Working: you see <code>ELM327 v1.5</code>, then a line starting with <code>410C</code>, each followed by <code>&gt;</code>.</div>
+    <div class="note">If you see <b>Connection refused</b>, go back to step 3. If nothing prints at all, see the troubleshooting table below.</div>
+  </div>
+
+  <div class="step">
+    <h2><span class="num">5</span> Rebuild and install the app <span class="where">Mac terminal</span></h2>
+    <p>The installed Tattlestone.app is older than the source code, so rebuild it:</p>
+    <div class="cmd"><pre><code>cd ~/Tattlestone/agador-spartacus/files
+npm run install:app</code></pre></div>
+    <div class="ok">Done when it finishes without errors and <code>/Applications/Tattlestone.app</code> has been replaced.</div>
+  </div>
+
+  <div class="step">
+    <h2><span class="num">6</span> Connect from Tattlestone <span class="where">Tattlestone app</span></h2>
+    <ol>
+      <li>Quit Tattlestone if it's open, then start it again.</li>
+      <li>Open the <b>Connection</b> screen and choose <b>Network</b>.</li>
+      <li>Enter <code>192.168.1.33:35000</code> and click <b>Connect</b>.</li>
+      <li>If macOS asks to let Tattlestone find devices on your local network, click <b>Allow</b>.</li>
+    </ol>
+    <div class="ok">Working: the status goes to <b>Connected</b>, the adapter shows the emulator, and live values like RPM (around 820) appear.</div>
+    <p>Then export the session log from the app and send it to Claude. It should now contain <code>RX …</code> lines; that's the proof data is coming back.</p>
+  </div>
+
+  <div class="step">
+    <h2>If something goes wrong</h2>
+    <p>The app's red banner now tells you which part failed:</p>
+    <div class="wrap"><table>
+      <tr><th>Banner or result says</th><th>Meaning</th><th>What to do</th></tr>
+      <tr><td><code>Nothing is listening on …</code> [ECONNREFUSED]</td><td>The board is up, but the service isn't running</td><td>On the board: <code>sudo systemctl restart tattlestone-emulator</code>, then <code>journalctl -u tattlestone-emulator -n 30</code></td></tr>
+      <tr><td><code>Can't reach …</code> [EHOSTUNREACH]</td><td>The board is off, still booting, or on another network</td><td>Wait 30 s and retry. Check the Mac and the board are on the same Wi-Fi. Check System Settings → Privacy &amp; Security → Local Network → Tattlestone is on</td></tr>
+      <tr><td><code>Can't find …</code> [ENOTFOUND]</td><td>The <code>.local</code> name didn't resolve</td><td>Type the IP address (<code>192.168.1.33:35000</code>) instead</td></tr>
+      <tr><td><code>Adapter not responding — no reply to ATZ/ATI</code></td><td>Connected, but nothing answered</td><td>Run the step-4 <code>nc</code> test. If that works, send Claude the session log</td></tr>
+      <tr><td><code>BRIDGE ERROR: cannot open /dev/rfcomm0</code> in the log</td><td>The real bridge is running, but there's no OBD adapter on the board</td><td>Expected for now. Use the emulator (step 3)</td></tr>
+      <tr><td>The board's IP changed</td><td>DHCP gave it a new address</td><td>On the board: <code>hostname -I</code>, then use that IP everywhere above</td></tr>
+    </table></div>
+  </div>
+
+  <div class="step">
+    <h2>Later: switch to the real OBD bridge</h2>
+    <p>Do this once the Bluetooth/OBD side works and <code>/dev/rfcomm0</code> exists on the board. On the board:</p>
+    <div class="cmd"><pre><code>sudo systemctl disable --now tattlestone-emulator
+sudo systemctl enable --now tattlestone-bridge
+journalctl -u tattlestone-bridge -f</code></pre></div>
+    <p>Only one can run at a time; they share port 35000. Note that if the Mac is connected to the OBDLink over Bluetooth, the board can't use it at the same time.</p>
+  </div>
+
+  <div class="step">
+    <h2>Send back to Claude</h2>
+    <ul>
+      <li>The output of the step-4 <code>nc</code> command</li>
+      <li>The exported Tattlestone session log from step 6</li>
+      <li>Whether you want the changes committed. Claude will commit only the Wi-Fi bridge files, not the other uncommitted work in the repo.</li>
+    </ul>
+  </div>
+</main>
+<script>
+  document.querySelectorAll('.cmd').forEach((box) => {
+    const btn = document.createElement('button');
+    btn.className = 'copy'; btn.textContent = 'Copy';
+    btn.onclick = async () => {
+      try { await navigator.clipboard.writeText(box.querySelector('code').innerText); btn.textContent = 'Copied'; }
+      catch { btn.textContent = 'Select & copy'; }
+      setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+    };
+    box.appendChild(btn);
+  });
+</script>
+</body>
+</html>
