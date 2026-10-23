@@ -6,11 +6,13 @@
 Tattlestone/
 ├── files/                  # The application (all source lives in files/src/)
 ├── eval/                   # Automated code review harness
-├── docs/                   # ui-styling.md, screenshots, specs, plans, code-review report
+├── brand/                  # Wordmark, lockup, icon and GitHub banner/diagram sources
+├── docs/                   # DEVELOPING, ARCHITECTURE, HARDWARE, SECURITY, ui-styling.md,
+│                           #   screenshots, specs, plans; history/ holds the original project files
 ├── .kiro/steering/         # These steering files
 ├── docker-compose.yml      # Headless container, noVNC on 127.0.0.1:6080 (password-protected)
-├── HARDWARE_SOFTWARE_COMPATIBILITY_REVIEW.md
-└── README.md               # Authoritative project reference
+├── CHANGELOG.md
+└── README.md               # Plain-language overview; technical detail lives in docs/
 ```
 
 ---
