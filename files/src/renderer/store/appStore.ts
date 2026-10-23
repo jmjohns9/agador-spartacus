@@ -447,7 +447,8 @@ export const selectActiveDTCCount = (s: AppState): number =>
 export const selectParasiteRiskScore = (s: AppState): number => {
   const rogueCount = s.modules.filter(m => m.status === 'rogue').length;
   const ltftB1 = typeof s.liveData['0107']?.value === 'number' ? s.liveData['0107'].value as number : 0;
-  const voltDrift = 0; // Calculated from voltage history elsewhere
+  // Resting drain as a fraction of the 5 mV/min critical rate; 0 until measurable
+  const voltDrift = Math.min(1, Math.max(0, (selectDropMvPerMin(s) ?? 0) / 5));
   const faultWeight = s.dtcs.filter(d => d.type === 'B' || d.type === 'U').length;
   const sleepFail = rogueCount;
   return Math.min(10, (sleepFail * 3) + (voltDrift * 4) + (faultWeight * 1.5) + (Math.abs(ltftB1) > 7 ? 1 : 0));
