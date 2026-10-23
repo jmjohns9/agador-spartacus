@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640" role="img" aria-label="How Tattlestone connects: the truck's OBD-II port, an OBDLink MX+ adapter, an Arduino UNO Q bridge over Wi-Fi, and the Mac app. A fuse sensor is planned.">
+<defs>
+<marker id="ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#F5F3EE"/></marker>
+<marker id="signal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#E8590C"/></marker>
+</defs>
+<rect x="0" y="0" width="1200" height="640" fill="#16171A"/>
+<g font-family="-apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif" fill="#F5F3EE">
+
+<!-- column headers -->
+<g font-size="18" font-weight="700">
+<text x="190" y="52" text-anchor="middle">In the truck</text>
+<text x="620" y="52" text-anchor="middle">On the Arduino UNO Q</text>
+<text x="1030" y="52" text-anchor="middle">On your Mac</text>
+</g>
+
+<!-- truck -->
+<rect x="60" y="80" width="260" height="76" rx="10" fill="none" stroke="#F5F3EE" stroke-width="2"/>
+<text x="190" y="113" text-anchor="middle" font-size="19" font-weight="700">OBD-II port</text>
+<text x="190" y="138" text-anchor="middle" font-size="15">under the dashboard</text>
+
+<rect x="60" y="216" width="260" height="76" rx="10" fill="none" stroke="#F5F3EE" stroke-width="2"/>
+<text x="190" y="249" text-anchor="middle" font-size="19" font-weight="700">OBDLink MX+</text>
+<text x="190" y="274" text-anchor="middle" font-size="15">listens to the truck</text>
+
+<line x1="190" y1="156" x2="190" y2="213" stroke="#F5F3EE" stroke-width="2" marker-end="url(#ink)"/>
+<text x="202" y="191" font-size="15">plugs in</text>
+
+<rect x="60" y="400" width="260" height="120" rx="10" fill="none" stroke="#E8590C" stroke-width="2" stroke-dasharray="8 6"/>
+<text x="190" y="434" text-anchor="middle" font-size="19" font-weight="700">Fuse sensor (INA260)</text>
+<text x="190" y="460" text-anchor="middle" font-size="15">sits in a fuse slot and</text>
+<text x="190" y="480" text-anchor="middle" font-size="15">measures battery drain</text>
+<text x="190" y="506" text-anchor="middle" font-size="15" font-weight="700" fill="#E8590C">COMING LATER</text>
+
+<!-- arduino -->
+<rect x="440" y="80" width="360" height="400" rx="12" fill="none" stroke="#F5F3EE" stroke-width="2"/>
+<rect x="460" y="100" width="320" height="170" rx="8" fill="none" stroke="#F5F3EE" stroke-width="1.5"/>
+<text x="620" y="130" text-anchor="middle" font-size="19" font-weight="700">Linux side</text>
+<text x="620" y="156" text-anchor="middle" font-size="15" font-family="ui-monospace, Menlo, monospace">obd_tcp_bridge.py</text>
+<text x="620" y="186" text-anchor="middle" font-size="15">passes the data through</text>
+<text x="620" y="208" text-anchor="middle" font-size="15">blocks Mode 04 (clear codes)</text>
+<text x="620" y="230" text-anchor="middle" font-size="15">starts by itself on boot</text>
+
+<rect x="460" y="330" width="320" height="130" rx="8" fill="none" stroke="#E8590C" stroke-width="2" stroke-dasharray="8 6"/>
+<text x="620" y="362" text-anchor="middle" font-size="19" font-weight="700">Microcontroller side</text>
+<text x="620" y="388" text-anchor="middle" font-size="15">reads amps and volts</text>
+<text x="620" y="410" text-anchor="middle" font-size="15">from the fuse sensor</text>
+<text x="620" y="440" text-anchor="middle" font-size="15" font-weight="700" fill="#E8590C">COMING LATER</text>
+
+<line x1="620" y1="328" x2="620" y2="273" stroke="#E8590C" stroke-width="2" stroke-dasharray="8 6" marker-end="url(#signal)"/>
+<text x="632" y="306" font-size="15" fill="#E8590C">joins the data</text>
+
+<rect x="500" y="510" width="240" height="44" rx="8" fill="none" stroke="#F5F3EE" stroke-width="1.5"/>
+<text x="620" y="538" text-anchor="middle" font-size="15">USB-C power bank</text>
+<line x1="620" y1="510" x2="620" y2="483" stroke="#F5F3EE" stroke-width="2" marker-end="url(#ink)"/>
+
+<!-- truck to arduino -->
+<path d="M320 240 L 412 240 L 412 185 L 457 185" fill="none" stroke="#F5F3EE" stroke-width="2" marker-end="url(#ink)"/>
+<text x="328" y="230" font-size="15">Bluetooth</text>
+
+<path d="M320 460 L 390 460 L 390 395 L 457 395" fill="none" stroke="#E8590C" stroke-width="2" stroke-dasharray="8 6" marker-end="url(#signal)"/>
+<text x="326" y="484" font-size="15" fill="#E8590C">Qwiic cable</text>
+
+<!-- mac -->
+<rect x="900" y="80" width="260" height="190" rx="12" fill="none" stroke="#F5F3EE" stroke-width="2"/>
+<text x="1030" y="124" text-anchor="middle" font-size="22" font-weight="700">Tattlestone</text>
+<text x="1030" y="156" text-anchor="middle" font-size="15">shows the readings,</text>
+<text x="1030" y="178" text-anchor="middle" font-size="15">fault codes and drain</text>
+<text x="1030" y="222" text-anchor="middle" font-size="15">Connect over Wi-Fi</text>
+<text x="1030" y="244" text-anchor="middle" font-size="15">or plain Bluetooth</text>
+
+<path d="M780 185 L 897 185" fill="none" stroke="#F5F3EE" stroke-width="2" marker-end="url(#ink)"/>
+<text x="850" y="170" text-anchor="middle" font-size="15">Wi-Fi</text>
+<text x="850" y="208" text-anchor="middle" font-size="15">port 35000</text>
+
+<rect x="900" y="310" width="260" height="150" rx="10" fill="none" stroke="#F5F3EE" stroke-width="1.5" stroke-opacity="0.5"/>
+<text x="920" y="342" font-size="17" font-weight="700">No adapter handy?</text>
+<text x="920" y="368" font-size="15" font-family="ui-monospace, Menlo, monospace">elm327_emulator.py</text>
+<text x="920" y="392" font-size="15">on the UNO Q pretends to</text>
+<text x="920" y="414" font-size="15">be the truck, on the</text>
+<text x="920" y="436" font-size="15">same Wi-Fi port.</text>
+
+<!-- direct path, no arduino -->
+<path d="M60 270 L 32 270 L 32 600 L 1180 600 L 1180 180 L 1163 180" fill="none" stroke="#F5F3EE" stroke-width="2" marker-end="url(#ink)"/>
+<rect x="420" y="588" width="400" height="24" fill="#16171A"/>
+<text x="620" y="606" text-anchor="middle" font-size="15">Bluetooth straight to the Mac: no Arduino needed</text>
+</g>
+</svg>
