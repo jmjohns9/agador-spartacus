@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OBDLink Bridge Bind</title>
+<title>OBDLink Bridge Setup</title>
 <style>
   :root {
     --bg: #f7f6f2; --card: #ffffff; --text: #1f2328; --muted: #5d6470;
@@ -56,194 +56,133 @@
 <body>
 <main>
   <h1>Connect the bridge to the OBDLink</h1>
-  <p class="sub">Tattlestone ↔ Arduino UNO Q ↔ OBDLink MX · next steps after the 2026-10-22 diagnosis · PR #12 (merged)</p>
+  <p class="sub">Tattlestone ↔ Arduino UNO Q ↔ OBDLink MX · the bridge now owns the Bluetooth link · branch <code>fix/bridge-owns-bluetooth-link</code></p>
 
   <div class="step">
     <h2>What's going on</h2>
-    <p>The Wi-Fi side works: the app reaches the bridge on <code>192.168.1.33:35000</code>. The bridge then tries to open <code>/dev/rfcomm0</code>, the Bluetooth serial link to the OBDLink, and that link doesn't exist yet. Every attempt in today's log ends with:</p>
+    <p>The app always reached the bridge, but the bridge then tried to open <code>/dev/rfcomm0</code>, and nothing ever created it. That device only appears after a manual root command (<code>rfcomm bind</code>), it disappears at every reboot, and the earlier bind attempt never succeeded:</p>
     <div class="cmd"><pre><code>BRIDGE ERROR: cannot open /dev/rfcomm0: No such file or directory</code></pre></div>
-    <p><code>/dev/rfcomm0</code> only appears after you pair the board with the OBDLink and run <code>rfcomm bind</code>. That's the main job below.</p>
-    <p>The app used to hide this reason behind "No response to ATZ/ATI". That's fixed in <code>main</code> (commit <code>9d91b7a</code>, PR #12): the app now shows the bridge's own reason.</p>
+    <p><b>New design:</b> the bridge opens the Bluetooth link to the OBDLink itself, once per app session, and closes it when the app leaves. There's no <code>/dev/rfcomm0</code> and no <code>rfcomm</code> commands. The app:</p>
+    <ul>
+      <li>shows the bridge's progress while it connects</li>
+      <li>reconnects to the last bridge whenever you open it</li>
+      <li>says what to do when something is missing</li>
+    </ul>
+    <p>One step stays manual, once: <b>pairing</b> the OBDLink with the board (step 2). It needs you at the adapter.</p>
   </div>
 
   <div class="step">
-    <h2><span class="num">1</span> Check you're on the right build <span class="where">Mac</span></h2>
-    <p>Every build reports version <code>1.0.0</code>, so the version number won't tell you which code you're running. Check the git commit instead: open Tattlestone, go to <b>Settings</b>, and scroll down to <b>About</b>.</p>
-    <div class="wrap"><table>
-      <tr><th>Row</th><th>What it should say</th></tr>
-      <tr><td>Build</td><td><code>&lt;commit&gt; · main</code>: any commit from the PR #12 merge on</td></tr>
-      <tr><td>Built</td><td>2026-10-22 or later</td></tr>
-    </table></div>
-    <p>If it shows another branch, an older build, or <code>Development build</code>, rebuild from <code>main</code>:</p>
-    <div class="cmd"><pre><code>cd ~/Tattlestone/agador-spartacus
-git checkout main
-git pull
-cd files
-npm run install:app</code></pre></div>
-    <p>The build prints a line like <code>build-info: 1a2b3c4 (main)</code>. Quit and reopen Tattlestone so it loads the new build.</p>
-    <div class="note">If the Build row ends in <code>· uncommitted changes</code>, the app was built from edited files that weren't committed, so it may not match any commit on GitHub. Commit (or discard) the changes and rebuild.</div>
-  </div>
-
-  <div class="step">
-    <h2><span class="num">2</span> Check the new error message <span class="where">Mac</span></h2>
-    <p>Before binding anything, confirm the app now explains the failure.</p>
-    <ol>
-      <li>Open Tattlestone, then go to <b>Connection</b>, then <b>Network</b>.</li>
-      <li>Enter <code>192.168.1.33</code>, port <code>35000</code>, and click <b>Connect</b>.</li>
-    </ol>
-    <div class="ok">Expected banner: <i>The bridge can't reach the OBD adapter: cannot open /dev/rfcomm0: No such file or directory [BRIDGE ERROR]</i>. The session log shows <code>Connection failed: …</code> and no "No response to ATZ/ATI" lines.</div>
-  </div>
-
-  <div class="step">
-    <h2><span class="num">3</span> Get the truck and adapter ready <span class="where">Truck · Mac</span></h2>
+    <h2><span class="num">1</span> Get the truck and adapter ready <span class="where">Truck · Mac</span></h2>
     <ol>
       <li>Plug the OBDLink MX into the Silverado's OBD port (under the dash, left of the steering column).</li>
       <li>Turn the <b>ignition on</b>. The engine doesn't need to run.</li>
-      <li>On the Mac, disconnect from the adapter: <b>System Settings → Bluetooth → OBDLinkMX… → ⓘ → Disconnect</b>. The OBDLink accepts <b>only one Bluetooth host at a time</b>, so if the Mac (or a phone app) is holding it, the board can't connect.</li>
-      <li>If your adapter has a pairing button, press it just before step 4. It stays discoverable for a few minutes.</li>
-      <li>The UNO Q must be within Bluetooth range of the truck: a few metres, with no thick walls in between.</li>
+      <li>On the Mac, disconnect from the adapter: <b>System Settings → Bluetooth → OBDLinkMX… → ⓘ → Disconnect</b>. The OBDLink accepts <b>one Bluetooth host at a time</b>.</li>
+      <li>Keep the UNO Q within a few metres of the truck.</li>
     </ol>
   </div>
 
   <div class="step">
-    <h2><span class="num">4</span> Pair the board with the OBDLink <span class="where">UNO Q</span></h2>
-    <p>SSH in from the Mac:</p>
-    <div class="cmd"><pre><code>ssh arduino@192.168.1.33</code></pre></div>
-    <p>Start the Bluetooth tool:</p>
-    <div class="cmd"><pre><code>bluetoothctl</code></pre></div>
-    <p>At the <code>[bluetooth]#</code> prompt, type these one at a time:</p>
+    <h2><span class="num">2</span> Pair the board with the OBDLink (once) <span class="where">UNO Q</span></h2>
+    <div class="cmd"><pre><code>ssh arduino@192.168.1.33
+bluetoothctl</code></pre></div>
+    <p>At the <code>[bluetooth]#</code> prompt:</p>
     <div class="cmd"><pre><code>power on
 agent on
 default-agent
 scan on</code></pre></div>
-    <p>Wait until a line like this appears (it can take 10–30 s):</p>
-    <div class="cmd"><pre><code>[NEW] Device 00:04:3E:12:34:56 OBDLinkMX13659</code></pre></div>
-    <p>The part after <code>Device</code> is the adapter's <b>MAC address</b>. Yours will differ from this example. Write it down, then type the commands below <b>using your own MAC</b>:</p>
+    <p>Wait for a line like <code>[NEW] Device 00:04:3E:12:34:56 OBDLinkMX13659</code>. Type the address <b>from your screen</b> into these (no angle brackets):</p>
     <div class="cmd"><pre><code>scan off
 pair 00:04:3E:12:34:56
 trust 00:04:3E:12:34:56
 quit</code></pre></div>
     <ul>
-      <li>If asked for a PIN or passkey, enter <code>1234</code>. If that's rejected, try <code>0000</code>.</li>
-      <li>If asked "Authorize service?" or to confirm a passkey, type <code>yes</code>.</li>
-      <li><code>trust</code> lets the board reconnect later without asking again.</li>
+      <li>PIN prompt: <code>1234</code> (then <code>0000</code>). "Authorize service?" / confirm passkey: <code>yes</code>.</li>
+      <li>You don't need to write the address down. The bridge finds the paired OBDLink by name.</li>
     </ul>
-    <div class="ok">Done when you see <code>Pairing successful</code> and <code>trust succeeded</code>.</div>
-    <div class="note">Don't type angle brackets like <code>&lt;MAC&gt;</code> anywhere. Bash reads <code>&lt;</code> as "read from a file", which is what caused the earlier <code>-bash: OBDLink-MAC: No such file or directory</code> error.</div>
+    <div class="ok">Done when you see <code>Pairing successful</code> and <code>trust succeeded</code>. Check with <code>bluetoothctl devices Paired</code>.</div>
   </div>
 
   <div class="step">
-    <h2><span class="num">5</span> Save the MAC in a variable <span class="where">UNO Q</span></h2>
-    <p>Still on the board. This finds the paired OBDLink and stores its MAC, so you don't have to retype it:</p>
-    <div class="cmd"><pre><code>MAC=$(bluetoothctl devices | grep -i obdlink | awk '{print $2}' | head -1)
-echo "OBDLink MAC: $MAC"</code></pre></div>
-    <div class="ok">Done when it prints a MAC like <code>00:04:3E:12:34:56</code>. If it prints nothing, step 4 didn't find the adapter: see Troubleshooting.</div>
-    <p>Optional: check which RFCOMM channel the adapter uses (it's almost always 1):</p>
-    <div class="cmd"><pre><code>sdptool browse "$MAC" | grep -i -A6 "serial port" | grep -i channel</code></pre></div>
-    <p>If this prints <code>Channel: 1</code> or errors with "Failed to connect to SDP server", use channel 1. If it shows another number, use that number in place of <code>1</code> in steps 6 and 9.</p>
+    <h2><span class="num">3</span> Deploy the new bridge <span class="where">Mac → UNO Q</span></h2>
+    <p>From the Mac, on the branch with the fix (or <code>main</code> once its PR is merged):</p>
+    <div class="cmd"><pre><code>cd ~/Tattlestone/agador-spartacus
+git fetch
+git checkout fix/bridge-owns-bluetooth-link
+scp files/firmware/uno-q-bridge/obd_tcp_bridge.py files/firmware/uno-q-bridge/tattlestone-bridge.service arduino@192.168.1.33:~/uno-q-bridge/</code></pre></div>
+    <p>Then on the board:</p>
+    <div class="cmd"><pre><code>getent group bluetooth &amp;&amp; echo "bluetooth group OK"
+sudo cp ~/uno-q-bridge/tattlestone-bridge.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl restart tattlestone-bridge
+journalctl -u tattlestone-bridge -n 5 --no-pager</code></pre></div>
+    <div class="ok">Done when the journal shows <code>Bridge listening on :35000 -&gt; Bluetooth auto channel 1</code>.</div>
+    <div class="note"><b>If <code>getent</code> printed nothing</b>, the board has no <code>bluetooth</code> group and the service won't start. Remove <code>bluetooth</code> from the <code>SupplementaryGroups=</code> line in <code>/etc/systemd/system/tattlestone-bridge.service</code>, run <code>daemon-reload</code>, restart, and send me the error the app shows.</div>
+    <div class="note"><b>If you followed the old guide</b> and created <code>tattlestone-rfcomm.service</code> or ran <code>rfcomm bind</code>, undo it. A bound <code>rfcomm0</code> can hold the adapter:<br><code>sudo systemctl disable --now tattlestone-rfcomm; sudo rm -f /etc/systemd/system/tattlestone-rfcomm.service; sudo rfcomm release all</code></div>
   </div>
 
   <div class="step">
-    <h2><span class="num">6</span> Create <code>/dev/rfcomm0</code> <span class="where">UNO Q</span></h2>
-    <div class="cmd"><pre><code>sudo rfcomm bind 0 "$MAC" 1
-ls -l /dev/rfcomm0
-rfcomm -a</code></pre></div>
-    <div class="ok">Done when <code>ls</code> shows something like <code>crw-rw---- 1 root dialout … /dev/rfcomm0</code> and <code>rfcomm -a</code> shows <code>rfcomm0: 00:04:3E:… channel 1 clean</code>.</div>
-    <p><code>bind</code> doesn't connect yet. It only reserves the device. The Bluetooth link starts when the bridge opens <code>/dev/rfcomm0</code>, which happens when the app connects. The bridge service is in the <code>dialout</code> group, so it can open the device.</p>
-  </div>
-
-  <div class="step">
-    <h2><span class="num">7</span> Test the full path with <code>nc</code> <span class="where">UNO Q + Mac</span></h2>
-    <p>On the board, watch the bridge log (leave it running):</p>
+    <h2><span class="num">4</span> Test the bridge with <code>nc</code> <span class="where">UNO Q + Mac</span></h2>
+    <p>On the board, leave this running:</p>
     <div class="cmd"><pre><code>journalctl -u tattlestone-bridge -f</code></pre></div>
-    <p>In a <b>new Mac terminal</b>, send a reset, an ID request and an RPM request:</p>
-    <div class="cmd"><pre><code>printf 'ATZ\r' | nc -w 4 192.168.1.33 35000; echo
-printf 'ATI\r010C\r' | nc -w 6 192.168.1.33 35000; echo</code></pre></div>
-    <div class="ok">Expected: an <code>ELM327 v1.x</code> banner, then a line starting <code>41 0C</code> (RPM data) or <code>NO DATA</code> with the engine off, each followed by <code>&gt;</code>. The journal shows <code>Client … connected</code> and no <code>Cannot open</code>.</div>
-    <div class="note">The first connect can take a few seconds while Bluetooth links up. If the first command comes back empty, run it again.</div>
+    <p>In a new Mac terminal. The pause lets the bridge finish connecting, since anything sent before <code>BRIDGE READY</code> is dropped:</p>
+    <div class="cmd"><pre><code>(sleep 8; printf 'ATI\r010C\r'; sleep 4) | nc 192.168.1.33 35000; echo</code></pre></div>
+    <div class="ok">Expected:<br><code>BRIDGE STATUS: connecting to the OBD adapter</code><br><code>BRIDGE READY</code><br>then an <code>ELM327 v1.x</code> line and a <code>41 0C …</code> (or <code>NO DATA</code> with the engine off), each ending in <code>&gt;</code>. The journal shows <code>Adapter link up</code> and then <code>Client disconnected (closed by app)</code>.</div>
+    <p>Retry lines such as <code>OBDLink … not answering, retrying in 2s (attempt 1)</code> are normal for the first few seconds after the ignition comes on.</p>
   </div>
 
   <div class="step">
-    <h2><span class="num">8</span> Connect from Tattlestone <span class="where">Mac</span></h2>
+    <h2><span class="num">5</span> Connect from Tattlestone, once <span class="where">Mac</span></h2>
     <ol>
-      <li><b>Connection → Network → 192.168.1.33 : 35000 → Connect</b>.</li>
-      <li>Watch for <code>Adapter responded to ATZ</code>, then <code>Initialization complete. Protocol: SAE J1850 VPW</code> (the 2004 Silverado's protocol).</li>
-      <li>Open the live dashboard and check RPM and coolant temperature update.</li>
-      <li>Export the session log (it saves next to the earlier logs in <code>~/Tattlestone</code>).</li>
+      <li>Rebuild the app from the same branch: <code>cd files &amp;&amp; npm run install:app</code>. Check that <b>Settings → About → Build</b> shows <code>fix/bridge-owns-bluetooth-link</code> (or <code>main</code> after merge).</li>
+      <li><b>Connection → Network → 192.168.1.33:35000 → Connect.</b></li>
+      <li>Under "Connecting…" you'll see the bridge's progress, then <code>Initialization complete. Protocol: SAE J1850 VPW</code> in the log.</li>
+    </ol>
+    <div class="ok">After this first successful connection the app remembers the bridge. From now on, opening the app connects by itself.</div>
+  </div>
+
+  <div class="step">
+    <h2><span class="num">6</span> Check close and reopen <span class="where">Mac + UNO Q</span></h2>
+    <ol>
+      <li>Quit Tattlestone (⌘Q). The journal on the board shows <code>Client disconnected (closed by app)</code>.</li>
+      <li>On the board, confirm the Bluetooth link was released (should print <code>Connected: no</code>):
+        <div class="cmd"><pre><code>bluetoothctl info "$(bluetoothctl devices Paired | grep -i obd | awk '{print $2}')" | grep Connected</code></pre></div></li>
+      <li>Open Tattlestone again. <b>Don't click anything.</b> It should connect within a few seconds and finish initialization.</li>
+      <li>Repeat once more to be sure.</li>
     </ol>
   </div>
 
   <div class="step">
-    <h2><span class="num">9</span> Keep the bind across reboots <span class="where">UNO Q</span></h2>
-    <p><code>rfcomm bind</code> is lost when the board restarts. This systemd unit redoes it at boot, before the bridge starts. Run it in the same SSH session as step 5 so <code>$MAC</code> is still set (check with <code>echo $MAC</code>):</p>
-    <div class="cmd"><pre><code>sudo tee /etc/systemd/system/tattlestone-rfcomm.service &gt;/dev/null &lt;&lt;EOF
-[Unit]
-Description=Tattlestone: bind /dev/rfcomm0 to the OBDLink
-After=bluetooth.service
-Requires=bluetooth.service
-Before=tattlestone-bridge.service
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/bin/rfcomm bind 0 $MAC 1
-ExecStop=/usr/bin/rfcomm release 0
-
-[Install]
-WantedBy=multi-user.target
-EOF
-sudo rfcomm release 0
-sudo systemctl daemon-reload
-sudo systemctl enable --now tattlestone-rfcomm
-systemctl status tattlestone-rfcomm --no-pager
-ls -l /dev/rfcomm0</code></pre></div>
-    <div class="ok">Done when the status shows <code>active (exited)</code> and <code>/dev/rfcomm0</code> exists. Then test with <code>sudo reboot</code>, wait a minute, and repeat step 7.</div>
-    <div class="note">Check the unit has the real MAC: <code>grep ExecStart /etc/systemd/system/tattlestone-rfcomm.service</code>. If it reads <code>bind 0  1</code> (blank MAC), <code>$MAC</code> was empty. Redo step 5, then this step.</div>
+    <h2><span class="num">7</span> Check after a board reboot <span class="where">UNO Q + Mac</span></h2>
+    <div class="cmd"><pre><code>sudo reboot</code></pre></div>
+    <p>Wait about a minute, then open Tattlestone. If the board is still booting, the app shows "Bridge … not reachable yet — retrying" and tries again after 3 s and 10 s. No <code>rfcomm</code> or other manual step should be needed.</p>
   </div>
 
   <div class="step">
-    <h2><span class="num">10</span> Keep the board's bridge in sync with <code>main</code> <span class="where">Mac → UNO Q</span></h2>
-    <p>PR #12 is merged, so <code>main</code> holds the same bridge the board runs. If you change the bridge later, copy from <code>main</code> and restart the service:</p>
-    <div class="cmd"><pre><code>cd ~/Tattlestone/agador-spartacus
-git checkout main
-git pull
-scp files/firmware/uno-q-bridge/* arduino@192.168.1.33:~/uno-q-bridge/
-ssh arduino@192.168.1.33 'sudo systemctl restart tattlestone-bridge'</code></pre></div>
-    <div class="note">Don't copy from older branches such as <code>docs/github-redesign</code>. Their bridge doesn't have the <code>BRIDGE ERROR</code> message, the systemd units or the tests.</div>
+    <h2><span class="num">8</span> Stop auto-connecting (optional) <span class="where">Mac</span></h2>
+    <p>Click <b>Disconnect</b> in the Connection screen. The app forgets the bridge and won't connect on open until you connect manually again.</p>
   </div>
 
   <div class="step">
-    <h2>Troubleshooting</h2>
+    <h2>Troubleshooting: what the app says</h2>
     <div class="wrap"><table>
-      <tr><th>What you see</th><th>Likely cause</th><th>Fix</th></tr>
-      <tr><td>No OBDLink appears during <code>scan on</code></td><td>Adapter asleep, ignition off, or connected to the Mac or a phone</td><td>Ignition on, disconnect other hosts, press the adapter's button, and scan again</td></tr>
-      <tr><td><code>Failed to pair: org.bluez.Error.AuthenticationFailed</code></td><td>Wrong PIN, or no agent</td><td>Run <code>agent on</code> and <code>default-agent</code> first, then try PIN <code>1234</code>, then <code>0000</code></td></tr>
-      <tr><td><code>Failed to pair: …AlreadyExists</code></td><td>Paired before</td><td>Fine: run <code>trust</code> and carry on, or <code>remove MAC</code> and pair again</td></tr>
-      <tr><td><code>Can't create device: Address already in use</code></td><td><code>rfcomm0</code> already bound</td><td><code>rfcomm -a</code> to check; <code>sudo rfcomm release 0</code> then bind again</td></tr>
-      <tr><td>App: <i>cannot open /dev/rfcomm0: No such file or directory</i></td><td>Bind missing (not done, or lost on reboot)</td><td>Step 6, then step 9</td></tr>
-      <tr><td>App: <i>cannot open /dev/rfcomm0: Host is down</i> or <i>Connection refused</i></td><td>Bound, but the OBDLink isn't reachable</td><td>Ignition on, adapter in range, Mac disconnected from it</td></tr>
-      <tr><td>App: <i>cannot open /dev/rfcomm0: Permission denied</i></td><td>Bridge user can't open the device</td><td><code>ls -l /dev/rfcomm0</code> should show group <code>dialout</code>; <code>sudo systemctl restart tattlestone-bridge</code></td></tr>
-      <tr><td>App: <i>The adapter closed the connection during setup</i></td><td>The bridge dropped the link without a reason</td><td>Check <code>journalctl -u tattlestone-bridge -n 50</code> for <code>Link error</code></td></tr>
-      <tr><td><code>nc</code> returns nothing</td><td>Bluetooth link still coming up, or the adapter hasn't answered</td><td>Run it again; watch the journal; power-cycle the ignition</td></tr>
-      <tr><td><code>NO DATA</code> for <code>010C</code></td><td>Engine off: no RPM to report</td><td>Normal with the engine off; start the engine to see RPM</td></tr>
+      <tr><th>Message (after "The bridge can't reach the OBD adapter:")</th><th>Fix</th></tr>
+      <tr><td><i>no paired OBDLink on this board …</i></td><td>Do step 2. If it's already paired, the bridge can't read the pairing list: check the <code>bluetooth</code> group (step 3), or set <code>--bt 00:04:3E:…</code> in the service's <code>ExecStart</code></td></tr>
+      <tr><td><i>the OBDLink (…) is not answering over Bluetooth …</i></td><td>Ignition on, board in range, disconnect the Mac or phone from the OBDLink. The bridge had already retried for 20 s</td></tr>
+      <tr><td><i>… refused RFCOMM channel 1 …</i></td><td><code>sdptool browse 00:04:3E:…</code> on the board; put the right channel in <code>--channel</code> in the service</td></tr>
+      <tr><td><i>Bluetooth on the board is already connected … by something else …</i></td><td><code>sudo rfcomm release all</code>; remove any old <code>tattlestone-rfcomm.service</code> (step 3)</td></tr>
+      <tr><td><i>permission denied opening a Bluetooth socket …</i></td><td>Check the <code>bluetooth</code> group in the service (step 3)</td></tr>
+      <tr><td><i>lost the link to the OBD adapter …</i> (mid-session)</td><td>The truck was switched off or the board went out of range. Reconnect</td></tr>
+      <tr><td><i>Nothing is listening on …:35000</i></td><td><code>systemctl status tattlestone-bridge</code> on the board</td></tr>
+      <tr><td><i>The bridge didn't bring up the OBD adapter within 30 s …</i></td><td><code>journalctl -u tattlestone-bridge -n 50</code> and send it to Claude</td></tr>
     </table></div>
-  </div>
-
-  <div class="step">
-    <h2>Optional: why direct Bluetooth from the Mac was silent</h2>
-    <p>Earlier today, the Mac's direct link (<code>/dev/cu.OBDLinkMX13659</code>) opened but got no bytes back. The log can't say why. To narrow it down, with the ignition on and the board <b>not</b> connected to the adapter (<code>sudo systemctl stop tattlestone-bridge</code>):</p>
-    <div class="cmd"><pre><code>screen /dev/cu.OBDLinkMX13659 115200</code></pre></div>
-    <p>Type <code>ATI</code> and press Return. Quit with <b>Ctrl-A</b>, then <b>K</b>, then <b>y</b>. Note whether text came back, and what the adapter's LEDs did. Restart the bridge afterwards with <code>sudo systemctl start tattlestone-bridge</code>.</p>
   </div>
 
   <div class="step">
     <h2>Send back to Claude</h2>
     <ul>
-      <li>The <b>Build</b> line from Settings → About</li>
-      <li>The OBDLink MAC, and the output of steps 6 and 7</li>
-      <li>The exported session log from step 8</li>
-      <li>Any <code>bluetoothctl</code> error, copied exactly</li>
-      <li>Optional: the <code>screen</code> result from the Mac test</li>
+      <li>The output of step 4's <code>nc</code> command</li>
+      <li>The results of steps 6 and 7: did it reconnect with no clicks, and did <code>Connected: no</code> appear?</li>
+      <li>Any message from the troubleshooting table, copied exactly, with <code>journalctl -u tattlestone-bridge -n 50</code></li>
     </ul>
   </div>
 </main>
