@@ -1,7 +1,13 @@
 # Tattlestone Network Mode bridge: TCP :35000 <-> the paired OBDLink over Bluetooth.
 # The bridge opens the RFCOMM link itself for each app session and closes it
 # when the app leaves: no /dev/rfcomm0 and no `rfcomm bind` needed.
-# One-time setup: pair and trust the OBDLink with bluetoothctl.
+# One-time setup: pair and trust the OBDLink with bluetoothctl, then create the
+# pairing token the app must prove it holds (paste the printed token into the
+# app's Connection screen; the bridge won't start without it):
+#   sudo python3 obd_tcp_bridge.py --new-token /etc/tattlestone/bridge-token
+#   sudo chgrp arduino /etc/tattlestone/bridge-token
+# Optional settings (listen address, port) go in /etc/default/tattlestone-bridge;
+# see tattlestone-bridge.env.
 #   sudo cp tattlestone-bridge.service /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl enable --now tattlestone-bridge
 #   journalctl -u tattlestone-bridge -f
@@ -15,7 +21,11 @@ Conflicts=tattlestone-emulator.service
 [Service]
 User=arduino
 SupplementaryGroups=dialout bluetooth
-ExecStart=/usr/bin/python3 -u /home/arduino/uno-q-bridge/obd_tcp_bridge.py --bt auto --channel 1 --port 35000
+# Fail closed: with this set, a missing or unreadable token stops the bridge
+# instead of opening the truck's bus to the whole network.
+Environment=TATTLESTONE_BRIDGE_TOKEN_FILE=/etc/tattlestone/bridge-token
+EnvironmentFile=-/etc/default/tattlestone-bridge
+ExecStart=/usr/bin/python3 -u /home/arduino/uno-q-bridge/obd_tcp_bridge.py --bt auto --channel 1
 Restart=always
 RestartSec=2
 

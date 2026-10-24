@@ -61,7 +61,7 @@ Bluetooth only reaches a few metres, though, and a drain test runs overnight wit
 
 1. The truck's computers talk on a wire that comes out at the OBD-II port under the dashboard.
 2. The OBDLink adapter plugs into that port, listens, and sends what it hears over Bluetooth.
-3. The UNO Q picks that up and passes it to your Mac over Wi-Fi. It also drops the standard clear-codes command (Mode 04) if anything sends one.
+3. The UNO Q picks that up and passes it to your Mac over Wi-Fi. Only your Mac, holding the bridge's pairing token, can connect, and the bridge refuses any command that isn't a read.
 4. Tattlestone shows it the same way it would if the adapter were paired with the Mac.
 5. Later, a small sensor on one fuse will measure the drain directly and send it the same way. That part isn't built yet.
 

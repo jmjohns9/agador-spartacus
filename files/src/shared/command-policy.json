@@ -1,0 +1,28 @@
+{
+  "comment": "Tattlestone read-only command policy, shared by the app (src/shared/command-policy.json, read by src/shared/commandPolicy.ts) and the UNO Q bridge (firmware/uno-q-bridge/command_policy.json, an identical copy; tests in both fail if they differ). Allowlist: anything not listed here is refused.",
+  "version": 1,
+  "maxLineLength": 64,
+  "readServices": {
+    "01": "OBD current data",
+    "02": "OBD freeze frame",
+    "03": "OBD stored DTCs",
+    "05": "OBD O2 sensor test results",
+    "06": "OBD on-board monitor results",
+    "07": "OBD pending DTCs",
+    "09": "OBD vehicle information",
+    "0A": "OBD permanent DTCs",
+    "19": "UDS ReadDTCInformation",
+    "1A": "KWP ReadEcuIdentification",
+    "21": "KWP ReadDataByLocalIdentifier",
+    "22": "UDS ReadDataByIdentifier",
+    "3C": "GM Class 2 read block",
+    "3E": "TesterPresent"
+  },
+  "atDenyPrefixes": {
+    "ATCAF0": "CAN auto-formatting off: the first byte becomes the PCI length, so the service check stops working",
+    "ATPP": "programmable parameters change the adapter's power-on defaults",
+    "ATWM": "the wakeup message is sent to the vehicle periodically and can carry any bytes",
+    "ATFCSD": "custom flow-control data puts arbitrary bytes on the bus"
+  },
+  "stAllow": ["STI", "STIX", "STDI", "STDIX", "STSN", "STMFR"]
+}

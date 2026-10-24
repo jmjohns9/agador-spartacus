@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, safeStorage } from 'electron';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { EventEmitter } from 'events';
@@ -17,6 +17,7 @@ import { fetchVehicleSafety, bulletinPdfUrl, validVehicle } from './nhtsa';
 import { buildGrounding, codesToGround } from './assistantGrounding';
 import { TcpPort, isTcpTarget, parseTcpTarget, isRetryableOpenError, TCP_PREFIX } from './tcpPort';
 import { AttemptResult, connectWithRetry, readRememberedBridge, rememberBridge } from './autoConnect';
+import { BridgeTokenStore, isValidToken } from './bridgeTokens';
 
 // SerialPort is a native module — use require() to avoid dynamic import issues in Electron
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -319,7 +320,7 @@ async function connectToPort(portPath: string, gen: number): Promise<AttemptResu
     // Network Mode: a Wi-Fi bridge at tcp://host:port. Otherwise OBDLink MX+
     // over Bluetooth SPP, which uses 115200 baud.
     port = isTcpTarget(portPath)
-      ? new TcpPort(portPath)
+      ? new TcpPort(portPath, { token: bridgeTokens().get(portPath) ?? undefined })
       : new SerialPort({ path: portPath, baudRate: 115200, autoOpen: false });
     activePort = port;
 
@@ -461,6 +462,40 @@ let connectionEpoch = 0;
 function connectionFile(): string {
   return path.join(app.getPath('userData'), 'connection.json');
 }
+
+// Pairing tokens for UNO Q bridges, encrypted with the OS keychain. On Linux
+// without a Secret Service safeStorage falls back to 'basic_text', whose key
+// is hard-coded: that counts as no encryption (as for the Claude API key).
+function bridgeTokens(): BridgeTokenStore {
+  return new BridgeTokenStore(path.join(app.getPath('userData'), 'bridge-tokens.json'), {
+    canEncrypt: () => safeStorage.isEncryptionAvailable()
+      && (safeStorage as { getSelectedStorageBackend?: () => string }).getSelectedStorageBackend?.() !== 'basic_text',
+    encrypt: (plain) => safeStorage.encryptString(plain),
+    decrypt: (cipher) => safeStorage.decryptString(cipher),
+  });
+}
+
+// The renderer may save or clear a token and ask whether one is saved; it
+// never gets one back.
+handle('bridge:token-status', (_event, arg: unknown) => {
+  const target = (arg as { target?: unknown } | null)?.target;
+  return { hasToken: typeof target === 'string' && isTcpTarget(target) && bridgeTokens().has(target) };
+});
+
+handle('bridge:set-token', (_event, arg: unknown) => {
+  const { target, token } = (arg ?? {}) as { target?: unknown; token?: unknown };
+  if (typeof target !== 'string' || !parseTcpTarget(target)) return { ok: false, error: 'Enter the bridge address first.' };
+  if (token !== null && !isValidToken(token)) return { ok: false, error: 'A pairing token is at least 16 characters, with no spaces.' };
+  try {
+    bridgeTokens().set(target, token);
+    addLog({ timestamp: Date.now(), level: 'info', message: token === null
+      ? `Pairing token removed for ${target.slice(TCP_PREFIX.length)}`
+      : `Pairing token saved for ${target.slice(TCP_PREFIX.length)}` });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+});
 
 async function autoConnectOnOpen(): Promise<void> {
   const target = readRememberedBridge(connectionFile());

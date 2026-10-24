@@ -214,6 +214,31 @@ export function ConnectionScreen(): React.ReactElement {
   const [scanError,     setScanError]     = useState('');
   // The UNO Q bridge on the home network, on the Wi-Fi ELM327 port
   const [bridgeAddress, setBridgeAddress] = useState('192.168.1.33:35000');
+  // The bridge's pairing token: typed here, saved encrypted by main, never read back
+  const [tokenInput,    setTokenInput]    = useState('');
+  const [hasToken,      setHasToken]      = useState(false);
+  const [tokenMessage,  setTokenMessage]  = useState('');
+  const bridgeTarget = `tcp://${bridgeAddress.trim()}`;
+
+  useEffect(() => {
+    let live = true;
+    setTokenMessage('');
+    const t = setTimeout(() => {
+      window.electronAPI?.bridgeTokenStatus?.(bridgeTarget)
+        .then(r => { if (live) setHasToken(r.hasToken); })
+        .catch(() => { if (live) setHasToken(false); });
+    }, 250);
+    return () => { live = false; clearTimeout(t); };
+  }, [bridgeTarget]);
+
+  const saveToken = async (token: string | null) => {
+    const r = await window.electronAPI?.setBridgeToken?.(bridgeTarget, token);
+    if (!r) return;
+    if (!r.ok) { setTokenMessage(r.error ?? 'Could not save the token.'); return; }
+    setTokenInput('');
+    setHasToken(token !== null);
+    setTokenMessage(token === null ? 'Token removed.' : 'Token saved for this address.');
+  };
 
   const isConnected   = connectionStatus === 'connected';
   const inProgress    = connectionStatus === 'connecting' || connectionStatus === 'initializing';
@@ -544,6 +569,39 @@ export function ConnectionScreen(): React.ReactElement {
                 {isBusy ? 'Connecting…' : 'Connect over Wi-Fi'}
               </Button>
             </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 12 }}>
+              <div style={{ flex: 1 }}>
+                <label htmlFor="bridge-token" style={{ display: 'block', ...TYPE.caption, color: 'var(--label-3)', marginBottom: 4 }}>
+                  Pairing token {hasToken ? '— saved for this address' : '— from /etc/tattlestone/bridge-token on the board'}
+                </label>
+                <input
+                  id="bridge-token"
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={tokenInput}
+                  placeholder={hasToken ? '••••••••••••••••' : 'Paste the bridge token'}
+                  onChange={e => setTokenInput(e.target.value)}
+                  style={{ width: '100%', ...NUMERIC }}
+                />
+              </div>
+              <Button
+                variant="secondary"
+                icon="ti-key"
+                disabled={!bridgeAddress.trim() || !tokenInput.trim()}
+                onClick={() => saveToken(tokenInput.trim())}
+              >
+                Save token
+              </Button>
+              {hasToken && (
+                <Button variant="secondary" icon="ti-trash" onClick={() => saveToken(null)}>
+                  Remove
+                </Button>
+              )}
+            </div>
+            {tokenMessage && (
+              <div role="status" style={{ ...TYPE.caption, color: 'var(--label-2)', marginTop: 6 }}>{tokenMessage}</div>
+            )}
           </Card>
 
           {/* ── Built-in Emulator ─────────────────────────────────────── */}

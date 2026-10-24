@@ -48,6 +48,8 @@ declare global {
       onModuleState: (cb: (m: ModuleState) => void) => () => void;
       onConnectionStatus: (cb: (s: { status: string; protocol?: string; adapterInfo?: string }) => void) => () => void;
       getStatus: () => Promise<{ status: string; protocol?: string; adapterInfo?: string }>;
+      bridgeTokenStatus?: (target: string) => Promise<{ hasToken: boolean }>;
+      setBridgeToken?: (target: string, token: string | null) => Promise<{ ok: boolean; error?: string }>;
       getAppInfo: () => Promise<{ version: string; build: BuildInfo | null; electron: string; chrome: string; node: string }>;
       onLogEntry: (cb: (e: LogEntry) => void) => () => void;
       onVINDetected: (cb: (vin: string) => void) => () => void;

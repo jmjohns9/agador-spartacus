@@ -2,11 +2,20 @@
 
 ## Read-only by design
 
-The app is strictly read-only: nothing in it writes to a control module, and it should stay that way. There is no Clear DTCs button, and the ELM327 command layer refuses any service that clears codes, resets, actuates, writes or reprograms a module (Mode 04 and 08, and UDS/GM 11, 14, 28, 2E, 2F, 31, 34–37, 3B and 85), so a future feature can't send one by accident. The UNO Q bridge also drops Mode 04 for any client. To clear codes, use a dedicated scan tool.
+The app is strictly read-only: nothing in it writes to a control module, and it should stay that way. There is no Clear DTCs button. Every command goes through an **allowlist** ([`files/src/shared/command-policy.json`](../files/src/shared/command-policy.json)) before it's written:
+
+- OBD/UDS requests pass only when their first byte is a read service: 01, 02, 03, 05, 06, 07, 09, 0A, 19, 1A, 21, 22, 3C, 3E. Clearing, resets, session changes, security access, writes, actuation, routines and programming are all refused because they aren't on the list.
+- AT commands pass, except the ones that would defeat the check or put arbitrary bytes on the bus: `ATCAF0`, `ATPP`, `ATWM`, `ATFC SD`.
+- ST commands pass only when they identify the adapter (`STI`, `STDI`, …); `STPX` passthrough is refused.
+- A line holding a CR or LF, a line over 64 characters, and anything non-printable are refused.
+
+The UNO Q bridge applies the same rules from an identical copy (`firmware/uno-q-bridge/command_policy.json`; tests in both languages fail if the copies differ), so the promise holds for any client, not just the app. The bridge never truncates an over-long line: it refuses it whole. To clear codes, use a dedicated scan tool.
 
 **The PCM surface is read-only too.** PcmHammer exists mainly for flashing: kernel upload, segment write and recovery. None of that is implemented here, because a diagnostics tab has no business holding a write primitive that can brick an ECU.
 
 ## Security notes
+
+**The UNO Q bridge needs a pairing token.** Without one, anything on the Wi-Fi could connect to port 35000, which phone OBD apps probe automatically, and take the adapter away from the Mac. The bridge now challenges every client (HMAC-SHA256 over a fresh nonce), refuses those that fail, and lets only an authenticated client replace the current one. The systemd unit fails closed when the token file is missing. Traffic isn't encrypted; see [HARDWARE.md](HARDWARE.md#network-mode-with-the-arduino-uno-q).
 
 This desktop app takes in data from an untrusted peripheral (the adapter) and from third-party APIs, so its threat model is reviewed daily.
 

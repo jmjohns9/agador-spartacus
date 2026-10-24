@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { parseVIN } from './obdParsers';
+import { refusalReason } from '../shared/commandPolicy';
 
 // ─── ELM327 Constants ─────────────────────────────────────────────────────────
 
@@ -34,18 +35,8 @@ const LINK_LOST_TIMEOUTS = 4;
 // which can take several seconds on some vehicles.
 const PROTOCOL_SEARCH_TIMEOUT = 10000;
 
-// The app is read-only: it must never change a control module. Refuse the
-// OBD/UDS/GM services that clear codes, actuate, reset, write or reprogram.
-// AT/ST commands only configure the adapter and are always allowed.
-const WRITE_SERVICES = new Set([
-  '04', '08', '11', '14', '28', '2E', '2F', '31', '34', '35', '36', '37', '3B', '85',
-]);
-
-export function isVehicleWrite(command: string): boolean {
-  const hex = command.replace(/\s+/g, '').toUpperCase();
-  if (!/^[0-9A-F]+$/.test(hex)) return false;
-  return WRITE_SERVICES.has(hex.slice(0, 2));
-}
+// The app is read-only: every command passes the shared allowlist in
+// shared/commandPolicy before it is written (see that file for the rules).
 
 export interface ELM327Response {
   command: string;
@@ -296,8 +287,10 @@ export class ELM327Commander extends EventEmitter {
         resolve({ command, raw: '', lines: [], success: false, errorMessage: 'Closed' });
         return;
       }
-      if (isVehicleWrite(command)) {
-        resolve({ command, raw: '', lines: [], success: false, errorMessage: 'Refused: the app is read-only' });
+      const refusal = refusalReason(command);
+      if (refusal) {
+        this.log(`Refused ${JSON.stringify(command.slice(0, 40))}: ${refusal}`, 'warn');
+        resolve({ command, raw: '', lines: [], success: false, errorMessage: `Refused: ${refusal}` });
         return;
       }
       // Nothing is pending, so anything buffered is the tail of an earlier

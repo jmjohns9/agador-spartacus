@@ -3,6 +3,7 @@
 answers like elm327_emulator; the Bluetooth adapter is a socketpair handed out
 by a stand-in for bt_connect. Stdlib only:  python3 -m unittest test_obd_tcp_bridge"""
 import errno
+import json
 import os
 import pty
 import signal
@@ -22,8 +23,9 @@ from elm327_emulator import Engine, respond  # noqa: E402
 MAC = "00:04:3E:12:34:56"
 
 
-def emulate(read, write, released=None):
-    """Answer CR-terminated commands like an ELM327 until the link closes."""
+def emulate(read, write, released=None, seen=None):
+    """Answer CR-terminated commands like an ELM327 until the link closes.
+    Every line the adapter receives is appended to `seen` when given."""
     engine, buf = Engine(), b""
     while True:
         try:
@@ -37,6 +39,8 @@ def emulate(read, write, released=None):
         buf += chunk
         while b"\r" in buf:
             line, buf = buf.split(b"\r", 1)
+            if seen is not None:
+                seen.append(line)
             if line.strip():
                 write((respond(line.decode(), engine) + "\r\r>").encode())
 
@@ -56,7 +60,7 @@ class FakeBluetooth:
 
     def __init__(self, failures=0, error=errno.EHOSTDOWN):
         self.failures, self.error = failures, error
-        self.calls, self.released, self.far_ends = 0, [], []
+        self.calls, self.released, self.far_ends, self.seen = 0, [], [], []
 
     def connect(self, mac, channel):
         self.calls += 1
@@ -66,7 +70,8 @@ class FakeBluetooth:
         released = threading.Event()
         self.released.append(released)
         self.far_ends.append(theirs)
-        threading.Thread(target=emulate, args=(theirs.recv, theirs.sendall, released), daemon=True).start()
+        threading.Thread(target=emulate, args=(theirs.recv, theirs.sendall, released, self.seen),
+                         daemon=True).start()
         return ours
 
     def drop(self):
@@ -131,7 +136,7 @@ class SerialBridgeTest(unittest.TestCase):
         self.assertEqual(handshake(s), ["BRIDGE STATUS: connecting to the OBD adapter", "BRIDGE READY"])
         return s
 
-    def test_round_trip_and_mode04_guard(self):
+    def test_round_trip_and_write_guard(self):
         dev, slave = fake_adapter()
         self.addCleanup(os.close, slave)
         self.start_bridge(dev)
@@ -187,11 +192,11 @@ class SerialBridgeTest(unittest.TestCase):
 class BluetoothBridgeTest(unittest.TestCase):
     """The default --bt mode, with the RFCOMM connect replaced by FakeBluetooth."""
 
-    def start_bridge(self, fake, find=lambda: MAC, deadline_s=5.0, backoff=(0.05,)):
+    def start_bridge(self, fake, find=lambda: MAC, deadline_s=5.0, backoff=(0.05,), token=None):
         self.port = free_port()
         opener = bridge.bt_opener("auto", 1, find=find, connect=fake.connect)
         threading.Thread(target=bridge.serve, args=(opener, self.port, "127.0.0.1", "test", deadline_s, backoff),
-                         daemon=True).start()
+                         kwargs={"token": token}, daemon=True).start()
         for _ in range(100):
             try:
                 socket.create_connection(("127.0.0.1", self.port), timeout=0.2).close()
@@ -290,6 +295,197 @@ class BluetoothBridgeTest(unittest.TestCase):
         self.assertIn("no paired OBDLink on this board", last)
         self.assertIn("trust ADDRESS", last)
         self.assertEqual(fake.calls, calls, "nothing to dial without a paired adapter")
+
+
+TOKEN = "correct-horse-battery-staple"
+
+
+def authenticate(sock, token=TOKEN):
+    """Answer the bridge's challenge; returns the lines that follow, to READY or ERROR."""
+    challenge = read_until(sock, lambda b: b.endswith(b"\r"))
+    assert challenge.startswith("BRIDGE AUTH "), challenge
+    sock.sendall(f"AUTH {bridge.auth_response(token, challenge.split()[2])}\r".encode())
+    return handshake(sock)
+
+
+class PolicyTest(unittest.TestCase):
+    """The same cases as src/shared/commandPolicy.test.ts."""
+
+    policy = bridge.load_policy()
+
+    def allowed(self, *cmds):
+        for c in cmds:
+            self.assertIsNone(bridge.refusal_reason(c.encode("latin-1"), self.policy), c)
+
+    def refused(self, *cmds):
+        for c in cmds:
+            self.assertIsNotNone(bridge.refusal_reason(c.encode("latin-1"), self.policy), c)
+
+    def test_the_app_and_the_bridge_ship_the_same_policy(self):
+        app_copy = os.path.join(HERE, "..", "..", "src", "shared", "command-policy.json")
+        if not os.path.exists(app_copy):
+            self.skipTest("not in the repository checkout")
+        with open(app_copy) as f:
+            self.assertEqual(json.load(f), self.policy)
+
+    def test_reads_and_adapter_commands_pass(self):
+        self.allowed("ATZ", "ATI", "ATE0", "ATSP0", "ATSH 6C 10 F0", "ATSR F0", "STI", "STDI", "010C", "01 0c",
+                     "03", "07", "0A", "0902", "3C 01", "22 F1 90", "19 02 FF", "atsp a2", "")
+
+    def test_writes_clears_resets_and_programming_are_refused(self):
+        self.refused("04", "0 4", "04\t", "0400", "08", "11 01", "14FF00", "14 FF FF FF", "10 02", "27 01", "28 00",
+                     "2E F1 90 00", "2F 01", "31 01 FF 00", "34 00", "36 01", "3B 01", "3D 00", "85 02", "A5", "AE")
+
+    def test_passthrough_and_dangerous_adapter_settings_are_refused(self):
+        self.refused("STPX H:7E0,D:04", "STSBR 2000000", "ATCAF0", "AT CAF 0", "ATPP 2D SV 00", "ATWM 81 10 F1 04",
+                     "ATFC SD 30 00 00")
+        self.allowed("ATCAF1", "STIX", "STDIX", "STSN", "STMFR")
+
+    def test_malformed_lines_are_refused(self):
+        self.refused("010C\r04", "010C\n04", "ATSH" + "0" * 61, "01\x000C", "010C1", "HELLO", "01\xff")
+
+    def test_a_missing_policy_stops_the_bridge(self):
+        with self.assertRaises(SystemExit) as cm:
+            bridge.load_policy("/nonexistent/command_policy.json")
+        self.assertIn("command_policy.json", str(cm.exception))
+
+
+class GuardTest(unittest.TestCase):
+    """What reaches the adapter, end to end through the forwarding loop."""
+
+    start_bridge = BluetoothBridgeTest.start_bridge
+    connect = BluetoothBridgeTest.connect
+
+    def test_refused_commands_get_a_question_mark_and_never_reach_the_adapter(self):
+        fake = FakeBluetooth()
+        self.start_bridge(fake)
+        c = self.connect()
+        handshake(c)
+        for cmd in ("04", "0400", "04\t", "14FF00", "10 02", "STPX H:7E0,D:04", "ATCAF0"):
+            self.assertEqual(ask(c, cmd), "?\r\r>", cmd)
+        self.assertEqual(ask(c, "ATI"), "ELM327 v1.5\r\r>")
+        self.assertEqual(fake.seen, [b"ATI"])
+
+    def test_an_over_long_line_is_refused_whole_not_truncated(self):
+        fake = FakeBluetooth()
+        self.start_bridge(fake)
+        c = self.connect()
+        handshake(c)
+        self.assertEqual(ask(c, "ATSH7E0" + "X" * 70), "?\r\r>")
+        self.assertEqual(ask(c, "ATI"), "ELM327 v1.5\r\r>", "the next command starts clean")
+        self.assertEqual(fake.seen, [b"ATI"])
+
+
+class AuthTest(unittest.TestCase):
+    """A bridge started with a pairing token."""
+
+    start_bridge = BluetoothBridgeTest.start_bridge
+    connect = BluetoothBridgeTest.connect
+
+    def setUp(self):
+        self.addCleanup(setattr, bridge, "AUTH_TIMEOUT_S", bridge.AUTH_TIMEOUT_S)
+        bridge.AUTH_TIMEOUT_S = 0.5
+        self.fake = FakeBluetooth()
+        self.start_bridge(self.fake, token=TOKEN)
+
+    def test_the_right_token_gets_a_session(self):
+        c = self.connect()
+        self.assertEqual(authenticate(c), ["BRIDGE STATUS: connecting to the OBD adapter", "BRIDGE READY"])
+        self.assertEqual(ask(c, "ATI"), "ELM327 v1.5\r\r>")
+
+    def test_each_connection_gets_a_fresh_challenge(self):
+        nonces = set()
+        for _ in range(3):
+            c = self.connect()
+            nonces.add(read_until(c, lambda b: b.endswith(b"\r")))
+            c.close()
+        self.assertEqual(len(nonces), 3)
+
+    def test_a_wrong_token_is_refused_and_the_adapter_never_opened(self):
+        lines = authenticate(self.connect(), token="not-the-token-at-all")
+        self.assertTrue(lines[-1].startswith("BRIDGE ERROR: authentication failed"), lines)
+        self.assertEqual(self.fake.calls, 0)
+
+    def test_replaying_an_old_answer_fails(self):
+        first = self.connect()
+        nonce = read_until(first, lambda b: b.endswith(b"\r")).split()[2]
+        first.close()
+        replay = self.connect()
+        read_until(replay, lambda b: b.endswith(b"\r"))
+        replay.sendall(f"AUTH {bridge.auth_response(TOKEN, nonce)}\r".encode())
+        self.assertIn("authentication failed", handshake(replay)[-1])
+
+    def test_a_silent_client_times_out(self):
+        c = self.connect()
+        self.assertIn("authentication timed out", handshake(c, timeout=3)[-1])
+
+    def test_strangers_cannot_take_over_or_stall_a_session(self):
+        owner = self.connect()
+        self.assertEqual(authenticate(owner)[-1], "BRIDGE READY")
+        silent = self.connect()  # holds a pending slot without answering
+        wrong = self.connect()
+        self.assertIn("authentication failed", authenticate(wrong, token="wrong-token-wrong-token")[-1])
+        t0 = time.monotonic()
+        self.assertEqual(ask(owner, "ATI"), "ELM327 v1.5\r\r>")
+        self.assertLess(time.monotonic() - t0, 0.4, "the session waited on an unauthenticated client")
+        self.assertIn("timed out", handshake(silent, timeout=3)[-1])
+        self.assertEqual(ask(owner, "ATI"), "ELM327 v1.5\r\r>", "owner still has the adapter")
+
+    def test_an_authenticated_newcomer_replaces_the_old_client(self):
+        old = self.connect()
+        authenticate(old)
+        new = self.connect()
+        self.assertEqual(authenticate(new)[-1], "BRIDGE READY")
+        self.assertEqual(ask(new, "ATI"), "ELM327 v1.5\r\r>")
+        old.settimeout(2)
+        self.assertEqual(old.recv(64), b"", "replaced client is closed")
+
+
+class CommandLineTest(unittest.TestCase):
+    def run_bridge(self, *args, env=None):
+        return subprocess.run([sys.executable, os.path.join(HERE, "obd_tcp_bridge.py"), *args],
+                              capture_output=True, text=True, timeout=10,
+                              env={**os.environ, **(env or {})})
+
+    def test_new_token_writes_a_private_file_and_prints_it(self):
+        path = os.path.join(self.tmpdir(), "sub", "bridge-token")
+        out = self.run_bridge("--new-token", path)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        with open(path) as f:
+            self.assertEqual(f.read().strip(), out.stdout.strip())
+        self.assertGreaterEqual(len(out.stdout.strip()), bridge.MIN_TOKEN_LEN)
+        self.assertEqual(os.stat(path).st_mode & 0o777, 0o640)
+
+    def test_a_token_file_that_was_asked_for_but_is_missing_stops_the_bridge(self):
+        out = self.run_bridge("--device", "/dev/null", "--port", str(free_port()), "--token-file", "/nonexistent/t")
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("cannot read the pairing token", out.stderr)
+
+    def test_a_short_token_is_rejected(self):
+        out = self.run_bridge("--device", "/dev/null", "--port", str(free_port()),
+                              env={"TATTLESTONE_BRIDGE_TOKEN": "short"})
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("shorter than", out.stderr)
+
+    def test_host_and_token_come_from_flags_or_the_environment(self):
+        port = free_port()
+        proc = subprocess.Popen(
+            [sys.executable, "-u", os.path.join(HERE, "obd_tcp_bridge.py"), "--device", "/dev/null",
+             "--port", str(port), "--host", "127.0.0.1"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            env={**os.environ, "TATTLESTONE_BRIDGE_TOKEN": TOKEN})
+        self.addCleanup(proc.stdout.close)
+        self.addCleanup(proc.wait)
+        self.addCleanup(proc.kill)
+        first = proc.stdout.readline()
+        self.assertIn(f"listening on 127.0.0.1:{port}", first)
+        self.assertIn("pairing token required", first)
+
+    def tmpdir(self):
+        import tempfile
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        return d.name
 
 
 class DiscoveryAndErrorsTest(unittest.TestCase):
