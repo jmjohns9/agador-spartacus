@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { useAppStore, selectVoltageTrend } from './appStore';
+import { useAppStore, selectVoltageTrend, selectParasiteRiskScore } from './appStore';
 
 const MIN = 60_000;
 const atrv = (t: number, value: number) => ({ pid: 'ATRV', value, raw: [], timestamp: t, unit: 'V' });
@@ -28,6 +28,16 @@ test('selectVoltageTrend does not call an engine shutdown a draw', () => {
   s.updatePIDReading(atrv(10 * MIN, 12.69));
   s.updatePIDReading(atrv(11 * MIN, 12.7));
   assert.equal(selectVoltageTrend(useAppStore.getState()), 'stable');
+});
+
+test('the parasite risk score counts the resting drain rate', () => {
+  useAppStore.setState({ history: {}, liveData: {}, modules: [], dtcs: [] });
+  assert.equal(selectParasiteRiskScore(useAppStore.getState()), 0, 'no rate yet');
+  const s = useAppStore.getState();
+  // 4 mV/min for 20 minutes: 4/5 of the way to critical, so 0.8 × 4 points
+  for (let i = 0; i <= 20; i++) s.updatePIDReading(atrv(i * MIN, +(12.7 - i * 0.004).toFixed(3)));
+  const score = selectParasiteRiskScore(useAppStore.getState());
+  assert.ok(Math.abs(score - 3.2) < 0.1, String(score));
 });
 
 test('a repeated "connected" does not restart the session timer', () => {
