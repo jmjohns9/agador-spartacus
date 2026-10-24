@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as net from 'net';
 import * as path from 'path';
 import { spawn } from 'child_process';
-import { TcpPort, parseTcpTarget, isTcpTarget, parseBridgeError, isRetryableOpenError, DEFAULT_TCP_PORT } from './tcpPort';
+import { TcpPort, parseTcpTarget, isTcpTarget, parseBridgeError, isRetryableOpenError, DEFAULT_TCP_PORT, bridgeAuthResponse } from './tcpPort';
 
 // A plain Wi-Fi ELM327 never greets; don't make every test wait the full window
 const QUICK = { greetingMs: 20 };
@@ -267,8 +267,8 @@ test('round-trips ELM327 traffic with the firmware emulator, across split reads'
 // test module: the app/bridge handshake end to end. Skipped where python3 is missing.
 const FIRMWARE = path.join(__dirname, '../../firmware/uno-q-bridge');
 
-function spawnLine(t: { after: (fn: () => void) => void }, args: string[], expect: RegExp): Promise<string | null> {
-  const proc = spawn('python3', ['-u', ...args], { cwd: FIRMWARE });
+function spawnLine(t: { after: (fn: () => void) => void }, args: string[], expect: RegExp, env?: Record<string, string>): Promise<string | null> {
+  const proc = spawn('python3', ['-u', ...args], { cwd: FIRMWARE, env: { ...process.env, ...env } });
   t.after(() => { proc.kill(); });
   return new Promise<string | null>((r) => {
     proc.once('error', () => r(null));
@@ -277,14 +277,15 @@ function spawnLine(t: { after: (fn: () => void) => void }, args: string[], expec
   });
 }
 
-async function realBridge(t: { after: (fn: () => void) => void }, device: string | null): Promise<number | null> {
+async function realBridge(t: { after: (fn: () => void) => void }, device: string | null, token?: string): Promise<number | null> {
   if (device === null) {
     const pty = await spawnLine(t, ['-c', 'from test_obd_tcp_bridge import fake_adapter\nimport time\nprint(fake_adapter()[0], flush=True)\ntime.sleep(60)'], /(\/dev\/\S+)/);
     if (!pty) return null;
     device = pty;
   }
   const tcp = await freePort();
-  const up = await spawnLine(t, ['obd_tcp_bridge.py', '--device', device, '--port', String(tcp)], /listening/);
+  const up = await spawnLine(t, ['obd_tcp_bridge.py', '--device', device, '--port', String(tcp), '--host', '127.0.0.1'], /listening/,
+    token ? { TATTLESTONE_BRIDGE_TOKEN: token } : undefined);
   return up ? tcp : null;
 }
 
@@ -311,4 +312,59 @@ test('with the real bridge: an unavailable adapter fails open() with what to do'
   const err = await openPort(new TcpPort(`tcp://127.0.0.1:${tcp}`));
   assert.equal((err as NodeJS.ErrnoException).code, 'BRIDGE_ERROR');
   assert.match(err!.message, /^The bridge can't reach the OBD adapter: cannot open \/dev\/does-not-exist: .*USB cable/);
+});
+
+// ── Pairing token ────────────────────────────────────────────────────────────
+
+const TOKEN = 'correct-horse-battery-staple';
+
+test('the auth answer is HMAC-SHA256 of the nonce, as the bridge computes it', () => {
+  // python3 -c "import hmac,hashlib;print(hmac.new(b'correct-horse-battery-staple',b'00ff',hashlib.sha256).hexdigest())"
+  assert.equal(bridgeAuthResponse(TOKEN, '00ff'), 'fd2450f849475854eba6dca2e60c4661214b3cce85e96e8894e5cd5bde7d476d');
+  assert.match(bridgeAuthResponse(TOKEN, '00ff'), /^[0-9a-f]{64}$/);
+  assert.notEqual(bridgeAuthResponse(TOKEN, '00ff'), bridgeAuthResponse(TOKEN, '00fe'));
+});
+
+test('with the real bridge and a token: the right token connects, without it or wrong it fails clearly', async (t) => {
+  const tcp = await realBridge(t, null, TOKEN);
+  if (!tcp) { t.skip('python3 not available'); return; }
+
+  const port = new TcpPort(`tcp://127.0.0.1:${tcp}`, { token: TOKEN });
+  const statuses: string[] = [];
+  port.on('status', (s: string) => statuses.push(s));
+  assert.equal(await openPort(port), null);
+  assert.deepEqual(statuses, ['checking the pairing token', 'connecting to the OBD adapter']);
+  const reply = new Promise<string>((r) => { let rx = ''; port.on('data', (b: Buffer) => { rx += b.toString('ascii'); if (rx.endsWith('>')) r(rx); }); });
+  port.write('ATI\r');
+  assert.equal(await reply, 'ELM327 v1.5\r\r>');
+  // The bridge's own guard, end to end
+  const refused = new Promise<string>((r) => { let rx = ''; port.on('data', (b: Buffer) => { rx += b.toString('ascii'); if (rx.endsWith('>')) r(rx); }); });
+  port.write('14FF00\r');
+  assert.equal(await refused, '?\r\r>');
+  await new Promise<void>((r) => port.close(r));
+
+  const none = await openPort(new TcpPort(`tcp://127.0.0.1:${tcp}`, QUICK));
+  assert.equal((none as NodeJS.ErrnoException).code, 'BRIDGE_AUTH_REQUIRED');
+  assert.match(none!.message, /requires its pairing token/);
+  assert.equal(isRetryableOpenError(none), false);
+
+  const wrong = await openPort(new TcpPort(`tcp://127.0.0.1:${tcp}`, { token: 'wrong-token-wrong-token' }));
+  assert.equal((wrong as NodeJS.ErrnoException).code, 'BRIDGE_ERROR');
+  assert.match(wrong!.message, /authentication failed/);
+});
+
+test('a token bridge that is busy greets late, and is still treated as a bridge', async () => {
+  const server = net.createServer((s) => {
+    setTimeout(() => s.write('BRIDGE AUTH abcd\r'), 120);   // longer than the plain-ELM327 greeting window
+    s.on('data', (d) => {
+      const line = d.toString().trim();
+      s.write(line === `AUTH ${bridgeAuthResponse(TOKEN, 'abcd')}` ? 'BRIDGE READY\r' : 'BRIDGE ERROR: authentication failed\r');
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+  const { port: p } = server.address() as net.AddressInfo;
+  const port = new TcpPort(`tcp://127.0.0.1:${p}`, { token: TOKEN, linkTimeoutMs: 2000 });
+  assert.equal(await openPort(port), null);
+  await new Promise<void>((r) => port.close(r));
+  await new Promise<void>((r) => server.close(() => r()));
 });

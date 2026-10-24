@@ -4,6 +4,7 @@ import { ELM327Commander } from './elm327Commander';
 import { ELM327Simulator } from './elm327Simulator';
 import { OBDProtocolManager } from './obdProtocolManager';
 import { PcmDiagnostics } from './pcmDiagnostics';
+import { refusalReason } from '../shared/commandPolicy';
 
 // The app must never change a control module. Drive a full session against the
 // simulator and check every command that reaches the adapter.
@@ -29,7 +30,19 @@ test('a whole session only sends adapter commands and reads', async () => {
   await new PcmDiagnostics(elm).readIdentity();
   elm.close();
 
-  const bad = [...new Set(sent.filter(c => !ALLOWED.test(c.replace(/\s+/g, ''))))];
+  const bad = [...new Set(sent.filter(c => !ALLOWED.test(c.replace(/\s+/g, '')) || refusalReason(c) !== null))];
   assert.deepEqual(bad, [], `non-read commands sent: ${bad.join(', ')}`);
   assert.ok(sent.includes('03') && sent.includes('0902') && sent.some(c => c.startsWith('3C')));
+});
+
+test('a refused command never reaches the adapter', async () => {
+  const sent: string[] = [];
+  const elm = new ELM327Commander((data) => { sent.push(data); });
+  for (const cmd of ['04', '14FF00', '010C\r04', 'STPX H:7E0,D:04', 'ATCAF0']) {
+    const resp = await elm.send(cmd, 50);
+    assert.equal(resp.success, false);
+    assert.match(resp.errorMessage ?? '', /^Refused: /);
+  }
+  assert.deepEqual(sent, []);
+  elm.close();
 });

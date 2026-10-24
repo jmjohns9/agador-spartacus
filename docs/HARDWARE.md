@@ -26,7 +26,7 @@ The board runs one of two programs from [`files/firmware/uno-q-bridge/`](../file
 
 | Program | Unit | What it does |
 |---|---|---|
-| `obd_tcp_bridge.py` | `tattlestone-bridge.service` | Forwards bytes between the app and the OBDLink on `/dev/rfcomm0`. Drops Mode 04 (clear codes). If it can't reach the adapter it sends `BRIDGE ERROR: <reason>` before hanging up, and the app shows that reason. |
+| `obd_tcp_bridge.py` | `tattlestone-bridge.service` | Opens the Bluetooth link to the paired OBDLink itself and forwards bytes between it and the app. Only a client holding the bridge's pairing token gets a session. Every command is checked against `command_policy.json`, the same read-only allowlist the app uses; anything else gets `?` and never reaches the adapter. If it can't reach the adapter it sends `BRIDGE ERROR: <reason>` before hanging up, and the app shows that reason. |
 | `elm327_emulator.py` | `tattlestone-emulator.service` | Answers like an ELM327 with no adapter attached, so you can test the Wi-Fi link on the bench. A few values are real board readings: SoC temperature as ambient air temperature, and uptime as engine run time. |
 
 Setup guides, step by step:
@@ -34,7 +34,16 @@ Setup guides, step by step:
 - [Wi-Fi bridge setup](uno-q/wifi-bridge-setup.html): copy the files, install the units, test with `nc`, connect from the app.
 - [OBDLink bind guide](uno-q/obdlink-bind-next-steps.html): pair the OBDLink with the board and bind `/dev/rfcomm0`.
 
-In the app, open **Connection**, find **Network adapter**, enter the board's address with the port (for example `192.168.1.33:35000`), and click **Connect over Wi-Fi**.
+In the app, open **Connection**, find **Network adapter**, enter the board's address with the port (for example `192.168.1.33:35000`), paste the bridge's pairing token and click **Save token**, then click **Connect over Wi-Fi**.
+
+**Pairing token.** The bridge refuses any client that can't prove it holds the token. On connect it sends `BRIDGE AUTH <nonce>`; the app answers `AUTH <HMAC-SHA256(token, nonce)>`, so the token itself never crosses the network and an overheard answer can't be replayed. A stranger who connects (a phone OBD app probing port 35000, say) gets `BRIDGE ERROR` and can't take over or stall the session in progress. Create the token once on the board:
+
+```bash
+sudo python3 ~/uno-q-bridge/obd_tcp_bridge.py --new-token /etc/tattlestone/bridge-token
+sudo chgrp arduino /etc/tattlestone/bridge-token
+```
+
+The app stores the token per bridge address, encrypted with the macOS keychain. To listen on one interface only, set `TATTLESTONE_BRIDGE_HOST` in `/etc/default/tattlestone-bridge` (see `tattlestone-bridge.env`). The token protects who can connect; the traffic itself is still plain TCP, so keep the bridge on a network you trust.
 
 ### Planned: measuring the drain directly
 

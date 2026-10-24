@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportCSV:    (data: string, filename: string) => ipcRenderer.invoke('session:export-csv', { data, filename }),
   getAppInfo:    ()                  => ipcRenderer.invoke('app:get-info') as Promise<{ version: string; build: BuildInfo | null; electron: string; chrome: string; node: string }>,
   getStatus:     ()                  => ipcRenderer.invoke('obd:get-status') as Promise<{ status: ConnectionStatus; protocol?: string; adapterInfo?: string }>,
+  bridgeTokenStatus: (target: string) => ipcRenderer.invoke('bridge:token-status', { target }) as Promise<{ hasToken: boolean }>,
+  setBridgeToken:    (target: string, token: string | null) => ipcRenderer.invoke('bridge:set-token', { target, token }) as Promise<{ ok: boolean; error?: string }>,
 
   // ── Claude assistant ────────────────────────────────────────────────────────
   claudeAsk:        (payload: { question: string; context: unknown; history: unknown })                  => ipcRenderer.invoke('claude:ask', payload),

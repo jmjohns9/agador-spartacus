@@ -63,7 +63,7 @@
     <h2><span class="num">1</span> Copy the bridge files to the board <span class="where">Mac terminal</span></h2>
     <p>From the Mac, run this. It asks for the <code>arduino</code> user's password.</p>
     <div class="cmd"><pre><code>scp -r ~/Tattlestone/agador-spartacus/files/firmware/uno-q-bridge arduino@tattlestone.local:/home/arduino/</code></pre></div>
-    <div class="ok">Done when you see the files listed as they copy: <code>obd_tcp_bridge.py</code>, <code>elm327_emulator.py</code>, the two <code>.service</code> files and the test file.</div>
+    <div class="ok">Done when you see the files listed as they copy: <code>obd_tcp_bridge.py</code>, <code>command_policy.json</code>, <code>elm327_emulator.py</code>, the two <code>.service</code> files, <code>tattlestone-bridge.env</code> and the test file.</div>
     <div class="note">If <code>tattlestone.local</code> isn't found, use the IP instead: <code>arduino@192.168.1.33:/home/arduino/</code></div>
   </div>
 
@@ -75,6 +75,10 @@
     <p>Then install both service files:</p>
     <div class="cmd"><pre><code>sudo cp ~/uno-q-bridge/tattlestone-bridge.service ~/uno-q-bridge/tattlestone-emulator.service /etc/systemd/system/
 sudo systemctl daemon-reload</code></pre></div>
+    <p>Create the bridge's pairing token. It prints the token: copy it, you'll paste it into the app in step 6.</p>
+    <div class="cmd"><pre><code>sudo python3 ~/uno-q-bridge/obd_tcp_bridge.py --new-token /etc/tattlestone/bridge-token
+sudo chgrp arduino /etc/tattlestone/bridge-token</code></pre></div>
+    <div class="note">Lost it? <code>sudo cat /etc/tattlestone/bridge-token</code> shows it again. The real bridge won't start without this file. The emulator doesn't use it.</div>
   </div>
 
   <div class="step">
@@ -108,7 +112,9 @@ npm run install:app</code></pre></div>
     <ol>
       <li>Quit Tattlestone if it's open, then start it again.</li>
       <li>Open the <b>Connection</b> screen and choose <b>Network</b>.</li>
-      <li>Enter <code>192.168.1.33:35000</code> and click <b>Connect</b>.</li>
+      <li>Enter <code>192.168.1.33:35000</code>.</li>
+      <li>Paste the pairing token from step 2 and click <b>Save token</b> (needed for the real bridge; the emulator ignores it).</li>
+      <li>Click <b>Connect over Wi-Fi</b>.</li>
       <li>If macOS asks to let Tattlestone find devices on your local network, click <b>Allow</b>.</li>
     </ol>
     <div class="ok">Working: the status goes to <b>Connected</b>, the adapter shows the emulator, and live values like RPM (around 820) appear.</div>
@@ -125,6 +131,8 @@ npm run install:app</code></pre></div>
       <tr><td><code>Can't find …</code> [ENOTFOUND]</td><td>The <code>.local</code> name didn't resolve</td><td>Type the IP address (<code>192.168.1.33:35000</code>) instead</td></tr>
       <tr><td><code>Adapter not responding — no reply to ATZ/ATI</code></td><td>Connected, but nothing answered</td><td>Run the step-4 <code>nc</code> test. If that works, send Claude the session log</td></tr>
       <tr><td><code>BRIDGE ERROR: cannot open /dev/rfcomm0</code> in the log</td><td>The real bridge is running, but there's no OBD adapter on the board</td><td>Expected for now. Use the emulator (step 3)</td></tr>
+      <tr><td><code>… requires its pairing token</code> [BRIDGE_AUTH_REQUIRED]</td><td>No token saved for this address</td><td>Paste the token from <code>/etc/tattlestone/bridge-token</code> and click <b>Save token</b></td></tr>
+      <tr><td><code>authentication failed</code></td><td>The saved token doesn't match the board's</td><td>Copy it again with <code>sudo cat /etc/tattlestone/bridge-token</code>, then <b>Save token</b></td></tr>
       <tr><td>The board's IP changed</td><td>DHCP gave it a new address</td><td>On the board: <code>hostname -I</code>, then use that IP everywhere above</td></tr>
     </table></div>
   </div>

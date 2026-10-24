@@ -66,7 +66,7 @@ test('send() refuses vehicle-write services without touching the transport', asy
     const { elm, writes } = simulated();
     const resp = await elm.send(cmd, 1000);
     assert.equal(resp.success, false, `${cmd} was not refused`);
-    assert.match(resp.errorMessage ?? '', /read-only/i);
+    assert.match(resp.errorMessage ?? '', /^Refused: service .. is not a read$/);
     assert.equal(writes.length, 0, `${cmd} reached the adapter`);
   }
 });

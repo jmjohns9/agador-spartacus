@@ -1,4 +1,5 @@
 import * as net from 'net';
+import { createHmac } from 'crypto';
 import { EventEmitter } from 'events';
 
 // ─── Network Mode: ELM327 over TCP ────────────────────────────────────────────
@@ -56,6 +57,7 @@ export function describeConnectError(err: NodeJS.ErrnoException, target: TcpTarg
 
 // The UNO Q bridge reports on the adapter link in-band, one line each, before
 // any ELM327 traffic (none carry the '>' prompt):
+//   BRIDGE AUTH <nonce>            it has a pairing token: answer AUTH <hmac>
 //   BRIDGE STATUS: <progress>      while it brings up Bluetooth, retrying as needed
 //   BRIDGE READY                   link up; adapter traffic follows
 //   BRIDGE ERROR: <what to do>     then it hangs up (also on a mid-session drop)
@@ -63,6 +65,12 @@ export function describeConnectError(err: NodeJS.ErrnoException, target: TcpTarg
 export function parseBridgeError(text: string): string | null {
   const m = text.match(/BRIDGE ERROR: ([^\r\n]+)/);
   return m ? m[1].trim() : null;
+}
+
+// Proof of the pairing token without sending it: HMAC-SHA256 over the
+// bridge's one-time nonce (auth_response() in obd_tcp_bridge.py).
+export function bridgeAuthResponse(token: string, nonce: string): string {
+  return createHmac('sha256', token).update(nonce).digest('hex');
 }
 
 // Failures that mean the bridge itself isn't up yet (board booting, service
@@ -91,16 +99,22 @@ export class TcpPort extends EventEmitter {
   private tail = '';
   private readonly greetingMs: number;
   private readonly linkTimeoutMs: number;
+  private readonly token: string | undefined;
 
+  // `token` is the bridge's pairing token, when one is saved for this address.
   // The wait overrides exist for tests; the app uses the defaults.
-  constructor(path: string, opts: { greetingMs?: number; linkTimeoutMs?: number } = {}) {
+  constructor(path: string, opts: { greetingMs?: number; linkTimeoutMs?: number; token?: string } = {}) {
     super();
     const target = parseTcpTarget(path);
     if (!target) throw new Error(`Not a network adapter address: ${path} (expected tcp://host:port)`);
     this.path = path;
     this.target = target;
-    this.greetingMs = opts.greetingMs ?? BRIDGE_GREETING_MS;
+    this.token = opts.token || undefined;
     this.linkTimeoutMs = opts.linkTimeoutMs ?? BRIDGE_LINK_TIMEOUT_MS;
+    // With a token this is known to be a bridge, and a token bridge busy
+    // bringing up the adapter for someone else greets only when it is done:
+    // silence then isn't "a plain Wi-Fi ELM327".
+    this.greetingMs = opts.greetingMs ?? (this.token ? this.linkTimeoutMs : BRIDGE_GREETING_MS);
   }
 
   get isOpen(): boolean {
@@ -175,11 +189,23 @@ export class TcpPort extends EventEmitter {
         const line = lineBuf.slice(0, i).trim();
         lineBuf = lineBuf.slice(i + 1);
         if (!line) continue;
-        if (line.startsWith('BRIDGE STATUS:')) {
+        const armLinkTimer = (): void => {
           clearTimeout(greetTimer);
           linkTimer ??= setTimeout(() => fail(
             `The bridge didn't bring up the OBD adapter within ${this.linkTimeoutMs / 1000} s: check journalctl -u tattlestone-bridge on the board`,
             'BRIDGE_TIMEOUT'), this.linkTimeoutMs);
+        };
+        if (line.startsWith('BRIDGE AUTH ')) {
+          if (!this.token) {
+            fail(`${this.target.host}:${this.target.port} is a Tattlestone bridge that requires its pairing token: enter the token from /etc/tattlestone/bridge-token on the board`,
+              'BRIDGE_AUTH_REQUIRED');
+            return;
+          }
+          armLinkTimer();
+          socket.write(`AUTH ${bridgeAuthResponse(this.token, line.slice('BRIDGE AUTH '.length).trim())}\r`, 'ascii');
+          this.emit('status', 'checking the pairing token');
+        } else if (line.startsWith('BRIDGE STATUS:')) {
+          armLinkTimer();
           this.emit('status', line.slice('BRIDGE STATUS:'.length).trim());
         } else if (line === 'BRIDGE READY') {
           settle(null);
